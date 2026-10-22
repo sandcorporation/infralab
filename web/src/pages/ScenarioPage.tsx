@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { ApiError, getCohortScenario, parseId, type ScenarioDetail } from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
 import { EnvCheck, envVerdict } from "../components/EnvCheck";
+import { GradePanel } from "../components/GradePanel";
 import { RequiresTags } from "../components/ScenarioPicker";
 import { useMyCohort } from "../hooks";
 
@@ -50,25 +51,14 @@ export default function ScenarioPage() {
           </section>
 
           <section className="card">
-            <div className="row">
-              <h2>검사 {scenario.checks.length}</h2>
-              <button disabled title="채점은 다음 단계에서 열립니다">
-                채점
-              </button>
-            </div>
             <EnvCheck cohortId={cohort.id} probe={probe} requires={scenario.requires} />
-            <ol className="checks">
-              {scenario.checks.map((c) => (
-                <li key={c.id}>
-                  <div>{c.name}</div>
-                  {c.hint && (
-                    <div className="muted hint">
-                      <code>{c.hint}</code>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
+            <GradePanel
+              cohortId={cohort.id}
+              scenario={scenario}
+              agentUrl={cohort.agent_url}
+              agentToken={cohort.agent_token}
+              ready={env.ready}
+            />
           </section>
         </div>
 

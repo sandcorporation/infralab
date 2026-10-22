@@ -31,3 +31,12 @@ def open_scenario_ids(cohort: Cohort) -> list[str]:
 def open_scenarios(cohort: Cohort) -> list[Scenario]:
     known = registry.all_scenarios()
     return [known[sid] for sid in open_scenario_ids(cohort)]
+
+
+def open_scenario(membership: Membership, scenario_id: str) -> Scenario:
+    """참여자의 기수에 열린 시나리오 하나. 없거나 닫혔으면 404 — 상세·제출·이력이 같은 판정을 쓴다."""
+
+    s = registry.get(scenario_id)
+    if s is None or scenario_id not in open_scenario_ids(membership.cohort):
+        raise HttpError(404, "이 기수에 열리지 않은 시나리오입니다.")
+    return s

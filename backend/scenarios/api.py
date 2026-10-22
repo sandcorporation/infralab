@@ -13,7 +13,8 @@ from ninja.errors import HttpError
 
 from accounts.auth import instructor_auth, jwt_auth
 from cohorts.models import Cohort
-from cohorts.services import my_membership, open_scenario_ids, open_scenarios
+from cohorts.services import my_membership, open_scenario, open_scenarios
+from submissions.services import latest_submissions_by_scenario, passed_against
 
 from . import registry
 from .schemas import OpenScenariosIn, ScenarioDetailOut, ScenarioSummaryOut, StudentScenarioSummaryOut, detail, summary
@@ -48,13 +49,16 @@ def set_open_scenarios(request: HttpRequest, cohort_id: int, payload: OpenScenar
 @student_router.get("/cohorts/{cohort_id}/scenarios", response=list[StudentScenarioSummaryOut])
 def my_cohort_scenarios(request: HttpRequest, cohort_id: int):
     m = my_membership(request, cohort_id)
-    return [{**summary(s), "passed": None} for s in open_scenarios(m.cohort)]
+    latest = latest_submissions_by_scenario(m)
+    out = []
+    for s in open_scenarios(m.cohort):
+        sub = latest.get(s.id)
+        # 옛 제출의 통과 수를 지금 검사 정의에 맞춰 다시 센다 — 검사가 줄면 4/3 이 되지 않게.
+        out.append({**summary(s), "passed": passed_against(sub, s) if sub else None})
+    return out
 
 
 @student_router.get("/cohorts/{cohort_id}/scenarios/{scenario_id}", response=ScenarioDetailOut)
 def my_cohort_scenario(request: HttpRequest, cohort_id: int, scenario_id: str):
     m = my_membership(request, cohort_id)
-    s = registry.get(scenario_id)
-    if s is None or scenario_id not in open_scenario_ids(m.cohort):
-        raise HttpError(404, "이 기수에 열리지 않은 시나리오입니다.")
-    return detail(s)
+    return detail(open_scenario(m, scenario_id))

@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "accounts",
     "scenarios",
     "cohorts",
+    "submissions",
 ]
 
 # ---------- 학생 compose.yml ----------

@@ -136,6 +136,24 @@ export type CheckDef = {
   expect: Record<string, unknown> & { type: string };
 };
 export type ScenarioDetail = ScenarioSummary & { description: string; checks: CheckDef[]; scripts: Record<string, string> };
+export type SubmittedResult = {
+  check_id: string;
+  name: string;
+  pass: boolean;
+  output: string;
+  truncated: boolean;
+  exit_code: number;
+  error: string;
+};
+export type SubmissionSummary = {
+  id: number;
+  scenario_id: string;
+  submitted_at: string;
+  agent_version: string;
+  passed: number;
+  total: number;
+};
+export type Submission = SubmissionSummary & { results: SubmittedResult[] };
 
 // ---------- 호출 ----------
 
@@ -154,6 +172,20 @@ export const getCohortScenarios = (cohortId: number) =>
   api<StudentScenarioSummary[]>(`/api/cohorts/${cohortId}/scenarios`);
 export const getCohortScenario = (cohortId: number, scenarioId: string) =>
   api<ScenarioDetail>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}`);
+export const submitResults = (cohortId: number, scenarioId: string, body: { agent_version: string; results: unknown[] }) =>
+  api<Submission>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}/submissions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+export const getLatestSubmission = async (cohortId: number, scenarioId: string): Promise<Submission | null> => {
+  try {
+    return await api<Submission>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}/submissions/latest`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+};
+
 /** compose.yml 본문 — 내려받기와 복사 둘 다 이 텍스트를 쓴다. */
 export const fetchComposeFile = (id: number) => apiText(`/api/cohorts/${id}/compose.yml`);
 

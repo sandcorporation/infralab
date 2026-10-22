@@ -8,6 +8,7 @@
   --error: #b91c1c;
   --notice-bg: #ecfdf5;
   --notice-fg: #065f46;
+  --warn: #b45309;
   color-scheme: light;
 }
 * {
@@ -225,6 +226,28 @@ label.check input {
 }
 .checks li {
   margin-bottom: 8px;
+}
+.checks li.pass .mark {
+  color: var(--notice-fg);
+}
+.checks li.fail .mark {
+  color: var(--error);
+}
+.checks li.unknown .mark {
+  color: var(--warn);
+}
+.mark {
+  font-weight: 700;
+  width: 1.2em;
+  display: inline-block;
+}
+.checks details {
+  margin: 4px 0 0 1.6em;
+}
+.checks pre {
+  max-height: 240px;
+  overflow: auto;
+  font-size: 12px;
 }
 .hint code {
   white-space: pre-wrap;
