@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>infra-agent PoC</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; background: #111; color: #ddd; display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header { padding: 8px 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #333; }
+  button { padding: 6px 10px; }
+  main { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
+  #term { min-height: 0; padding: 4px; }
+  #log { overflow: auto; margin: 0; padding: 8px; font: 12px ui-monospace, monospace; white-space: pre-wrap; border-left: 1px solid #333; }
+  .ok { color: #7c7; } .bad { color: #e77; }
+</style>
+</head>
+<body>
+<header>
+  <strong>infra-agent PoC</strong>
+  <button data-call="GET /api/status">상태</button>
+  <button data-call="POST /api/env/up">환경 올리기 (LocalStack+workstation)</button>
+  <button data-call='POST /api/kind/up {"control_planes":1,"workers":2}'>kind 클러스터 (1cp+2w)</button>
+  <button data-call="GET /api/grade/s3-site">채점: s3-site</button>
+  <button data-call="GET /api/grade/k8s-basic">채점: k8s-basic</button>
+  <button data-call="POST /api/kind/down">kind 내리기</button>
+  <button data-call="POST /api/env/down">환경 내리기</button>
+  <button id="reconnect">터미널 재연결</button>
+</header>
+<main>
+  <div id="term"></div>
+  <pre id="log"></pre>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  let token = params.get('token') || localStorage.getItem('agentToken') || prompt('agent token');
+  localStorage.setItem('agentToken', token);
+  const base = params.get('agent') || location.origin;   // 대시보드에서 쓸 때는 ?agent=http://127.0.0.1:7777
+  const logEl = document.getElementById('log');
+  const log = (s, cls) => { const d = document.createElement('div'); d.textContent = s; if (cls) d.className = cls; logEl.prepend(d); };
+
+  async function call(spec) {
+    const [method, path, ...rest] = spec.split(' ');
+    const body = rest.join(' ');
+    const t0 = performance.now();
+    log(`→ ${method} ${path}`);
+    try {
+      const res = await fetch(base + path, { method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: body || undefined });
+      const json = await res.json();
+      log(`← ${res.status} (${Math.round(performance.now() - t0)} ms)\n` + JSON.stringify(json, null, 2), res.ok && json.ok !== false ? 'ok' : 'bad');
+    } catch (e) { log('✗ ' + e, 'bad'); }
+  }
+  document.querySelectorAll('button[data-call]').forEach(b => b.onclick = () => call(b.dataset.call));
+
+  const term = new Terminal({ cursorBlink: true, fontSize: 13 });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById('term'));
+  fit.fit();
+  let ws;
+  function connect() {
+    if (ws) ws.close();
+    const url = base.replace(/^http/, 'ws') + '/ws/terminal?token=' + encodeURIComponent(token);
+    ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => { term.focus(); ws.send(JSON.stringify({ t: 'r', c: term.cols, r: term.rows })); log('terminal connected'); };
+    ws.onmessage = ev => term.write(new Uint8Array(ev.data));
+    ws.onclose = () => log('terminal closed', 'bad');
+  }
+  term.onData(d => ws && ws.readyState === 1 && ws.send(JSON.stringify({ t: 'i', d })));
+  term.onResize(({ cols, rows }) => ws && ws.readyState === 1 && ws.send(JSON.stringify({ t: 'r', c: cols, r: rows })));
+  window.addEventListener('resize', () => fit.fit());
+  document.getElementById('reconnect').onclick = connect;
+  connect();
+</script>
+</body>
+</html>
