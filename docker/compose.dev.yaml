@@ -45,7 +45,9 @@ services:
       DJANGO_DEBUG: "true"
       DJANGO_SECRET_KEY: dev-only-insecure-key-do-not-use-in-deploy
       DJANGO_ALLOWED_HOSTS: "*"
-      SOCIAL_AUTH_MODE: fake
+      # 카카오 REST 키를 주면(web 과 같은 변수) 실제 카카오 어댑터로, 없으면 Fake 로. 둘이 따로 놀면 카카오
+      # 토큰이 Fake 어댑터에 들어가 항상 401 이다.
+      SOCIAL_AUTH_MODE: ${VITE_KAKAO_REST_KEY:+real}
       SCENARIOS_DIR: /scenarios
     ports:
       - "${INFRALAB_API_PORT:-58040}:8000"
@@ -58,5 +60,24 @@ services:
       sh -c "python manage.py migrate --noinput &&
              python manage.py runserver 0.0.0.0:8000"
 
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    depends_on:
+      - backend
+    environment:
+      # Vite 개발 서버가 /api 를 이 주소로 넘긴다 — 브라우저는 web 오리진 하나만 본다.
+      INFRALAB_API_PROXY: http://backend:8000
+      # 카카오 REST API 키. 비우면 화면은 Fake 로그인만 보인다.
+      VITE_KAKAO_REST_KEY: ${VITE_KAKAO_REST_KEY:-}
+    ports:
+      - "${INFRALAB_WEB_PORT:-53040}:5173"
+    volumes:
+      - ../web:/app
+      # node_modules 는 호스트와 섞이지 않게 컨테이너 볼륨에 둔다(OS 별 바이너리).
+      - infralab-dev-web-modules:/app/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+
 volumes:
   infralab-dev-db:
+  infralab-dev-web-modules:

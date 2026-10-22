@@ -52,7 +52,24 @@ class Api:
             path, data=data or {}, content_type="application/json", **(session.headers if session else {})
         )
 
+    def patch(self, path: str, data=None, session: Session | None = None):
+        return self.client.patch(
+            path, data=data or {}, content_type="application/json", **(session.headers if session else {})
+        )
+
     def me(self, session: Session) -> dict:
         res = self.get("/api/accounts/me", session)
+        assert res.status_code == 200, res.content
+        return res.json()
+
+    # ---------- 기수 ----------
+
+    def create_cohort(self, instructor: Session, name: str = "1기") -> dict:
+        res = self.post("/api/instructor/cohorts", {"name": name}, instructor)
+        assert res.status_code == 201, res.content
+        return res.json()
+
+    def join(self, student: Session, token: str) -> dict:
+        res = self.post(f"/api/join/{token}", session=student)
         assert res.status_code == 200, res.content
         return res.json()

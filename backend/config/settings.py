@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "accounts",
     "scenarios",
+    "cohorts",
 ]
 
 # 시나리오 YAML 디렉터리. 저장소 레이아웃(backend/ 옆 scenarios/)이 기본, compose 는 /scenarios 로 마운트한다.
