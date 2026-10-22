@@ -122,6 +122,20 @@ button.link {
   color: var(--accent);
   padding: 0;
 }
+button.secondary {
+  background: var(--card);
+  color: var(--accent);
+}
+button.danger {
+  background: var(--error);
+  border-color: var(--error);
+}
+.actions {
+  margin-top: 10px;
+}
+.right {
+  text-align: right;
+}
 button.kakao {
   background: #fee500;
   border-color: #fee500;

@@ -24,6 +24,8 @@ class CohortCreateIn(Schema):
 
 class CohortUpdateIn(Schema):
     name: str | None = Field(default=None, max_length=100)
+    join_open: bool | None = None
+    archived: bool | None = None
 
     @field_validator("name")
     @classmethod

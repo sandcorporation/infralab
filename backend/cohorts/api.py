@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from django.db import IntegrityError, transaction
 from django.db.models import Count
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from ninja import Router
 from ninja.errors import HttpError
@@ -17,7 +17,7 @@ from ninja.responses import Status
 
 from accounts.auth import instructor_auth, jwt_auth
 
-from .models import Cohort, Membership
+from .models import Cohort, Membership, new_token
 from .schemas import (
     CohortCreateIn,
     CohortOut,
@@ -33,10 +33,13 @@ join_router = Router(tags=["join"])
 student_router = Router(tags=["student"], auth=jwt_auth)
 
 
+def _cohorts_with_counts():
+    """강사 표면이 쓰는 질의 — 참여자 수를 함께 센다. GROUP BY 가 있어 Meta.ordering 이 적용되지 않으므로 명시한다."""
+
+    return Cohort.objects.annotate(member_count=Count("memberships")).order_by("archived", "-created_at")
+
+
 def _cohort_out(c: Cohort) -> CohortOut:
-    count = getattr(c, "member_count", None)
-    if count is None:
-        count = c.memberships.count()
     return CohortOut(
         id=c.id,
         name=c.name,
@@ -44,7 +47,7 @@ def _cohort_out(c: Cohort) -> CohortOut:
         join_open=c.join_open,
         archived=c.archived,
         open_scenario_ids=list(c.open_scenario_ids or []),
-        member_count=count,
+        member_count=getattr(c, "member_count", 0),
         created_at=c.created_at,
     )
 
@@ -60,22 +63,43 @@ def create_cohort(request: HttpRequest, payload: CohortCreateIn):
 
 @instructor_router.get("/cohorts", response=list[CohortOut])
 def list_cohorts(request: HttpRequest):
-    qs = Cohort.objects.annotate(member_count=Count("memberships"))
-    return [_cohort_out(c) for c in qs]
+    return [_cohort_out(c) for c in _cohorts_with_counts()]
 
 
 @instructor_router.get("/cohorts/{cohort_id}", response=CohortOut)
 def get_cohort(request: HttpRequest, cohort_id: int):
-    return _cohort_out(get_object_or_404(Cohort, pk=cohort_id))
+    return _cohort_out(get_object_or_404(_cohorts_with_counts(), pk=cohort_id))
 
 
 @instructor_router.patch("/cohorts/{cohort_id}", response=CohortOut)
 def update_cohort(request: HttpRequest, cohort_id: int, payload: CohortUpdateIn):
-    cohort = get_object_or_404(Cohort, pk=cohort_id)
-    if payload.name is not None:
-        cohort.name = payload.name
-        cohort.save(update_fields=["name"])
+    cohort = get_object_or_404(_cohorts_with_counts(), pk=cohort_id)
+    # 보낸 필드만 바꾼다 — 스키마 검증기가 이름을 이미 다듬었다.
+    changes = payload.dict(exclude_unset=True, exclude_none=True)
+    for field, value in changes.items():
+        setattr(cohort, field, value)
+    if changes:
+        cohort.save(update_fields=list(changes))
     return _cohort_out(cohort)
+
+
+@instructor_router.post("/cohorts/{cohort_id}/join-token/regenerate", response=CohortOut)
+def regenerate_join_token(request: HttpRequest, cohort_id: int):
+    """옛 링크를 즉시 무효화한다 — 링크가 새어 나갔을 때."""
+
+    cohort = get_object_or_404(_cohorts_with_counts(), pk=cohort_id)
+    cohort.join_token = new_token()
+    cohort.save(update_fields=["join_token"])
+    return _cohort_out(cohort)
+
+
+@instructor_router.delete("/cohorts/{cohort_id}/participants/{membership_id}", response={204: None})
+def remove_participant(request: HttpRequest, cohort_id: int, membership_id: int):
+    deleted, _ = Membership.objects.filter(pk=membership_id, cohort_id=cohort_id).delete()
+    if not deleted:
+        raise HttpError(404, "그 학생은 이 기수에 없습니다.")
+    # 204 는 본문이 없어야 한다 — JSON null 을 붙이지 않는다.
+    return HttpResponse(status=204)
 
 
 @instructor_router.get("/cohorts/{cohort_id}/participants", response=list[ParticipantOut])

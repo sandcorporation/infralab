@@ -132,9 +132,13 @@ export const instructor = {
   cohort: (id: number) => api<Cohort>(`/api/instructor/cohorts/${id}`),
   createCohort: (name: string) =>
     api<Cohort>("/api/instructor/cohorts", { method: "POST", body: JSON.stringify({ name }) }),
-  renameCohort: (id: number, name: string) =>
-    api<Cohort>(`/api/instructor/cohorts/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  updateCohort: (id: number, patch: Partial<Pick<Cohort, "name" | "join_open" | "archived">>) =>
+    api<Cohort>(`/api/instructor/cohorts/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  regenerateJoinToken: (id: number) =>
+    api<Cohort>(`/api/instructor/cohorts/${id}/join-token/regenerate`, { method: "POST" }),
   participants: (id: number) => api<Participant[]>(`/api/instructor/cohorts/${id}/participants`),
+  removeParticipant: (id: number, membershipId: number) =>
+    api<void>(`/api/instructor/cohorts/${id}/participants/${membershipId}`, { method: "DELETE" }),
 };
 
 export function joinUrl(token: string): string {

@@ -57,6 +57,9 @@ class Api:
             path, data=data or {}, content_type="application/json", **(session.headers if session else {})
         )
 
+    def delete(self, path: str, session: Session | None = None):
+        return self.client.delete(path, **(session.headers if session else {}))
+
     def me(self, session: Session) -> dict:
         res = self.get("/api/accounts/me", session)
         assert res.status_code == 200, res.content

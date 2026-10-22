@@ -10,9 +10,16 @@ export default function InstructorCohortPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
+  // 되돌리기 어려운 동작은 두 번 누르게 한다(브라우저 confirm 은 쓰지 않는다). 값은 동작 키다.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  // 진행 중인 동작 키. 응답이 오기 전 같은 버튼을 다시 눌러 같은 값을 두 번 보내지 않게 한다.
+  const [pending, setPending] = useState<string | null>(null);
 
   useEffect(() => {
-    // 기수를 빠르게 바꿨을 때 늦게 도착한 옛 기수 응답이 새 화면을 덮지 않게 한다.
+    // 기수가 바뀌면 이전 기수의 화면 상태(확인·이름 편집·오류)는 버린다.
+    setConfirming(null);
+    setRenaming(null);
+    setError(null);
     let cancelled = false;
     Promise.all([instructor.cohort(cohortId), instructor.participants(cohortId)])
       .then(([c, p]) => {
@@ -26,6 +33,21 @@ export default function InstructorCohortPage() {
     };
   }, [cohortId]);
 
+  async function act(key: string, label: string, fn: () => Promise<void>) {
+    if (pending) return;
+    setPending(key);
+    setError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setError(`${label} 실패: ${(err as ApiError).message}`);
+    } finally {
+      setPending(null);
+      // 자기 확인 상태만 닫는다 — 다른 행의 「내보내기 확정」은 남는다.
+      setConfirming((cur) => (cur === key ? null : cur));
+    }
+  }
+
   async function copyLink() {
     if (!cohort) return;
     try {
@@ -37,18 +59,12 @@ export default function InstructorCohortPage() {
     }
   }
 
-  async function rename() {
-    if (!cohort || renaming === null) return;
-    try {
-      setCohort(await instructor.renameCohort(cohort.id, renaming.trim()));
-      setRenaming(null);
-    } catch (err) {
-      setError((err as ApiError).message);
-    }
-  }
-
   if (error && !cohort) return <p className="error">{error}</p>;
   if (!cohort) return <p className="muted">불러오는 중…</p>;
+  const c = cohort;
+  // 서버가 가입을 받는 조건과 같다 — 보관된 기수는 join_open 이어도 닫힌 것이다.
+  const effectivelyOpen = c.join_open && !c.archived;
+  const busy = (key: string) => pending === key;
 
   return (
     <section>
@@ -58,15 +74,23 @@ export default function InstructorCohortPage() {
       <div className="row">
         {renaming === null ? (
           <>
-            <h1>{cohort.name}</h1>
-            <button className="link" onClick={() => setRenaming(cohort.name)}>
+            <h1>{c.name}</h1>
+            <button className="link" onClick={() => setRenaming(c.name)}>
               이름 바꾸기
             </button>
           </>
         ) : (
           <>
             <input value={renaming} onChange={(e) => setRenaming(e.target.value)} autoFocus />
-            <button onClick={rename} disabled={!renaming.trim()}>
+            <button
+              disabled={!renaming.trim() || busy("rename")}
+              onClick={() =>
+                act("rename", "이름 바꾸기", async () => {
+                  setCohort(await instructor.updateCohort(c.id, { name: renaming.trim() }));
+                  setRenaming(null);
+                })
+              }
+            >
               저장
             </button>
             <button className="link" onClick={() => setRenaming(null)}>
@@ -74,7 +98,8 @@ export default function InstructorCohortPage() {
             </button>
           </>
         )}
-        {cohort.archived && <span className="tag">보관됨</span>}
+        {c.archived && <span className="tag">보관됨</span>}
+        {!effectivelyOpen && <span className="tag">가입 닫힘</span>}
       </div>
       {error && <p className="error">{error}</p>}
 
@@ -82,10 +107,49 @@ export default function InstructorCohortPage() {
         <h2>가입 링크</h2>
         <p className="muted">수업 첫날 이 링크 하나만 뿌리면 학생이 카카오로 로그인해 스스로 들어옵니다.</p>
         <div className="row">
-          <code className="grow">{joinUrl(cohort.join_token)}</code>
+          <code className="grow">{joinUrl(c.join_token)}</code>
           <button onClick={copyLink}>{copied ? "복사됨" : "복사"}</button>
         </div>
-        {!cohort.join_open && <p className="error">지금은 가입이 닫혀 있습니다.</p>}
+        <div className="row actions">
+          <button
+            className="secondary"
+            disabled={busy("toggle-join") || c.archived}
+            onClick={() =>
+              act("toggle-join", c.join_open ? "가입 닫기" : "가입 열기", async () => {
+                setCohort(await instructor.updateCohort(c.id, { join_open: !c.join_open }));
+              })
+            }
+          >
+            {c.join_open ? "가입 닫기" : "가입 열기"}
+          </button>
+          {confirming === "regenerate" ? (
+            <>
+              <span className="muted">옛 링크는 바로 쓸 수 없게 됩니다.</span>
+              <button
+                className="danger"
+                disabled={busy("regenerate")}
+                onClick={() =>
+                  act("regenerate", "링크 재발급", async () => {
+                    setCohort(await instructor.regenerateJoinToken(c.id));
+                  })
+                }
+              >
+                재발급 확정
+              </button>
+              <button className="link" onClick={() => setConfirming(null)}>
+                취소
+              </button>
+            </>
+          ) : (
+            <button className="secondary" onClick={() => setConfirming("regenerate")}>
+              링크 재발급
+            </button>
+          )}
+        </div>
+        {c.archived && <p className="muted">보관된 기수는 가입을 받지 않습니다. 보관을 해제하면 다시 열립니다.</p>}
+        {!c.archived && !c.join_open && (
+          <p className="muted">가입이 닫혀 있습니다. 링크를 열어도 새 학생은 들어오지 못합니다.</p>
+        )}
       </section>
 
       <section className="card">
@@ -98,19 +162,65 @@ export default function InstructorCohortPage() {
                 <th>이름</th>
                 <th>계정</th>
                 <th>가입 시각</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {people.map((p) => (
-                <tr key={p.membership_id}>
-                  <td>{p.display_name || <span className="muted">(이름 없음)</span>}</td>
-                  <td className="muted">{p.username}</td>
-                  <td>{formatTime(p.joined_at)}</td>
-                </tr>
-              ))}
+              {people.map((p) => {
+                const key = `remove:${p.membership_id}`;
+                return (
+                  <tr key={p.membership_id}>
+                    <td>{p.display_name || <span className="muted">(이름 없음)</span>}</td>
+                    <td className="muted">{p.username}</td>
+                    <td>{formatTime(p.joined_at)}</td>
+                    <td className="right">
+                      {confirming === key ? (
+                        <>
+                          <button
+                            className="danger"
+                            disabled={busy(key)}
+                            onClick={() =>
+                              act(key, "내보내기", async () => {
+                                await instructor.removeParticipant(c.id, p.membership_id);
+                                setPeople((prev) => prev?.filter((x) => x.membership_id !== p.membership_id) ?? null);
+                                setCohort((prev) => (prev ? { ...prev, member_count: prev.member_count - 1 } : prev));
+                              })
+                            }
+                          >
+                            내보내기 확정
+                          </button>{" "}
+                          <button className="link" onClick={() => setConfirming(null)}>
+                            취소
+                          </button>
+                        </>
+                      ) : (
+                        <button className="link" onClick={() => setConfirming(key)}>
+                          내보내기
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
+      </section>
+
+      <section className="card">
+        <h2>보관</h2>
+        <p className="muted">끝난 기수를 보관하면 목록 뒤로 가고 새 가입이 막힙니다. 학생 쪽 환경과 기록은 그대로입니다.</p>
+        <button
+          className="secondary"
+          disabled={busy("archive")}
+          onClick={() =>
+            act("archive", c.archived ? "보관 해제" : "보관", async () => {
+              setCohort(await instructor.updateCohort(c.id, { archived: !c.archived }));
+            })
+          }
+        >
+          {c.archived ? "보관 해제" : "이 기수 보관하기"}
+        </button>
       </section>
     </section>
   );

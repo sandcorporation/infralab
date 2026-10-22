@@ -67,6 +67,7 @@ function CohortList({ cohorts }: { cohorts: Cohort[] }) {
             </Link>
             <span className="muted">학생 {c.member_count}명</span>
             {!c.join_open && <span className="tag">가입 닫힘</span>}
+            {c.archived && <span className="tag">보관됨</span>}
           </div>
           <div className="muted">만든 날 {formatTime(c.created_at)}</div>
         </li>
