@@ -60,6 +60,18 @@ export async function agentFetch<T>(
 export const agentStatus = (agentUrl: string, token: string, signal?: AbortSignal) =>
   agentFetch<AgentStatus>(agentUrl, token, "/api/status", { signal });
 
+export type Step = { name: string; result: string; ms: number };
+export type StepsResponse = { ok: boolean; steps: Step[] };
+
+/** 환경 작업은 분 단위로 걸린다 — 넉넉히 기다린다. 에이전트는 같은 작업이 돌고 있으면 409 를 준다. */
+const ENV_TIMEOUT_MS = 16 * 60 * 1000;
+export const kindUp = (agentUrl: string, token: string, nodes: { control_planes: number; workers: number }) =>
+  agentFetch<StepsResponse>(agentUrl, token, "/api/kind/up", { method: "POST", body: JSON.stringify(nodes), timeoutMs: ENV_TIMEOUT_MS });
+export const kindDown = (agentUrl: string, token: string) =>
+  agentFetch<StepsResponse>(agentUrl, token, "/api/kind/down", { method: "POST", timeoutMs: ENV_TIMEOUT_MS });
+export const flociReset = (agentUrl: string, token: string) =>
+  agentFetch<StepsResponse>(agentUrl, token, "/api/floci/reset", { method: "POST", timeoutMs: ENV_TIMEOUT_MS });
+
 export type CheckResult = {
   id: string;
   name: string;

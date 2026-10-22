@@ -37,6 +37,7 @@ func newHandler(cfg config, r Runner) http.Handler {
 	mux.HandleFunc("/api/status", s.auth(get(s.handleStatus)))
 	mux.HandleFunc("/api/kind/up", s.auth(post(s.exclusive(s.handleKindUp))))
 	mux.HandleFunc("/api/kind/down", s.auth(post(s.exclusive(s.handleKindDown))))
+	mux.HandleFunc("/api/floci/reset", s.auth(post(s.exclusive(s.handleFlociReset))))
 	// 채점도 환경 작업과 겹치지 않게 — 반쯤 내려간 클러스터를 보고 내린 판정은 증거가 못 된다.
 	mux.HandleFunc("/api/check", s.auth(post(s.exclusive(s.handleCheck))))
 	mux.HandleFunc("/ws/terminal", s.handleTerminal)

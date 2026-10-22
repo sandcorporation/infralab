@@ -34,9 +34,12 @@ func TestKindUp_CreatesClusterWithRequestedNodesViaStdin(t *testing.T) {
 	}
 }
 
+const threeNodes = "infralab-control-plane\ninfralab-worker\ninfralab-worker2"
+
 func TestKindUp_ExistingClusterOnlyReinjectsKubeconfig(t *testing.T) {
 	fake := newFakeRunner()
 	fake.respond("kind get clusters", "infralab", 0)
+	fake.respond("docker ps --filter label=io.x-k8s.kind.cluster=infralab", threeNodes, 0)
 	fake.respond("kind get kubeconfig --name infralab --internal", "apiVersion: v1\nclusters: [x]\n", 0)
 	srv := newTestServer(t, fake)
 
@@ -64,9 +67,31 @@ func TestKindUp_ExistingClusterOnlyReinjectsKubeconfig(t *testing.T) {
 	}
 }
 
+func TestKindUp_ExistingClusterWithWrongNodeCountIsRecreated(t *testing.T) {
+	fake := newFakeRunner()
+	fake.respond("kind get clusters", "infralab", 0)
+	fake.respond("docker ps --filter label=io.x-k8s.kind.cluster=infralab", "infralab-control-plane", 0)
+	srv := newTestServer(t, fake)
+
+	res := do(t, srv, "POST", "/api/kind/up", `{"control_planes":1,"workers":2}`, authed(nil))
+	var got kindUpResponse
+	decode(t, res, &got)
+	if !got.OK {
+		t.Fatalf("ok=false, steps=%+v", got.Steps)
+	}
+	if n := len(fake.callsWithPrefix("kind delete cluster --name infralab")); n != 1 {
+		t.Errorf("delete calls = %d, want 1 (1 node present, 3 wanted)", n)
+	}
+	creates := fake.callsWithPrefix("kind create cluster")
+	if len(creates) != 1 || strings.Count(creates[0].Stdin, "role: worker") != 2 {
+		t.Errorf("create calls = %+v", creates)
+	}
+}
+
 func TestKindUp_AlreadyConnectedNetworkIsNotAnError(t *testing.T) {
 	fake := newFakeRunner()
 	fake.respond("kind get clusters", "infralab", 0)
+	fake.respond("docker ps --filter label=io.x-k8s.kind.cluster=infralab", "infralab-control-plane", 0)
 	fake.respond("docker network connect kind infralab-workstation",
 		"Error response from daemon: endpoint with name infralab-workstation already exists in network kind", 1)
 	srv := newTestServer(t, fake)
@@ -105,12 +130,9 @@ func TestKindDown_DeletesTheConfiguredCluster(t *testing.T) {
 	srv := newTestServer(t, fake)
 
 	res := do(t, srv, "POST", "/api/kind/down", "", authed(nil))
-	var got struct {
-		OK     bool   `json:"ok"`
-		Output string `json:"output"`
-	}
+	var got kindUpResponse
 	decode(t, res, &got)
-	if !got.OK || !strings.HasPrefix(got.Output, "Deleted nodes") {
+	if !got.OK || len(got.Steps) != 1 || got.Steps[0].Name != "delete" || !strings.HasPrefix(got.Steps[0].Result, "Deleted nodes") {
 		t.Errorf("got %+v", got)
 	}
 	if n := len(fake.callsWithPrefix("kind delete cluster --name infralab")); n != 1 {
@@ -121,6 +143,7 @@ func TestKindDown_DeletesTheConfiguredCluster(t *testing.T) {
 func TestKindUp_StderrWarningsDoNotLeakIntoKubeconfig(t *testing.T) {
 	fake := newFakeRunner()
 	fake.respond("kind get clusters", "infralab", 0)
+	fake.respond("docker ps --filter label=io.x-k8s.kind.cluster=infralab", "infralab-control-plane", 0)
 	fake.respondFull("kind get kubeconfig --name infralab --internal", Result{
 		Stdout: "apiVersion: v1\nkind: Config\n",
 		Stderr: "WARNING: cgroup v1 detected\n",
@@ -148,6 +171,7 @@ func TestKindUp_StderrWarningsDoNotLeakIntoKubeconfig(t *testing.T) {
 func TestKindUp_WorkstationAlreadyInKindNetworkIsNotReconnected(t *testing.T) {
 	fake := newFakeRunner()
 	fake.respond("kind get clusters", "infralab", 0)
+	fake.respond("docker ps --filter label=io.x-k8s.kind.cluster=infralab", "infralab-control-plane", 0)
 	fake.respond("docker network inspect kind -f", "infralab-control-plane infralab-workstation infralab-worker ", 0)
 	srv := newTestServer(t, fake)
 

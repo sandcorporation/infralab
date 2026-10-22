@@ -1,0 +1,36 @@
+id: k8s-basics
+title: Kubernetes 기초
+description: |
+  kind 클러스터에 Deployment 와 Service 를 만든다.
+
+  ## 할 일
+
+  1. 클러스터를 올린다 (control-plane 1, worker 2).
+  2. `web` 이라는 Deployment 를 `nginx` 이미지, 레플리카 2 로 만든다.
+  3. `web` Deployment 를 `web` 이라는 Service 로 연다 (포트 80).
+
+requires:
+  floci: false
+  kind:
+    control_planes: 1
+    workers: 2
+
+checks:
+  - id: nodes-ready
+    name: Ready 노드 2개 이상
+    hint: kubectl get nodes
+    command: kubectl get nodes --no-headers | awk '$2 == "Ready"' | wc -l
+    expect: { regex: "^\\s*[2-9]" }
+
+  - id: deployment-ready
+    name: Deployment web 의 ready 레플리카 2개 이상
+    hint: kubectl create deployment web --image=nginx --replicas=2
+    command: kubectl get deploy web -o json
+    expect: { jsonpath: { path: .status.readyReplicas, min: 2 } }
+    timeout_seconds: 60
+
+  - id: service-exists
+    name: Service web 존재
+    hint: kubectl expose deployment web --port=80
+    command: kubectl get svc web -o json
+    expect: { jsonpath: { path: ".spec.ports[0].port", equals: "80" } }

@@ -18,8 +18,12 @@ workstation·Floci 를 찾고, kind 클러스터를 올리고 내리며, 브라�
 ## API
 
 - `GET /api/status` — `version`, `docker_server`, `workstation`·`floci` 상태(`running` / `exited` / `missing` …), `kind_nodes`. Docker 데몬에 닿지 못하면 `docker_error` 가 함께 온다
-- `POST /api/kind/up {"control_planes":1,"workers":2}` — 단계별 결과(`steps`)와 `ok`. 클러스터가 이미 있으면 kubeconfig 만 다시 넣는다. 노드 수 상한(control-plane 3, worker 5)을 넘으면 400
-- `POST /api/kind/down`
+- `POST /api/kind/up {"control_planes":1,"workers":2}` — 단계별 결과(`steps`)와 `ok`. 클러스터가 이미 있고 노드 수가 같으면
+  kubeconfig 만 다시 넣고, 노드 수가 다르면 지우고 다시 만든다. 노드 수 상한(control-plane 3, worker 5)을 넘으면 400
+- `POST /api/kind/down` — `steps`·`ok`
+- `POST /api/floci/reset` — compose 가 만든 Floci 컨테이너를 같은 설정(이미지·entrypoint/cmd·환경·라벨·bind/named 마운트·
+  포트·privileged·재시작 정책·네트워크·별칭)으로 다시 만들어 상태를 비운다(익명 볼륨은 버린다). Floci 의 healthcheck 로
+  준비를 기다린다. 단계별 결과(`steps`)와 `ok`
 - `POST /api/check {"checks":[{id,name,hint,command,timeout_seconds,expect},…],"scripts":{"name.sh":"본문"}}` — 각 명령을
   workstation 에서 `bash -lc` 로(작업 폴더 `/work`) 돌리고 검사별 `pass`·`output`(stdout+stderr, 8KiB 상한·`truncated`)·
   `exit_code`·`ms`·`error` 를 돌려준다. `expect.type` 은 `exit_zero` / `equals{value}` / `contains{value}` /

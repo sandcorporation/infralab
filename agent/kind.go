@@ -15,8 +15,9 @@ const (
 )
 
 // handleKindUp 은 노드 구성대로 kind 클러스터를 만들고 kubeconfig 를 workstation 에 넣고
-// workstation 을 kind 네트워크에 붙인다. 클러스터가 이미 있으면 만들기는 건너뛰고 나머지만 한다
-// (에이전트 재기동 뒤 복구 — PoC 에서 검증).
+// workstation 을 kind 네트워크에 붙인다. 클러스터가 이미 있고 노드 수가 같으면 만들기는 건너뛰고 나머지만
+// 한다(에이전트 재기동 뒤 복구 — PoC 에서 검증). 노드 수가 다르면 지우고 다시 만든다 — 「올리기」를 눌렀는데
+// 환경이 계속 「빠진 것: kind」로 남는 일이 없게.
 func (s *server) handleKindUp(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ControlPlanes int `json:"control_planes"`
@@ -38,10 +39,17 @@ func (s *server) handleKindUp(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
 
+	want := req.ControlPlanes + req.Workers
 	var st stepper
 	ok := st.run("create", func() (string, error) {
 		if out, _ := run(ctx, s.runner, "kind", "get", "clusters"); containsLine(out, s.cfg.KindCluster) {
-			return "exists", nil
+			if have := len(s.kindNodes(ctx)); have == want {
+				return "exists", nil
+			} else {
+				if out, err := run(ctx, s.runner, "kind", "delete", "cluster", "--name", s.cfg.KindCluster); err != nil {
+					return out, fmt.Errorf("cluster has %d nodes, want %d; delete failed: %w", have, want, err)
+				}
+			}
 		}
 		cfg := "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n"
 		cfg += strings.Repeat("  - role: control-plane\n", req.ControlPlanes)
@@ -84,8 +92,11 @@ func (s *server) handleKindUp(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleKindDown(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	out, err := run(ctx, s.runner, "kind", "delete", "cluster", "--name", s.cfg.KindCluster)
-	writeJSON(w, 200, map[string]any{"ok": err == nil, "output": out})
+	var st stepper
+	ok := st.run("delete", func() (string, error) {
+		return run(ctx, s.runner, "kind", "delete", "cluster", "--name", s.cfg.KindCluster)
+	})
+	writeJSON(w, 200, map[string]any{"ok": ok, "steps": st.steps})
 }
 
 func containsLine(out, want string) bool {

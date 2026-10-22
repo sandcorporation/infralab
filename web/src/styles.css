@@ -223,6 +223,24 @@ label.check input {
 .terminal-bar {
   margin-bottom: 6px;
 }
+.env-actions .row {
+  margin-top: 8px;
+}
+.steps-log {
+  margin-top: 10px;
+}
+.steps-log summary.ok {
+  color: var(--notice-fg);
+}
+.steps-log ol {
+  padding-left: 18px;
+}
+.steps-log pre {
+  margin: 4px 0 8px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 12px;
+}
 .markdown h1,
 .markdown h2,
 .markdown h3 {

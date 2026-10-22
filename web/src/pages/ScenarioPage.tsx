@@ -3,6 +3,7 @@ import Markdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, getCohortScenario, parseId, type ScenarioDetail } from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
+import { EnvActions } from "../components/EnvActions";
 import { EnvCheck, envVerdict } from "../components/EnvCheck";
 import { GradePanel } from "../components/GradePanel";
 import { RequiresTags } from "../components/ScenarioPicker";
@@ -89,6 +90,7 @@ export default function ScenarioPage() {
                 <p className="muted">Floci{probe.state === "connected" && ` · ${probe.status.floci}`}</p>
               )}
               {env?.ready && <p className="badge ok">준비됨</p>}
+              <EnvActions requires={scenario.requires} probe={probe} agentUrl={cohort.agent_url} token={cohort.agent_token} />
             </section>
           )}
           <section className="card">
