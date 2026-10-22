@@ -1,0 +1,46 @@
+id: s3-static-site
+title: S3 정적 사이트
+description: |
+  `aws` CLI 로 S3 버킷을 만들고 정적 웹사이트로 호스팅한다. 이 환경의 `aws` 는 이미 Floci 를
+  가리키고 있어 자격증명·엔드포인트를 따로 넣지 않는다.
+
+  ## 할 일
+
+  1. `lab-site` 라는 버킷을 만든다.
+  2. 버킷의 **버저닝**을 켠다.
+  3. `./work` 폴더에 `index.html` 을 만들어(VS Code 로 쓰면 된다) 버킷에 올린다.
+  4. 버킷을 **정적 웹 호스팅**으로 설정하고 인덱스 문서를 `index.html` 로 한다.
+
+  ## 힌트가 되는 명령
+
+  `aws s3 mb`, `aws s3api put-bucket-versioning`, `aws s3 cp`, `aws s3api put-bucket-website`.
+  `aws s3api help` 와 `aws s3api <명령> help` 가 옵션을 알려 준다.
+
+requires:
+  floci: true
+  kind: null
+
+checks:
+  - id: bucket-exists
+    name: 버킷 lab-site 존재
+    hint: "`aws s3 mb s3://lab-site` 로 만든다. `aws s3 ls` 로 확인."
+    command: aws s3api head-bucket --bucket lab-site
+    expect: exit_zero
+
+  - id: versioning-enabled
+    name: 버저닝 Enabled
+    hint: "`aws s3api put-bucket-versioning --bucket lab-site --versioning-configuration Status=Enabled`"
+    command: aws s3api get-bucket-versioning --bucket lab-site --query Status --output text
+    expect: { equals: Enabled }
+
+  - id: index-uploaded
+    name: index.html 업로드
+    hint: "VS Code 로 `./work/index.html` 을 만들면 터미널의 현재 폴더(/work)에 보인다. 거기서 `aws s3 cp index.html s3://lab-site/index.html`"
+    command: aws s3api head-object --bucket lab-site --key index.html
+    expect: exit_zero
+
+  - id: website-configured
+    name: 정적 웹 호스팅 설정 (IndexDocument = index.html)
+    hint: "`aws s3api put-bucket-website --bucket lab-site --website-configuration '{\"IndexDocument\":{\"Suffix\":\"index.html\"}}'`"
+    command: aws s3api get-bucket-website --bucket lab-site --query IndexDocument.Suffix --output text
+    expect: { equals: index.html }

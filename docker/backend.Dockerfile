@@ -17,6 +17,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 
 COPY backend/ ./
+# 시나리오 YAML 은 서버가 시작 때 읽는다 — 이미지 혼자서도 뜨게 함께 넣는다. dev compose 는 같은
+# 자리에 저장소의 scenarios/ 를 마운트해 덮는다.
+COPY scenarios/ /scenarios/
+ENV SCENARIOS_DIR=/scenarios
 
 EXPOSE 8000
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

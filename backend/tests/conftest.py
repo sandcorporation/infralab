@@ -6,8 +6,8 @@ import pytest
 
 @pytest.fixture
 def api(client):
-    """`tests.scenarios.Api` — 로그인·인증 헤더 같은 반복을 묶은 시나리오 헬퍼."""
+    """`tests.api_helpers.Api` — 로그인·인증 헤더 같은 반복을 묶은 시나리오 헬퍼."""
 
-    from tests.scenarios import Api
+    from tests.api_helpers import Api
 
     return Api(client)

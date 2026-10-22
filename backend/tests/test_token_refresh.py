@@ -11,7 +11,7 @@ def test_refresh_returns_a_new_pair_that_works(api):
     body = res.json()
     assert body["access"] != s.access
     assert body["refresh"] != s.refresh
-    from tests.scenarios import Session
+    from tests.api_helpers import Session
 
     assert api.me(Session(access=body["access"], refresh=body["refresh"]))["username"] == "kakao:uid-r"
 
