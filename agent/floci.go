@@ -197,6 +197,21 @@ func (s *server) handleFlociReset(w http.ResponseWriter, r *http.Request) {
 		}
 		return spec.Image, nil
 	})
+	// Floci 가 띄운 EC2 인스턴스·포워더 컨테이너와 VPC 네트워크는 Floci 를 지워도 남는다 — 상태를 비우는 김에 같이 치운다.
+	ok = ok && st.run("remove-children", func() (string, error) {
+		out, _ := run(ctx, s.runner, "docker", "ps", "-a", "--filter", "name=floci-aws-", "--format", "{{.Names}}")
+		names := strings.Fields(out)
+		if len(names) > 0 {
+			if out, err := run(ctx, s.runner, "docker", append([]string{"rm", "-f", "-v"}, names...)...); err != nil {
+				return out, err
+			}
+		}
+		nets, _ := run(ctx, s.runner, "docker", "network", "ls", "--filter", "name=floci-aws-vpc-", "--format", "{{.Name}}")
+		for _, n := range strings.Fields(nets) {
+			_, _ = run(ctx, s.runner, "docker", "network", "rm", n)
+		}
+		return fmt.Sprintf("%d containers, %d networks", len(names), len(strings.Fields(nets))), nil
+	})
 	ok = ok && st.run("remove", func() (string, error) {
 		return run(ctx, s.runner, "docker", "rm", "-f", "-v", name)
 	})

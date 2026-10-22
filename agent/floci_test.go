@@ -84,8 +84,42 @@ func TestFlociReset_RecreatesTheContainerWithTheSameConfig(t *testing.T) {
 	for _, s := range got.Steps {
 		names = append(names, s.Name)
 	}
-	if strings.Join(names, ",") != "inspect,remove,create,wait-ready" {
+	if strings.Join(names, ",") != "inspect,remove-children,remove,create,wait-ready" {
 		t.Errorf("steps = %v", names)
+	}
+}
+
+func TestFlociReset_RemovesInstanceContainersAndVpcNetworksFlociLeftBehind(t *testing.T) {
+	fake := flociFake()
+	fake.respond("docker ps -a --filter name=floci-aws-", "floci-aws-ec2-i-1\nfloci-aws-ec2-fwd-i-1-80\n", 0)
+	fake.respond("docker network ls --filter name=floci-aws-vpc-", "floci-aws-vpc-4566-ap-northeast-2-vpc-1\n", 0)
+	srv := newTestServer(t, fake)
+
+	res := do(t, srv, "POST", "/api/floci/reset", "", authed(nil))
+	var got kindUpResponse
+	decode(t, res, &got)
+	if !got.OK {
+		t.Fatalf("ok=false, steps=%+v", got.Steps)
+	}
+	if n := len(fake.callsWithPrefix("docker rm -f -v floci-aws-ec2-i-1 floci-aws-ec2-fwd-i-1-80")); n != 1 {
+		t.Errorf("children were not removed: %+v", fake.callsWithPrefix("docker rm"))
+	}
+	if n := len(fake.callsWithPrefix("docker network rm floci-aws-vpc-4566-ap-northeast-2-vpc-1")); n != 1 {
+		t.Errorf("vpc network was not removed")
+	}
+	// 자식 정리가 Floci 제거보다 먼저다 — 순서가 바뀌면 Floci 가 사라진 뒤 자식 목록을 못 얻는 일은 없지만,
+	// 새 Floci 가 뜬 뒤 옛 자식이 남아 있는 창이 생긴다.
+	var order []string
+	for _, c := range fake.calls {
+		s := c.String()
+		if strings.HasPrefix(s, "docker rm -f -v floci-aws-ec2") {
+			order = append(order, "children")
+		} else if strings.HasPrefix(s, "docker rm -f -v infralab-floci") {
+			order = append(order, "floci")
+		}
+	}
+	if strings.Join(order, ",") != "children,floci" {
+		t.Errorf("order = %v", order)
 	}
 }
 

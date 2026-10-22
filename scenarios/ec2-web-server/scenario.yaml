@@ -1,0 +1,57 @@
+id: ec2-web-server
+title: EC2 웹 서버
+description: |
+  VPC 안에 EC2 인스턴스를 띄우고 그 안에서 nginx 를 돌려 터미널의 `curl` 로 응답을 받는다.
+
+  ## 할 일
+
+  1. VPC `10.0.0.0/16` 과 서브넷 `10.0.1.0/24` 를 만든다.
+  2. 보안 그룹 `web` 을 만들고 TCP **8080** 인바운드를 연다.
+  3. 아래 `user-data.sh` 를 만들어 인스턴스를 띄운다 (AMI 는 `aws ec2 describe-images` 에서 고른다).
+  4. 터미널에서 `curl http://floci-aws-ec2-<인스턴스 id>:8080/` 으로 응답을 확인한다.
+
+  이 환경에서는 인스턴스 안의 80 포트를 쓸 수 없다 — 8080 으로 연다.
+
+  ```bash
+  #!/bin/bash
+  yum install -y nginx
+  sed -i 's/listen       80;/listen       8080;/; s/listen       \[::\]:80;/listen       [::]:8080;/' /etc/nginx/nginx.conf
+  echo "<h1>hello from ec2</h1>" > /usr/share/nginx/html/index.html
+  nginx
+  ```
+
+requires:
+  floci: true
+  kind: null
+
+checks:
+  - id: vpc-exists
+    name: VPC 10.0.0.0/16 존재
+    hint: aws ec2 create-vpc --cidr-block 10.0.0.0/16
+    command: aws ec2 describe-vpcs --filters Name=cidr,Values=10.0.0.0/16 --query 'Vpcs[0].VpcId' --output text
+    expect: { regex: "^vpc-" }
+
+  - id: subnet-exists
+    name: 서브넷 10.0.1.0/24 존재
+    hint: aws ec2 create-subnet --vpc-id <vpc-id> --cidr-block 10.0.1.0/24
+    command: aws ec2 describe-subnets --filters Name=cidr-block,Values=10.0.1.0/24 --query 'Subnets[0].SubnetId' --output text
+    expect: { regex: "^subnet-" }
+
+  - id: sg-allows-8080
+    name: 보안 그룹 web 이 TCP 8080 을 연다
+    hint: aws ec2 create-security-group --group-name web --description web --vpc-id <vpc-id> && aws ec2 authorize-security-group-ingress --group-id <sg-id> --protocol tcp --port 8080 --cidr 0.0.0.0/0
+    command: aws ec2 describe-security-groups --filters Name=group-name,Values=web --query 'SecurityGroups[0].IpPermissions[?FromPort==`8080`] | length(@)' --output text
+    expect: { regex: "^[1-9]" }
+
+  - id: instance-running
+    name: 실행 중인 인스턴스
+    hint: aws ec2 run-instances --image-id ami-0abcdef1234567891 --instance-type t3.micro --subnet-id <subnet-id> --security-group-ids <sg-id> --user-data file://user-data.sh
+    command: aws ec2 describe-instances --filters Name=instance-state-name,Values=running --query 'Reservations[].Instances[].InstanceId | length(@)' --output text
+    expect: { regex: "^[1-9]" }
+
+  - id: nginx-responds
+    name: 인스턴스의 8080 이 응답한다
+    hint: "user-data.sh 가 nginx 를 8080 으로 띄웠는지 본다: aws ec2 describe-instances 로 id 를 찾고 curl http://floci-aws-ec2-<id>:8080/"
+    command: web-check.sh
+    expect: { contains: "<" }
+    timeout_seconds: 60

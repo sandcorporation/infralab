@@ -1,0 +1,62 @@
+id: terraform-s3
+title: Terraform 으로 S3
+description: |
+  `.tf` 파일로 S3 버킷을 선언하고 `terraform apply` 로 만든다.
+
+  ## 할 일
+
+  1. `terraform-s3` 폴더를 만들고 그 안에 `main.tf` 를 쓴다.
+  2. provider 를 아래처럼 둔다 — 이 환경의 S3 엔드포인트다.
+  3. `tf-site` 버킷과 버저닝(Enabled)을 선언한다.
+  4. `terraform init` 뒤 `terraform apply` 한다.
+
+  ```hcl
+  terraform {
+    required_providers {
+      aws = { source = "hashicorp/aws", version = "~> 5.0" }
+    }
+  }
+
+  provider "aws" {
+    region                      = "ap-northeast-2"
+    access_key                  = "test"
+    secret_key                  = "test"
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_requesting_account_id  = true
+    s3_use_path_style           = true
+    endpoints {
+      s3  = "http://infralab-floci:4566"
+      sts = "http://infralab-floci:4566"
+    }
+  }
+  ```
+
+requires:
+  floci: true
+  kind: null
+
+checks:
+  - id: tfstate-exists
+    name: terraform-s3/terraform.tfstate 존재
+    hint: cd terraform-s3 && terraform init && terraform apply
+    command: test -f terraform-s3/terraform.tfstate && echo present
+    expect: { equals: present }
+
+  - id: bucket-in-state
+    name: 상태 파일에 aws_s3_bucket 리소스
+    hint: 'resource "aws_s3_bucket" "site" { bucket = "tf-site" }'
+    command: terraform -chdir=terraform-s3 state list
+    expect: { contains: aws_s3_bucket. }
+
+  - id: bucket-exists
+    name: 버킷 tf-site 존재
+    hint: terraform -chdir=terraform-s3 apply
+    command: aws s3api head-bucket --bucket tf-site
+    expect: exit_zero
+
+  - id: versioning-enabled
+    name: 버저닝 Enabled
+    hint: 'resource "aws_s3_bucket_versioning" "site" { bucket = aws_s3_bucket.site.id  versioning_configuration { status = "Enabled" } }'
+    command: aws s3api get-bucket-versioning --bucket tf-site --query Status --output text
+    expect: { equals: Enabled }
