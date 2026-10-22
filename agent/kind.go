@@ -54,9 +54,8 @@ func (s *server) handleKindUp(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return kc, err
 		}
-		out, err := runInput(ctx, s.runner, kc+"\n", "docker", "exec", "-i", s.cfg.Workstation, "sh", "-c", "mkdir -p /root/.kube && cat > /root/.kube/config")
-		if err != nil {
-			return out, err
+		if err := s.writeWorkstationFile(ctx, "/root/.kube/config", kc+"\n", false); err != nil {
+			return "", err
 		}
 		return fmt.Sprintf("written (%d bytes)", len(kc)+1), nil
 	})

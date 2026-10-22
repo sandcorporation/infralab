@@ -42,7 +42,7 @@ func (f *fakeRunner) respondFull(prefix string, res Result) {
 	f.responses = append(f.responses, fakeResponse{prefix, res})
 }
 
-func (f *fakeRunner) Run(_ context.Context, stdin, name string, args ...string) (Result, error) {
+func (f *fakeRunner) Run(ctx context.Context, stdin, name string, args ...string) (Result, error) {
 	c := call{name, args, stdin}
 	f.mu.Lock()
 	f.calls = append(f.calls, c)
@@ -59,6 +59,10 @@ func (f *fakeRunner) Run(_ context.Context, stdin, name string, args ...string) 
 	f.mu.Unlock()
 	if hook != nil {
 		hook(c)
+	}
+	// 실제 runner 와 같은 계약 — 컨텍스트가 끝났으면 그 오류를 돌려준다(시간 초과 시험용).
+	if ctx.Err() != nil {
+		return res, ctx.Err()
 	}
 	return res, nil
 }

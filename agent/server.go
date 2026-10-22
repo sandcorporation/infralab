@@ -37,6 +37,8 @@ func newHandler(cfg config, r Runner) http.Handler {
 	mux.HandleFunc("/api/status", s.auth(get(s.handleStatus)))
 	mux.HandleFunc("/api/kind/up", s.auth(post(s.exclusive(s.handleKindUp))))
 	mux.HandleFunc("/api/kind/down", s.auth(post(s.exclusive(s.handleKindDown))))
+	// 채점도 환경 작업과 겹치지 않게 — 반쯤 내려간 클러스터를 보고 내린 판정은 증거가 못 된다.
+	mux.HandleFunc("/api/check", s.auth(post(s.exclusive(s.handleCheck))))
 	mux.HandleFunc("/ws/terminal", s.handleTerminal)
 	return s.cors(mux)
 }
@@ -116,11 +118,26 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = enc.Encode(v)
 }
 
+// 요청 본문 상한 — 검사 50개 + 스크립트 20개 × 64KiB 가 넉넉히 들어간다.
+const maxRequestBytes = 4 << 20
+
 func readJSON(r *http.Request, v any) error {
 	if r.Body == nil || r.ContentLength == 0 {
 		return nil
 	}
-	return json.NewDecoder(r.Body).Decode(v)
+	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxRequestBytes)).Decode(v)
+}
+
+// writeWorkstationFile 은 본문을 workstation 의 경로에 쓴다(상위 디렉터리를 만들고, 필요하면 실행 권한).
+// kubeconfig 주입과 보조 스크립트 설치가 같은 길을 쓴다.
+func (s *server) writeWorkstationFile(ctx context.Context, path, body string, executable bool) error {
+	dir := path[:strings.LastIndexByte(path, '/')]
+	script := fmt.Sprintf("mkdir -p %s && cat > %s", dir, path)
+	if executable {
+		script += " && chmod +x " + path
+	}
+	_, err := runInput(ctx, s.runner, body, "docker", "exec", "-i", s.cfg.Workstation, "sh", "-c", script)
+	return err
 }
 
 // ---------- docker 조회 ----------
