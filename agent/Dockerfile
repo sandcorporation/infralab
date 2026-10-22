@@ -1,9 +1,10 @@
 FROM golang:1.23-alpine AS build
+ARG VERSION=dev
 WORKDIR /src
-COPY go.mod ./
-COPY main.go ./
-COPY static ./static
-RUN go mod tidy && CGO_ENABLED=0 go build -o /agent .
+COPY go.mod go.sum ./
+RUN go mod download
+COPY *.go ./
+RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /agent .
 
 FROM alpine:3.21
 RUN apk add --no-cache docker-cli bash curl ca-certificates
