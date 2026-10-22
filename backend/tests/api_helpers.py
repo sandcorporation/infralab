@@ -86,3 +86,31 @@ class Api:
         res = self.put(f"/api/instructor/cohorts/{cohort_id}/scenarios", {"scenario_ids": scenario_ids}, instructor)
         assert res.status_code == 200, res.content
         return res.json()
+
+    def submit(self, student: Session, cohort_id: int, scenario_id: str, results: list[dict], agent_version: str = "0.2.0"):
+        return self.post(
+            f"/api/cohorts/{cohort_id}/scenarios/{scenario_id}/submissions",
+            {"agent_version": agent_version, "results": results},
+            student,
+        )
+
+
+# ---------- s3-static-site 시나리오의 가짜 에이전트 결과 ----------
+
+S3 = "s3-static-site"
+S3_CHECK_IDS = ["bucket-exists", "versioning-enabled", "index-uploaded", "website-configured"]
+
+
+def s3_results(passing: set[str], output: str = "ok") -> list[dict]:
+    """에이전트 /api/check 응답의 results[] 모양. `passing` 에 든 검사만 통과."""
+
+    return [
+        {
+            "id": cid,
+            "name": cid,
+            "pass": cid in passing,
+            "output": output if cid in passing else "An error occurred (404)",
+            "exit_code": 0 if cid in passing else 254,
+        }
+        for cid in S3_CHECK_IDS
+    ]

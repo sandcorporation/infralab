@@ -9,6 +9,7 @@ import InstructorCohortPage from "./pages/InstructorCohortPage";
 import CohortPage from "./pages/CohortPage";
 import SetupPage from "./pages/SetupPage";
 import ScenarioPage from "./pages/ScenarioPage";
+import InstructorGridPage from "./pages/InstructorGridPage";
 
 function Layout() {
   const { me, logout } = useAuth();
@@ -64,6 +65,7 @@ export default function App() {
         <Route element={<RequireAuth instructor />}>
           <Route path="/instructor" element={<InstructorCohortsPage />} />
           <Route path="/instructor/cohorts/:id" element={<InstructorCohortPage />} />
+          <Route path="/instructor/cohorts/:id/grid" element={<InstructorGridPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

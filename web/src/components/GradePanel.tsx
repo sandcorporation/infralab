@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AgentTimeout, AgentUnreachable, runChecks, type CheckResult } from "../agent";
 import { ApiError, formatTime, getLatestSubmission, submitResults, type ScenarioDetail, type Submission } from "../api";
+import { CheckResultList } from "./CheckResultList";
 
 type Phase =
   | { kind: "idle" }
@@ -119,42 +120,33 @@ export function GradePanel({
       )}
       {phase.kind === "done" && <p className="notice">제출됨 · {formatTime(phase.submission.submitted_at)}</p>}
 
-      <ol className="checks">
-        {shown
-          ? shown.results.map((r) => (
-              <li key={r.id} className={r.pass ? "pass" : r.error ? "unknown" : "fail"}>
-                <div className="row">
-                  <span className="mark">{r.pass ? "✓" : r.error ? "!" : "✗"}</span>
-                  <span>{r.name}</span>
-                  <span className="muted">{r.ms} ms</span>
+      {shown ? (
+        <CheckResultList
+          rows={shown.results.map((r) => ({
+            key: r.id,
+            name: r.name,
+            pass: r.pass,
+            output: r.output,
+            truncated: r.truncated,
+            error: r.error,
+            meta: `${r.ms} ms`,
+            hint: hints.get(r.id),
+          }))}
+        />
+      ) : (
+        <ol className="checks">
+          {scenario.checks.map((c) => (
+            <li key={c.id}>
+              <div>{c.name}</div>
+              {c.hint && (
+                <div className="muted hint">
+                  <code>{c.hint}</code>
                 </div>
-                {r.error && <div className="error">{r.error}</div>}
-                {!r.pass && hints.get(r.id) && (
-                  <div className="hint">
-                    <code>{hints.get(r.id)}</code>
-                  </div>
-                )}
-                {r.output && (
-                  <details>
-                    <summary>출력{r.truncated ? " (잘림)" : ""}</summary>
-                    <pre>
-                      <code>{r.output}</code>
-                    </pre>
-                  </details>
-                )}
-              </li>
-            ))
-          : scenario.checks.map((c) => (
-              <li key={c.id}>
-                <div>{c.name}</div>
-                {c.hint && (
-                  <div className="muted hint">
-                    <code>{c.hint}</code>
-                  </div>
-                )}
-              </li>
-            ))}
-      </ol>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
     </>
   );
 }

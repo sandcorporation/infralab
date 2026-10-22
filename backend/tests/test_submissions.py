@@ -2,15 +2,12 @@
 
 import pytest
 
-S3 = "s3-static-site"
-CHECK_IDS = ["bucket-exists", "versioning-enabled", "index-uploaded", "website-configured"]
+from tests.api_helpers import S3, S3_CHECK_IDS as CHECK_IDS, s3_results as _results
 
 
-def _results(passing: set[str], output: str = "ok") -> list[dict]:
-    return [
-        {"id": cid, "name": cid, "pass": cid in passing, "output": output if cid in passing else "An error occurred (404)", "exit_code": 0 if cid in passing else 254}
-        for cid in CHECK_IDS
-    ]
+
+
+
 
 
 def _setup(api):

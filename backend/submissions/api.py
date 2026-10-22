@@ -12,14 +12,25 @@ from cohorts.services import my_membership, open_scenario
 
 from .models import MAX_OUTPUT_CHARS, Submission
 from .schemas import SubmissionIn, SubmissionOut, SubmissionSummaryOut
+from .services import score
 
 student_router = Router(tags=["student"], auth=jwt_auth)
 
-SUMMARY_FIELDS = ("id", "scenario_id", "submitted_at", "agent_version", "passed", "total")
+
+def summary_out(sub: Submission) -> dict:
+    passed, total = score(sub)
+    return {
+        "id": sub.id,
+        "scenario_id": sub.scenario_id,
+        "submitted_at": sub.submitted_at,
+        "agent_version": sub.agent_version,
+        "passed": passed,
+        "total": total,
+    }
 
 
 def submission_out(sub: Submission) -> dict:
-    return {**{f: getattr(sub, f) for f in SUMMARY_FIELDS}, "results": sub.results}
+    return {**summary_out(sub), "results": sub.results}
 
 
 def _clip(text: str) -> tuple[str, bool]:
@@ -72,8 +83,7 @@ def submit(request: HttpRequest, cohort_id: int, scenario_id: str, payload: Subm
 def my_submissions(request: HttpRequest, cohort_id: int, scenario_id: str):
     m = my_membership(request, cohort_id)
     open_scenario(m, scenario_id)
-    # 요약만 — 이력이 길어지면 results 가 수백 KB 다.
-    return list(Submission.objects.filter(membership=m, scenario_id=scenario_id).values(*SUMMARY_FIELDS))
+    return [summary_out(s) for s in Submission.objects.filter(membership=m, scenario_id=scenario_id)]
 
 
 @student_router.get("/cohorts/{cohort_id}/scenarios/{scenario_id}/submissions/latest", response=SubmissionOut)

@@ -101,6 +101,10 @@ export default function InstructorCohortPage() {
         )}
         {c.archived && <span className="tag">보관됨</span>}
         {!effectivelyOpen && <span className="tag">가입 닫힘</span>}
+        <span className="grow" />
+        <Link className="button" to={`/instructor/cohorts/${c.id}/grid`}>
+          진행 격자
+        </Link>
       </div>
       {error && <p className="error">{error}</p>}
 

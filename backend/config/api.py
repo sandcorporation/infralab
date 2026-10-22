@@ -7,6 +7,7 @@ from cohorts.api import join_router, student_router
 from scenarios.api import instructor_router as scenarios_instructor_router
 from scenarios.api import student_router as scenarios_student_router
 from submissions.api import student_router as submissions_student_router
+from submissions.instructor_api import instructor_router as submissions_instructor_router
 
 api = NinjaAPI(title="infralab API", version="0.1.0")
 
@@ -19,6 +20,7 @@ api.add_router("", submissions_student_router)
 api.add_router("/instructor", accounts_instructor_router)
 api.add_router("/instructor", cohorts_instructor_router)
 api.add_router("/instructor", scenarios_instructor_router)
+api.add_router("/instructor", submissions_instructor_router)
 
 
 @api.get("/health", auth=None)

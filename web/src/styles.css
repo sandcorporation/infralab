@@ -226,6 +226,52 @@ label.check input {
 .env-actions .row {
   margin-top: 8px;
 }
+.small {
+  font-size: 12px;
+}
+.stale {
+  color: var(--warn);
+}
+.grid-wrap {
+  overflow-x: auto;
+}
+table.grid th,
+table.grid td {
+  vertical-align: top;
+}
+table.grid td.active {
+  background: #eff6ff;
+}
+button.cell {
+  display: grid;
+  gap: 2px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--fg);
+  padding: 4px 8px;
+  text-align: left;
+}
+button.cell:hover {
+  border-color: var(--line);
+  background: var(--bg);
+}
+.drawer-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+}
+@media (max-width: 800px) {
+  .drawer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+button.link.current {
+  font-weight: 700;
+}
+h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
 .steps-log {
   margin-top: 10px;
 }

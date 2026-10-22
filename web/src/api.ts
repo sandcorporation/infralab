@@ -154,6 +154,15 @@ export type SubmissionSummary = {
   total: number;
 };
 export type Submission = SubmissionSummary & { results: SubmittedResult[] };
+export type GridCell = { submission_id: number; passed: number; total: number; submitted_at: string; agent_version: string };
+export type GridRow = {
+  membership_id: number;
+  user_id: number;
+  username: string;
+  display_name: string;
+  cells: Record<string, GridCell | null>;
+};
+export type Grid = { scenarios: { id: string; title: string; total: number }[]; rows: GridRow[] };
 
 // ---------- 호출 ----------
 
@@ -211,6 +220,12 @@ export const instructor = {
   participants: (id: number) => api<Participant[]>(`/api/instructor/cohorts/${id}/participants`),
   removeParticipant: (id: number, membershipId: number) =>
     api<void>(`/api/instructor/cohorts/${id}/participants/${membershipId}`, { method: "DELETE" }),
+  grid: (cohortId: number) => api<Grid>(`/api/instructor/cohorts/${cohortId}/grid`),
+  history: (cohortId: number, membershipId: number, scenarioId: string) =>
+    api<SubmissionSummary[]>(
+      `/api/instructor/cohorts/${cohortId}/participants/${membershipId}/scenarios/${encodeURIComponent(scenarioId)}/submissions`,
+    ),
+  submission: (id: number) => api<Submission>(`/api/instructor/submissions/${id}`),
   scenarios: () => api<ScenarioSummary[]>("/api/instructor/scenarios"),
   setOpenScenarios: (cohortId: number, scenarioIds: string[]) =>
     api<string[]>(`/api/instructor/cohorts/${cohortId}/scenarios`, {

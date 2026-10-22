@@ -14,7 +14,7 @@ from ninja.errors import HttpError
 from accounts.auth import instructor_auth, jwt_auth
 from cohorts.models import Cohort
 from cohorts.services import my_membership, open_scenario, open_scenarios
-from submissions.services import latest_submissions_by_scenario, passed_against
+from submissions.services import latest_submissions_by_scenario, passed_against  # noqa: F401 - scenarios → submissions 읽기 의존
 
 from . import registry
 from .schemas import OpenScenariosIn, ScenarioDetailOut, ScenarioSummaryOut, StudentScenarioSummaryOut, detail, summary
