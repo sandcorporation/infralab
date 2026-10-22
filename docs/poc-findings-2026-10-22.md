@@ -1,5 +1,17 @@
 # infra-agent PoC — 로컬 에이전트 방식 실현 가능성 검증 (2026-10-22)
 
+> **이 문서는 PoC 당시 기록이다.** 제품 설계는 스펙 이슈
+> [#1](https://github.com/sandcorporation/infralab/issues/1) 에 있고, 아래와 다른 점은 이렇다.
+>
+> - AWS 에뮬레이터는 **LocalStack 이 아니라 Floci**(`floci/floci`) — LocalStack 은 계정 필수·EC2/RDS 유료가
+>   되어 버렸다. 컨테이너 이름은 `infralab-floci`, 엔드포인트는 compose 환경변수 하나.
+> - 환경 기동은 에이전트의 `env/up` 이 아니라 **서버가 학생마다 내려 주는 `compose.yml`** 이 한다
+>   (`docker compose up -d`). `run.sh` 는 없고, 에이전트에서 LocalStack·env 코드는 제거됐다(#3).
+> - 채점은 에이전트에 박힌 `grade/{scenario}` 가 아니라 서버의 시나리오 YAML(검사 정의)을 브라우저가
+>   에이전트 `/api/check` 로 넘기는 구조다.
+>
+> 검증 결과(docker.sock 제어, kind, 터미널, https 페이지 → localhost)는 그대로 유효하다.
+
 인프라 수업용 「브라우저 + 학생 로컬 Docker」 구조가 실제로 도는지 이 머신(Windows 11, Docker Desktop 29.6.2,
 WSL2 메모리 25GB)에서 확인한 기록. laurio 저장소·CI·staging·production 과 무관한 독립 디렉터리다.
 

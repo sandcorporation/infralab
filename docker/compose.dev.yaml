@@ -1,0 +1,59 @@
+# 개발용 스택 — Postgres + backend. 학생 PC 의 compose(에이전트·workstation·Floci)는 서버가 학생마다
+# 만들어 내려 주는 별개 파일이다.
+#
+#   docker compose -f docker/compose.dev.yaml up
+#   docker compose -f docker/compose.dev.yaml run --rm backend pytest
+#
+# 공개 포트는 다른 프로젝트와 부딪히지 않게 비표준으로 잡았고 환경변수로 바꿀 수 있다
+# (이 머신은 5432·6379·55432·58000·53000 대가 이미 쓰인다).
+name: infralab-dev
+
+x-postgres-env: &postgres-env
+  POSTGRES_DB: infralab
+  POSTGRES_USER: infralab
+  POSTGRES_PASSWORD: infralab
+
+services:
+  db:
+    image: postgres:17-alpine
+    # 버릴 수 있는 dev DB — 커밋마다 fsync 를 기다리지 않는다.
+    command: ["postgres", "-c", "synchronous_commit=off"]
+    environment:
+      <<: *postgres-env
+    ports:
+      - "${INFRALAB_DB_PORT:-55440}:5432"
+    volumes:
+      - infralab-dev-db:/var/lib/postgresql/data
+    healthcheck:
+      # -h 를 준다 — 없으면 초기화 중 임시 서버가 유닉스 소켓에 응답해 TCP 가 열리기 전에 healthy 가 된다.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U infralab -d infralab"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *postgres-env
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      DJANGO_DEBUG: "true"
+      DJANGO_SECRET_KEY: dev-only-insecure-key-do-not-use-in-deploy
+      DJANGO_ALLOWED_HOSTS: "*"
+      SOCIAL_AUTH_MODE: fake
+    ports:
+      - "${INFRALAB_API_PORT:-58040}:8000"
+    volumes:
+      # 소스를 마운트해 코드 수정이 즉시 반영되게 한다. 가상환경은 /opt/venv 라 가려지지 않는다.
+      - ../backend:/app
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+volumes:
+  infralab-dev-db:
