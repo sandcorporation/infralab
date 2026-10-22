@@ -74,7 +74,8 @@ async function errorMessage(res: Response): Promise<string> {
   return `${res.status} ${res.statusText}`;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+/** 인증 헤더를 붙여 요청하고, 401 이면 리프레시 뒤 한 번 다시 시도한다. 성공 응답만 돌려준다. */
+async function request(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const tokens = loadTokens();
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -82,12 +83,21 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
   const res = await fetch(path, { ...init, headers });
   if (res.status === 401 && tokens && retry) {
     const fresh = await refreshTokens();
-    if (fresh) return api<T>(path, init, false);
+    if (fresh) return request(path, init, false);
   }
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  return res;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await request(path, init);
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export async function apiText(path: string, init: RequestInit = {}): Promise<string> {
+  return (await request(path, init)).text();
 }
 
 // ---------- 타입 ----------
@@ -104,6 +114,7 @@ export type Cohort = {
   created_at: string;
 };
 export type MyCohort = { id: number; name: string; archived: boolean; joined_at: string };
+export type MyCohortDetail = MyCohort & { agent_token: string; agent_url: string };
 export type Participant = {
   membership_id: number;
   user_id: number;
@@ -122,6 +133,18 @@ export const socialLogin = (provider: string, accessToken: string) =>
   });
 export const getMe = () => api<Me>("/api/accounts/me");
 export const getMyCohorts = () => api<MyCohort[]>("/api/cohorts");
+export const getMyCohort = (id: number) => api<MyCohortDetail>(`/api/cohorts/${id}`);
+export const regenerateAgentToken = (id: number) =>
+  api<MyCohortDetail>(`/api/cohorts/${id}/agent-token/regenerate`, { method: "POST" });
+
+/** compose.yml 본문 — 내려받기와 복사 둘 다 이 텍스트를 쓴다. */
+export const fetchComposeFile = (id: number) => apiText(`/api/cohorts/${id}/compose.yml`);
+
+/** 라우트 파라미터의 기수 id. 숫자가 아니면 null — 서버에 NaN 을 보내 422 를 받지 않는다. */
+export function parseId(raw: string | undefined): number | null {
+  const n = Number(raw);
+  return raw !== undefined && Number.isInteger(n) && n > 0 ? n : null;
+}
 export const previewJoin = (token: string) => api<JoinPreview>(`/api/join/${encodeURIComponent(token)}`);
 export const join = (token: string) =>
   api<{ cohort_id: number; name: string; created: boolean }>(`/api/join/${encodeURIComponent(token)}`, {

@@ -57,7 +57,7 @@ export default function JoinPage() {
           <p>
             <strong>{preview.name}</strong> 에 가입합니다.
           </p>
-          {!preview.join_open && <p className="error">이 기수는 가입이 닫혔습니다. 강사에게 문의하세요.</p>}
+          {!preview.join_open && <p className="error">가입이 닫힌 기수입니다.</p>}
           {preview.join_open && !me && !loading && (
             <p>
               <Link className="button" to="/login" state={{ from: `/join/${token}` }}>

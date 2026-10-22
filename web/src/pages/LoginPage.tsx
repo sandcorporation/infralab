@@ -39,7 +39,7 @@ export default function LoginPage() {
         </button>
       ) : (
         <>
-          <p className="muted">개발 모드 — 카카오 키가 없어 Fake 로그인을 씁니다. 아이디만 넣으면 됩니다.</p>
+          <p className="muted">개발용 로그인</p>
           <form onSubmit={fakeLogin} className="stack">
             <label>
               아이디

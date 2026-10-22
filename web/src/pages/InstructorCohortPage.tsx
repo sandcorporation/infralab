@@ -105,7 +105,6 @@ export default function InstructorCohortPage() {
 
       <section className="card">
         <h2>가입 링크</h2>
-        <p className="muted">수업 첫날 이 링크 하나만 뿌리면 학생이 카카오로 로그인해 스스로 들어옵니다.</p>
         <div className="row">
           <code className="grow">{joinUrl(c.join_token)}</code>
           <button onClick={copyLink}>{copied ? "복사됨" : "복사"}</button>
@@ -124,7 +123,7 @@ export default function InstructorCohortPage() {
           </button>
           {confirming === "regenerate" ? (
             <>
-              <span className="muted">옛 링크는 바로 쓸 수 없게 됩니다.</span>
+              <span className="muted">옛 링크는 무효가 됩니다.</span>
               <button
                 className="danger"
                 disabled={busy("regenerate")}
@@ -146,15 +145,12 @@ export default function InstructorCohortPage() {
             </button>
           )}
         </div>
-        {c.archived && <p className="muted">보관된 기수는 가입을 받지 않습니다. 보관을 해제하면 다시 열립니다.</p>}
-        {!c.archived && !c.join_open && (
-          <p className="muted">가입이 닫혀 있습니다. 링크를 열어도 새 학생은 들어오지 못합니다.</p>
-        )}
+        {!effectivelyOpen && <p className="muted">{c.archived ? "보관된 기수 — 가입 불가" : "가입 닫힘"}</p>}
       </section>
 
       <section className="card">
         <h2>학생 {people?.length ?? 0}명</h2>
-        {people && people.length === 0 && <p className="muted">아직 아무도 들어오지 않았습니다.</p>}
+        {people && people.length === 0 && <p className="muted">참여자 없음</p>}
         {people && people.length > 0 && (
           <table>
             <thead>
@@ -209,7 +205,6 @@ export default function InstructorCohortPage() {
 
       <section className="card">
         <h2>보관</h2>
-        <p className="muted">끝난 기수를 보관하면 목록 뒤로 가고 새 가입이 막힙니다. 학생 쪽 환경과 기록은 그대로입니다.</p>
         <button
           className="secondary"
           disabled={busy("archive")}

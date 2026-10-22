@@ -75,3 +75,10 @@ class MyCohortOut(Schema):
     name: str
     archived: bool
     joined_at: datetime
+
+
+class MyCohortDetailOut(MyCohortOut):
+    """내 기수 하나 — 에이전트에 붙을 때 쓰는 토큰과 주소까지."""
+
+    agent_token: str
+    agent_url: str

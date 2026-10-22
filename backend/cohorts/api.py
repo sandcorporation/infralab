@@ -17,6 +17,7 @@ from ninja.responses import Status
 
 from accounts.auth import instructor_auth, jwt_auth
 
+from .compose import AGENT_PORT, render_compose
 from .models import Cohort, Membership, new_token
 from .schemas import (
     CohortCreateIn,
@@ -24,9 +25,12 @@ from .schemas import (
     CohortUpdateIn,
     JoinOut,
     JoinPreviewOut,
+    MyCohortDetailOut,
     MyCohortOut,
     ParticipantOut,
 )
+
+AGENT_URL = f"http://127.0.0.1:{AGENT_PORT}"
 
 instructor_router = Router(tags=["instructor"], auth=instructor_auth)
 join_router = Router(tags=["join"])
@@ -162,3 +166,55 @@ def my_cohorts(request: HttpRequest):
         MyCohortOut(id=m.cohort.id, name=m.cohort.name, archived=m.cohort.archived, joined_at=m.joined_at)
         for m in memberships
     ]
+
+
+def _my_membership(request: HttpRequest, cohort_id: int) -> Membership:
+    m = Membership.objects.filter(user=request.auth, cohort_id=cohort_id).select_related("cohort").first()
+    if m is None:
+        raise HttpError(404, "참여하지 않은 기수입니다.")
+    return m
+
+
+def _my_cohort_detail(m: Membership) -> MyCohortDetailOut:
+    return MyCohortDetailOut(
+        id=m.cohort.id,
+        name=m.cohort.name,
+        archived=m.cohort.archived,
+        joined_at=m.joined_at,
+        agent_token=m.agent_token,
+        agent_url=AGENT_URL,
+    )
+
+
+@student_router.get("/cohorts/{cohort_id}", response=MyCohortDetailOut)
+def my_cohort(request: HttpRequest, cohort_id: int):
+    return _my_cohort_detail(_my_membership(request, cohort_id))
+
+
+@student_router.get("/cohorts/{cohort_id}/compose.yml")
+def my_compose_file(request: HttpRequest, cohort_id: int):
+    """내 에이전트 토큰이 박힌 compose.yml. 설치가 파일 하나와 명령 하나가 되게."""
+
+    m = _my_membership(request, cohort_id)
+    body = render_compose(agent_token=m.agent_token, cohort_name=m.cohort.name)
+    response = HttpResponse(body, content_type="text/yaml; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="compose.yml"'
+    return response
+
+
+@student_router.post("/cohorts/{cohort_id}/agent-token/regenerate", response=MyCohortDetailOut)
+def regenerate_agent_token(request: HttpRequest, cohort_id: int):
+    """노트북을 바꿨거나 토큰이 새었을 때. 옛 compose.yml 의 에이전트는 더 이상 인증되지 않는다."""
+
+    m = _my_membership(request, cohort_id)
+    for attempt in range(3):
+        m.agent_token = new_token()
+        try:
+            with transaction.atomic():
+                m.save(update_fields=["agent_token"])
+            break
+        except IntegrityError:
+            # 유일 제약 충돌은 천문학적으로 드물지만 500 대신 다시 뽑는다.
+            if attempt == 2:
+                raise
+    return _my_cohort_detail(m)

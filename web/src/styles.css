@@ -136,6 +136,50 @@ button.danger {
 .right {
   text-align: right;
 }
+a.button.secondary {
+  background: var(--card);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+.badge.ok {
+  color: var(--notice-fg);
+  background: var(--notice-bg);
+  border-color: #a7f3d0;
+}
+.badge.bad {
+  color: var(--error);
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.steps li {
+  margin-bottom: 12px;
+}
+pre {
+  background: #111827;
+  color: #e5e7eb;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+details {
+  margin: 8px 0;
+}
+summary {
+  cursor: pointer;
+  color: var(--accent);
+}
 button.kakao {
   background: #fee500;
   border-color: #fee500;

@@ -37,6 +37,14 @@ INSTALLED_APPS = [
     "cohorts",
 ]
 
+# ---------- 학생 compose.yml ----------
+# 이미지 태그는 지금은 로컬 빌드 이름이다 — 배포 때 레지스트리 태그로 바꾼다(스펙 Out of Scope).
+AGENT_IMAGE = _env("AGENT_IMAGE", "infralab/agent:dev")
+WORKSTATION_IMAGE = _env("WORKSTATION_IMAGE", "infralab/workstation:dev")
+FLOCI_IMAGE = _env("FLOCI_IMAGE", "floci/floci:2.3.0")
+# 학생 브라우저가 대시보드를 여는 주소(콤마로 여러 개). 에이전트는 이 오리진에서 온 요청만 받는다.
+DASHBOARD_ORIGIN = _env("DASHBOARD_ORIGIN", "http://127.0.0.1:53040,http://127.0.0.1:5173")
+
 # 시나리오 YAML 디렉터리. 저장소 레이아웃(backend/ 옆 scenarios/)이 기본, compose 는 /scenarios 로 마운트한다.
 SCENARIOS_DIR = _env("SCENARIOS_DIR", str(BASE_DIR.parent / "scenarios"))
 

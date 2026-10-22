@@ -6,6 +6,8 @@ import JoinPage from "./pages/JoinPage";
 import MyCohortsPage from "./pages/MyCohortsPage";
 import InstructorCohortsPage from "./pages/InstructorCohortsPage";
 import InstructorCohortPage from "./pages/InstructorCohortPage";
+import CohortPage from "./pages/CohortPage";
+import SetupPage from "./pages/SetupPage";
 
 function Layout() {
   const { me, logout } = useAuth();
@@ -54,6 +56,8 @@ export default function App() {
         <Route path="/join/:token" element={<JoinPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/" element={<MyCohortsPage />} />
+          <Route path="/cohorts/:id" element={<CohortPage />} />
+          <Route path="/cohorts/:id/setup" element={<SetupPage />} />
         </Route>
         <Route element={<RequireAuth instructor />}>
           <Route path="/instructor" element={<InstructorCohortsPage />} />

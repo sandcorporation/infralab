@@ -49,6 +49,12 @@ services:
       # 토큰이 Fake 어댑터에 들어가 항상 401 이다.
       SOCIAL_AUTH_MODE: ${VITE_KAKAO_REST_KEY:+real}
       SCENARIOS_DIR: /scenarios
+      # 학생 compose.yml 에 들어가는 값. 이미지는 로컬 빌드 이름(docker build -t infralab/agent:dev agent/ 등).
+      # compose 의 web 과, 호스트에서 `npm run dev` 로 직접 띄운 Vite(5173) 둘 다 허용한다.
+      DASHBOARD_ORIGIN: http://127.0.0.1:${INFRALAB_WEB_PORT:-53040},http://127.0.0.1:5173
+      AGENT_IMAGE: ${AGENT_IMAGE:-infralab/agent:dev}
+      WORKSTATION_IMAGE: ${WORKSTATION_IMAGE:-infralab/workstation:dev}
+      FLOCI_IMAGE: ${FLOCI_IMAGE:-floci/floci:2.3.0}
     ports:
       - "${INFRALAB_API_PORT:-58040}:8000"
     volumes:
