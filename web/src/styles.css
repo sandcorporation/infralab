@@ -205,14 +205,23 @@ label.check input {
 }
 .scenario-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 45%);
   gap: 12px;
   align-items: start;
 }
-@media (max-width: 800px) {
+@media (max-width: 900px) {
   .scenario-grid {
     grid-template-columns: 1fr;
   }
+}
+.terminal-host {
+  height: 420px;
+  background: #111827;
+  border-radius: 6px;
+  padding: 4px;
+}
+.terminal-bar {
+  margin-bottom: 6px;
 }
 .markdown h1,
 .markdown h2,
