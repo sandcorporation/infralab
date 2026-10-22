@@ -176,6 +176,69 @@ pre code {
 details {
   margin: 8px 0;
 }
+.list.plain li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.list.plain li:last-child {
+  border-bottom: none;
+}
+label.check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--fg);
+  font-size: 15px;
+}
+label.check input {
+  min-width: 0;
+  margin-top: 4px;
+}
+.score {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.score.done {
+  color: var(--notice-fg);
+  font-weight: 600;
+}
+.scenario-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .scenario-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-size: 16px;
+  margin: 14px 0 6px;
+}
+.markdown p,
+.markdown li {
+  line-height: 1.6;
+}
+.checks li {
+  margin-bottom: 8px;
+}
+.hint code {
+  white-space: pre-wrap;
+}
+.env-missing {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.env-missing p {
+  margin: 4px 0;
+}
 summary {
   cursor: pointer;
   color: var(--accent);

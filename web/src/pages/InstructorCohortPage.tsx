@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, formatTime, instructor, joinUrl, type Cohort, type Participant } from "../api";
+import { ScenarioPicker } from "../components/ScenarioPicker";
 
 export default function InstructorCohortPage() {
   const { id = "" } = useParams();
@@ -146,6 +147,15 @@ export default function InstructorCohortPage() {
           )}
         </div>
         {!effectivelyOpen && <p className="muted">{c.archived ? "보관된 기수 — 가입 불가" : "가입 닫힘"}</p>}
+      </section>
+
+      <section className="card">
+        <h2>열린 시나리오 {c.open_scenario_ids.length}</h2>
+        <ScenarioPicker
+          cohortId={c.id}
+          open={c.open_scenario_ids}
+          onSaved={(ids) => setCohort((prev) => (prev ? { ...prev, open_scenario_ids: ids } : prev))}
+        />
       </section>
 
       <section className="card">

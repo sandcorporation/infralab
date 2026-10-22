@@ -52,6 +52,11 @@ class Api:
             path, data=data or {}, content_type="application/json", **(session.headers if session else {})
         )
 
+    def put(self, path: str, data=None, session: Session | None = None):
+        return self.client.put(
+            path, data=data or {}, content_type="application/json", **(session.headers if session else {})
+        )
+
     def patch(self, path: str, data=None, session: Session | None = None):
         return self.client.patch(
             path, data=data or {}, content_type="application/json", **(session.headers if session else {})
@@ -74,5 +79,10 @@ class Api:
 
     def join(self, student: Session, token: str) -> dict:
         res = self.post(f"/api/join/{token}", session=student)
+        assert res.status_code == 200, res.content
+        return res.json()
+
+    def open_scenarios(self, instructor: Session, cohort_id: int, scenario_ids: list[str]) -> list[str]:
+        res = self.put(f"/api/instructor/cohorts/{cohort_id}/scenarios", {"scenario_ids": scenario_ids}, instructor)
         assert res.status_code == 200, res.content
         return res.json()

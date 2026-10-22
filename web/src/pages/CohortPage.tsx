@@ -1,13 +1,31 @@
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { parseId } from "../api";
+import { ApiError, getCohortScenarios, parseId, type StudentScenarioSummary } from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
+import { RequiresTags } from "../components/ScenarioPicker";
 import { useMyCohort } from "../hooks";
 
-// 학생의 기수 화면. 환경(에이전트) 상태와 설치 안내 입구. 시나리오 목록은 #9 에서 여기에 들어온다.
+// 학생의 기수 화면. 환경(에이전트) 상태, 설치 안내 입구, 열린 시나리오 목록.
 export default function CohortPage() {
   const { id } = useParams();
-  const { cohort, error } = useMyCohort(parseId(id));
+  const cohortId = parseId(id);
+  const { cohort, error } = useMyCohort(cohortId);
   const probe = useAgentProbe(cohort?.agent_url, cohort?.agent_token);
+  const [scenarios, setScenarios] = useState<StudentScenarioSummary[] | null>(null);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setScenarios(null);
+    setScenarioError(null);
+    if (cohortId === null) return;
+    let cancelled = false;
+    getCohortScenarios(cohortId)
+      .then((s) => !cancelled && setScenarios(s))
+      .catch((err: ApiError) => !cancelled && setScenarioError(err.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [cohortId]);
 
   if (error) return <p className="error">{error}</p>;
   if (!cohort) return <p className="muted">불러오는 중…</p>;
@@ -67,7 +85,24 @@ export default function CohortPage() {
 
       <section className="card">
         <h2>시나리오</h2>
-        <p className="muted">열린 시나리오가 없습니다.</p>
+        {scenarioError && <p className="error">{scenarioError}</p>}
+        {scenarios && scenarios.length === 0 && <p className="muted">열린 시나리오가 없습니다.</p>}
+        {scenarios && scenarios.length > 0 && (
+          <ul className="list plain">
+            {scenarios.map((s) => (
+              <li key={s.id} className="row scenario-row">
+                <Link to={`/cohorts/${cohort.id}/scenarios/${s.id}`}>
+                  <strong>{s.title}</strong>
+                </Link>
+                <RequiresTags requires={s.requires} />
+                <span className="grow" />
+                <span className={s.passed === s.total ? "score done" : "score"}>
+                  {s.passed === null ? "—" : s.passed}/{s.total}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </section>
   );

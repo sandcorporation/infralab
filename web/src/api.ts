@@ -123,6 +123,19 @@ export type Participant = {
   joined_at: string;
 };
 export type JoinPreview = { cohort_id: number; name: string; join_open: boolean };
+export type KindRequirement = { control_planes: number; workers: number };
+export type Requires = { floci: boolean; kind: KindRequirement | null };
+export type ScenarioSummary = { id: string; title: string; requires: Requires; total: number };
+export type StudentScenarioSummary = ScenarioSummary & { passed: number | null };
+export type CheckDef = {
+  id: string;
+  name: string;
+  hint: string;
+  command: string;
+  timeout_seconds: number;
+  expect: Record<string, unknown> & { type: string };
+};
+export type ScenarioDetail = ScenarioSummary & { description: string; checks: CheckDef[]; scripts: Record<string, string> };
 
 // ---------- 호출 ----------
 
@@ -137,6 +150,10 @@ export const getMyCohort = (id: number) => api<MyCohortDetail>(`/api/cohorts/${i
 export const regenerateAgentToken = (id: number) =>
   api<MyCohortDetail>(`/api/cohorts/${id}/agent-token/regenerate`, { method: "POST" });
 
+export const getCohortScenarios = (cohortId: number) =>
+  api<StudentScenarioSummary[]>(`/api/cohorts/${cohortId}/scenarios`);
+export const getCohortScenario = (cohortId: number, scenarioId: string) =>
+  api<ScenarioDetail>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}`);
 /** compose.yml 본문 — 내려받기와 복사 둘 다 이 텍스트를 쓴다. */
 export const fetchComposeFile = (id: number) => apiText(`/api/cohorts/${id}/compose.yml`);
 
@@ -162,6 +179,12 @@ export const instructor = {
   participants: (id: number) => api<Participant[]>(`/api/instructor/cohorts/${id}/participants`),
   removeParticipant: (id: number, membershipId: number) =>
     api<void>(`/api/instructor/cohorts/${id}/participants/${membershipId}`, { method: "DELETE" }),
+  scenarios: () => api<ScenarioSummary[]>("/api/instructor/scenarios"),
+  setOpenScenarios: (cohortId: number, scenarioIds: string[]) =>
+    api<string[]>(`/api/instructor/cohorts/${cohortId}/scenarios`, {
+      method: "PUT",
+      body: JSON.stringify({ scenario_ids: scenarioIds }),
+    }),
 };
 
 export function joinUrl(token: string): string {
