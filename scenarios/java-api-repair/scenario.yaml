@@ -1,0 +1,55 @@
+id: java-api-repair
+title: 고장 난 Java API
+description: |
+  `/work/app` (호스트의 `./work/app`) 에 Javalin 으로 만든 API 가 있다. 이름 목록을 페이지로 나눠 돌려주는 `GET /names?page=&size=` 의 동작이 틀리다.
+
+  - 마지막 페이지에서 항목이 하나 빠진다.
+
+  ## 할 일
+
+  1. 증상을 재현하고 원인을 찾는다.
+  2. 코드를 고쳐 테스트(`./gradlew test`)가 모두 통과하게 한다.
+
+  테스트 파일(`src/test/`)과 빌드 설정(`build.gradle.kts`, `settings.gradle.kts`, `gradle/`)은 바꾸지 않는다.
+
+requires:
+  floci: false
+  kind: null
+
+setup: setup.sh
+setup_timeout_seconds: 300
+
+ai_rules: |
+  프로젝트는 `/work/app` 이다 (Java 25, Javalin, Gradle wrapper, 테스트는 JUnit 5). Gradle 배포본과 의존성은 이미 받아 두었다.
+  - 테스트: `cd /work/app && ./gradlew test --offline`
+  - 실행: `cd /work/app && ./gradlew run --offline` (포트는 환경변수 PORT, 기본 7070)
+  - `src/test/`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/` 은 바꾸지 않는다. 의존성도 더하지 않는다.
+
+checks:
+  - id: tests-pass
+    name: ./gradlew test 가 통과한다
+    hint: cd /work/app && ./gradlew test --offline 으로 실패하는 테스트와 메시지를 본다
+    command: cd /work/app && ./gradlew test --offline --console=plain 2>&1
+    expect: exit_zero
+    timeout_seconds: 240
+
+  - id: service-responds
+    name: 앱이 빌드되어 뜨고 응답한다
+    hint: cd /work/app && ./gradlew run --offline 이 뜨는지 본다
+    command: SERVE_WAIT=150 SERVE_ANY_STATUS=1 serve-and-curl.sh "./gradlew installDist --offline -q && build/install/java-api/bin/java-api" 3300 /health
+    expect: { contains: "HTTP " }
+    timeout_seconds: 200
+
+  - id: tests-untouched
+    name: src/test/ 를 바꾸지 않았다
+    hint: 테스트가 아니라 코드를 고친다 — 바뀐 파일은 출력에 보인다
+    command: check-baseline.sh java-api-repair src/test
+    expect: exit_zero
+    constraint: true
+
+  - id: build-untouched
+    name: 빌드 설정을 바꾸지 않았다
+    hint: build.gradle.kts, settings.gradle.kts, gradle/ 은 그대로 둔다 — 바뀐 파일은 출력에 보인다
+    command: check-baseline.sh java-api-repair build.gradle.kts settings.gradle.kts gradle
+    expect: exit_zero
+    constraint: true
