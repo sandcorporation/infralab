@@ -73,8 +73,10 @@ docker build --build-arg VERSION=0.1.0-dev -t infralab/agent:dev agent/
 ## 통합 시험 (실제 Docker, 손으로만)
 
 `integration` 빌드 태그로 분리돼 기본 `go test` 에는 들어가지 않는다. 떠 있는 에이전트(학생 compose 스택)를 HTTP 로
-친다: status → s3 검사 0/4 → 과제 수행 → 4/4 → 스크립트 검사 → kind up 두 번(두 번째는 exists) → kind down →
-Floci 초기화(버킷 사라짐) → 터미널 WS 에코. 전제: 대시보드에서 받은 compose.yml 로 `docker compose up -d` 한 상태.
+친다: status → 준비 전 기록 404 → 환경 준비(`/api/setup`: Floci 초기화·규칙 파일 두 개·준비 표시·setup 산출물을 workstation 에서
+확인) → 준비 뒤 기록 200(도구마다 하나) → 실패하는 setup(ok=false·출력) → s3 검사 0/4 → 과제 수행 → 4/4 → 스크립트 검사 →
+kind up 두 번(두 번째는 exists) → kind down → Floci 초기화(버킷 사라짐) → 터미널 WS 에코. 세션 파일 형식과 두 고장 시나리오의
+실측은 `docs/ai-session-formats-2026-10-23.md`, `docs/scenario-notes-2026-10-23.md`. 전제: 대시보드에서 받은 compose.yml 로 `docker compose up -d` 한 상태.
 kind 노드 이미지가 있으면 3~5분, 처음이면 이미지(약 1GB)를 받느라 더 걸린다. 돌리는 동안 Floci 상태와 kind
 클러스터가 지워진다.
 
