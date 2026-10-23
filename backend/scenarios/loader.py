@@ -75,6 +75,23 @@ def _scalar_text(value: Any, where: str) -> str:
     raise ScenarioError(f"{where} 는 문자열이어야 한다 — 따옴표로 감싼다 (지금 {type(value).__name__}: {value!r})")
 
 
+def _mentions(text: str, name: str) -> bool:
+    """스크립트 이름이 단어로 나오는가 — `a-check.sh` 안의 `check.sh` 같은 부분 문자열은 아니다.
+    앞에는 `/` 가 와도 된다(`$(dirname "$0")/app-lib.sh`)."""
+
+    return re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w-])", text) is not None
+
+
+def _strip_comments(body: str) -> str:
+    """셸 스크립트의 주석 줄을 뺀다 — 주석에 이름이 언급됐다고 그 스크립트를 부르는 것은 아니다."""
+
+    return "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
+
+
+#: 검사 명령 안의 맨 `이름.sh` 토큰(경로가 붙지 않은 것) — 보조 스크립트를 부르는 것으로 본다.
+_BARE_SCRIPT_TOKEN = re.compile(r"(?<![\w./-])([A-Za-z0-9][\w.-]*\.sh)(?![\w-])")
+
+
 @dataclass(frozen=True)
 class KindRequirement:
     control_planes: int = 1
@@ -147,9 +164,9 @@ class Scenario:
         while pending:
             text = pending.pop()
             for name, body in self.scripts.items():
-                if name not in used and name in text:
+                if name not in used and _mentions(text, name):
                     used[name] = body
-                    pending.append(body)
+                    pending.append(_strip_comments(body))
         return used
 
 
@@ -317,6 +334,17 @@ def load_scenario(directory: Path) -> Scenario:
         seen.add(c.id)
 
     scripts = {p.name: _read_text(p, where) for p in sorted(directory.glob("*.sh"))}
+    # 공유 스크립트(`_shared/*.sh`)는 모든 시나리오에 합친다. 같은 이름이 시나리오 디렉터리에도 있으면 갈라질 수 있어 거절한다.
+    shared_dir = directory.parent / "_shared"
+    if shared_dir.is_dir():
+        for p in sorted(shared_dir.glob("*.sh")):
+            if p.name in scripts:
+                raise ScenarioError(f"{where}: {p.name} 은 _shared 에 있다 — 시나리오 디렉터리에 복사하지 않는다")
+            scripts[p.name] = _read_text(p, where)
+    for c in checks:
+        for token in _BARE_SCRIPT_TOKEN.findall(c.command):
+            if token not in scripts:
+                raise ScenarioError(f"{where}: 검사 {c.id} 가 부르는 스크립트 {token} 이 없다")
 
     requires = _parse_requires(raw.get("requires"), where)
     setup, setup_timeout, setup_reset, ai_rules = _parse_setup(raw, requires, scripts, where)

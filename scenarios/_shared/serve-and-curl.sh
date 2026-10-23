@@ -3,9 +3,7 @@
 # 프로젝트(/work/app, APP_DIR 로 바꿀 수 있다)에서 시작 명령을 백그라운드로 띄우고(환경변수 PORT=<포트>),
 # 응답할 때까지(최대 30초, 환경변수 SERVE_WAIT 초로 늘린다 — 빌드가 오래 걸리는 앱용) 기다렸다가 http://127.0.0.1:<포트><경로> 를 curl 해 본문을 출력하고 앱을 끈다.
 # 기대 문자열이 있으면 본문에 없을 때 비정상 종료한다. 학생이 앱을 켜 둔 상태에 기대지 않는다 —
-# 같은 포트에 이미 응답하는 것이 있으면 시작하지 않고 실패한다.
-# 환경변수 SERVE_ANY_STATUS=1 이면 2xx 가 아니어도 서버가 응답하면 통과한다(본문은 「HTTP <코드> …」).
-set -uo pipefail
+# 같은 포트에 이미 응답하는 것이 있으면 시작하지 않고 실패한다.set -uo pipefail
 
 if [ "$#" -lt 3 ]; then
   echo "사용: serve-and-curl.sh <시작 명령> <포트> <경로> [기대 문자열]" >&2
@@ -42,13 +40,7 @@ for _ in $(seq 1 $(( ${SERVE_WAIT:-30} * 2 ))); do
     tail -n 20 "$log" >&2
     exit 1
   fi
-  if [ -n "${SERVE_ANY_STATUS:-}" ]; then
-    # 상태 코드와 상관없이 서버가 응답하기만 하면 된다 — 본문은 「HTTP <코드> <본문>」 으로 출력한다.
-    if out=$(curl -s -m 2 -w '\n%{http_code}' "$url") && [ "${out##*$'\n'}" != 000 ]; then
-      body="HTTP ${out##*$'\n'} ${out%$'\n'*}"
-      break
-    fi
-  elif body=$(curl -sf -m 2 "$url"); then
+  if body=$(curl -sf -m 2 "$url"); then
     break
   fi
   body=

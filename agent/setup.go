@@ -69,16 +69,8 @@ func (r *setupRequest) validate() error {
 		if st.TimeoutSeconds < 0 || st.TimeoutSeconds > int(maxCheckTimeout.Seconds()) {
 			return fmt.Errorf("setup.timeout_seconds must be 1..%d", int(maxCheckTimeout.Seconds()))
 		}
-		if len(st.Scripts) > maxScriptsPerRequest {
-			return fmt.Errorf("too many scripts (max %d)", maxScriptsPerRequest)
-		}
-		for name, body := range st.Scripts {
-			if !scriptNamePattern.MatchString(name) {
-				return fmt.Errorf("scripts: bad name %q", name)
-			}
-			if len(body) > maxScriptBytes {
-				return fmt.Errorf("scripts: %s is too large", name)
-			}
+		if err := validateScripts(st.Scripts); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -105,6 +97,10 @@ func (s *server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Minute)
 	defer cancel()
 
+	// 이전 준비의 표시는 이 준비가 끝나기 전까지 무효다 — 중간에 실패하면 옛 표시가 채점을 열어 두지 않게 먼저 지운다.
+	markPath := prepareMarkDir + "/" + req.ScenarioID + ".prepared"
+	_, _ = run(ctx, s.runner, "docker", "exec", s.cfg.Workstation, "rm", "-f", markPath)
+
 	var st stepper
 	ok := true
 	if req.Reset.Floci {
@@ -127,20 +123,21 @@ func (s *server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		}
 		return fmt.Sprintf("CLAUDE.md, AGENTS.md (%d bytes)", len(req.AIRules)), nil
 	})
-	ok = ok && st.run("mark", func() (string, error) {
-		stamp := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-		wctx, cancel := context.WithTimeout(ctx, defaultCheckTimeout)
-		defer cancel()
-		if err := s.writeWorkstationFile(wctx, prepareMarkDir+"/"+req.ScenarioID+".prepared", stamp+"\n", false); err != nil {
-			return "", err
-		}
-		return stamp, nil
-	})
 	if ok && req.Setup != nil {
 		ok = st.run("setup", func() (string, error) {
 			return s.runSetup(ctx, req.Setup.Command, req.Setup.Scripts, req.Setup.TimeoutSeconds)
 		})
 	}
+	// 준비 표시는 모든 단계가 성공한 뒤에만 쓴다 — setup 이 실패했는데 채점이 열리면 안 된다.
+	ok = ok && st.run("mark", func() (string, error) {
+		stamp := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		wctx, cancel := context.WithTimeout(ctx, defaultCheckTimeout)
+		defer cancel()
+		if err := s.writeWorkstationFile(wctx, markPath, stamp+"\n", false); err != nil {
+			return "", err
+		}
+		return stamp, nil
+	})
 	writeJSON(w, 200, map[string]any{"ok": ok, "steps": st.steps})
 }
 

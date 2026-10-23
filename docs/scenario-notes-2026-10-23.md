@@ -19,14 +19,14 @@
 
 ## python-api-feature
 
-- 프로젝트는 infralab-labs v2 의 labs/python-api. pip 설치는 PIP_USER=1 로 홈 볼륨(/root/.local)에 가고 PATH 에 /root/.local/bin 이 있어 pytest·uvicorn 이 바로 되며 컨테이너를 다시 만들어도 남는다(이미지에 추가). 환경 준비 약 16초.
+- 프로젝트는 infralab-labs 의 labs/python-api. pip 설치는 PIP_USER=1 로 홈 볼륨(/root/.local)에 가고 PATH 에 /root/.local/bin 이 있어 pytest·uvicorn 이 바로 되며 컨테이너를 다시 만들어도 남는다(이미지에 추가). 환경 준비 약 16초.
 - 인수 검사는 acceptance.sh 가 앱(uvicorn, 포트 3200)을 띄워 요청하고, 공개 API 유지는 api-shape.sh 가 보관하지 않은 항목의 키가 id·name·price 뿐인지 본다. 둘 다 app-lib.sh 를 쓴다. 기준 해시는 __pycache__·.pytest_cache 를 제외한다(공유 스크립트).
 - 「없는 항목은 404」가 구현 전에도 통과하지 않게(없는 라우트도 404) 본문 {"detail": "not found"} 까지 요구한다.
 - 실측: 환경 준비 직후 채점 5/7(인수 두 건 실패, 나머지 통과) → 구현 뒤 7/7 → 모든 항목에 archived 키를 넣고 requirements.txt 를 바꾸면 4/7, 두 제약이 실패하고 어긋난 응답·바뀐 파일이 출력에 보인다.
 
 ## java-api-repair
 
-- 프로젝트는 infralab-labs v2 의 labs/java-api(Javalin, Gradle 9.1 wrapper, toolchain 25). 환경 준비의 `./gradlew test` 가 Gradle 배포본과 의존성을 ~/.gradle(홈 볼륨)에 받는다. 소요: 처음 약 33초(배포본·의존성 다운로드), 이후 5~10초. setup_timeout 은 300초로 여유를 뒀다.
+- 프로젝트는 infralab-labs v3 의 labs/java-api(Javalin, Gradle 9.1 wrapper, toolchain 25). 환경 준비의 `./gradlew test` 가 Gradle 배포본과 의존성을 ~/.gradle(홈 볼륨)에 받는다. 소요: 처음 약 33초(배포본·의존성 다운로드), 이후 5~10초. setup_timeout 은 300초로 여유를 뒀다.
 - 호스트 폴더를 마운트한 /work 에서는 Gradle 의 파일 변경 감시(VFS watch)가 편집을 놓쳐 소스를 고쳐도 compileJava 가 UP-TO-DATE 로 남았다 → 환경 준비가 홈의 ~/.gradle/gradle.properties 에 org.gradle.vfs.watch=false 를 쓴다(프로젝트 파일은 건드리지 않는다).
-- **labs v2 의 java-api 는 jackson-databind 의존성이 없어 Javalin 의 ctx.json 이 항상 HTTP 500 을 낸다**(/health 도). 그래서 「서비스 응답」 검사는 본문이 아니라 서버가 뜨고 응답하는지(`SERVE_ANY_STATUS=1`, 출력 「HTTP <코드> …」)만 본다. labs 쪽에서 의존성을 더한 태그가 나오면 /health 본문 검사로 올린다.
+- labs v2 의 java-api 는 jackson-databind 가 없어 `/health` 가 500 이었다 → v3 에서 의존성이 들어와 서비스 검사는 `/health` 본문(`{"status":"ok"}`)을 본다(SERVE_ANY_STATUS 우회는 없앴다). 시나리오 셋은 모두 v3 를 쓴다.
 - 실측: 환경 준비 직후 채점 3/4(테스트 실패, 나머지 통과) → off-by-one 수정 뒤 4/4 → build.gradle.kts 를 바꾸면 2/4(제약 실패, 「바뀜: build.gradle.kts」 출력).

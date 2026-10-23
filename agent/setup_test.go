@@ -78,7 +78,7 @@ func TestSetup_RunsResetRulesMarkAndSetupInOrder(t *testing.T) {
 			order += n + ","
 		}
 	}
-	if order != "floci,kind,rules,mark,setup," {
+	if order != "floci,kind,rules,setup,mark," {
 		t.Fatalf("step order = %s (steps %v)", order, stepNames(got.Steps))
 	}
 
@@ -88,8 +88,8 @@ func TestSetup_RunsResetRulesMarkAndSetupInOrder(t *testing.T) {
 		indexOf(fake, "kind create cluster"),
 		indexOf(fake, rulesWritePrefix+"CLAUDE.md"),
 		indexOf(fake, rulesWritePrefix+"AGENTS.md"),
-		indexOf(fake, markWritePrefix+"web-down.prepared"),
 		indexOf(fake, runPrefix),
+		indexOf(fake, markWritePrefix+"web-down.prepared"),
 	}
 	for i, v := range idx {
 		if v < 0 || (i > 0 && v < idx[i-1]) {
@@ -182,6 +182,14 @@ func TestSetup_FailingSetupIsNotOkAndKeepsItsOutput(t *testing.T) {
 	last := got.Steps[len(got.Steps)-1]
 	if last.Name != "setup" || !strings.Contains(last.Result, "connection refused") || !strings.Contains(last.Result, "partial") || !strings.Contains(last.Result, "ERROR") {
 		t.Errorf("last step = %+v", last)
+	}
+	// 실패한 setup 은 준비 표시를 남기지 않고, 이전 준비의 표시도 먼저 지운다 — 채점이 열려 있으면 안 된다.
+	if n := len(fake.callsWithPrefix(markWritePrefix)); n != 0 {
+		t.Errorf("mark was written after a failed setup (%d writes)", n)
+	}
+	rm := indexOf(fake, "docker exec infralab-workstation rm -f /root/.infralab/web-down.prepared")
+	if rm < 0 || rm > indexOf(fake, "docker run -d --name infralab-floci") {
+		t.Errorf("old mark was not removed before the reset (rm at %d)", rm)
 	}
 }
 

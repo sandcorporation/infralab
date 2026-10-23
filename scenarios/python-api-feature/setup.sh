@@ -2,7 +2,7 @@
 # 환경 준비 — infralab-labs 의 labs/python-api 를 태그로 받아 /work/app 에 깨끗한 git 이력으로 놓고 의존성을 설치한다.
 set -euo pipefail
 
-TAG=v2
+TAG=v3
 REPO=https://github.com/sandcorporation/infralab-labs
 FOLDER=labs/python-api
 

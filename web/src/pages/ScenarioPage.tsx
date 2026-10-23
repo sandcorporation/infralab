@@ -32,16 +32,23 @@ export default function ScenarioPage() {
     setPrepared(null);
   }, [cohortId, scenarioId]);
   const connected = probe.state === "connected";
+  // 404(준비 표시 없음)만 「준비 전」이다. 시간 초과·503·네트워크 오류는 모르는 채로 두고 5초 뒤에 다시 묻는다 —
+  // 한 번의 실패가 새로고침 전까지 채점을 잠그지 않게.
+  const [askAgain, setAskAgain] = useState(0);
   useEffect(() => {
     if (!connected || prepared !== null || !cohort) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     isPrepared(cohort.agent_url, cohort.agent_token, scenarioId)
       .then((p) => !cancelled && setPrepared(p))
-      .catch(() => !cancelled && setPrepared(false));
+      .catch(() => {
+        if (!cancelled) timer = setTimeout(() => setAskAgain((n) => n + 1), 5000);
+      });
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [connected, prepared, cohort, scenarioId]);
+  }, [connected, prepared, cohort, scenarioId, askAgain]);
 
   useEffect(() => {
     if (cohortId === null) return;
@@ -88,7 +95,7 @@ export default function ScenarioPage() {
                   agentUrl={cohort.agent_url}
                   agentToken={cohort.agent_token}
                   ready={(env?.ready ?? false) && prepared === true}
-                  lockedReason={env?.ready && prepared !== true ? "환경 준비 먼저" : undefined}
+                  lockedReason={env?.ready ? (prepared === false ? "환경 준비 먼저" : prepared === null ? "준비 확인 중…" : undefined) : undefined}
                 />
               </section>
             </>
@@ -117,7 +124,7 @@ export default function ScenarioPage() {
                 agentUrl={cohort.agent_url}
                 token={cohort.agent_token}
                 prepared={prepared}
-                onPrepared={() => setPrepared(true)}
+                onPrepared={setPrepared}
               />
               <EnvActions requires={scenario.requires} probe={probe} agentUrl={cohort.agent_url} token={cohort.agent_token} />
             </section>

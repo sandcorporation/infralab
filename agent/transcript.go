@@ -92,7 +92,7 @@ type lineParser func(raw []byte) (e transcriptEntry, ok bool)
 func (s *server) readSessions(ctx context.Context, tool, sinceText string, since time.Time, root, pattern, markPath string, parse lineParser) toolTranscript {
 	out := toolTranscript{Tool: tool, Since: sinceText, Entries: []transcriptEntry{}}
 	// 표시보다 나중에 바뀐 파일만 — 준비 전에 끝난 옛 대화를 다 읽지 않는다.
-	list, err := s.runner.Run(ctx, "", "docker", "exec", s.cfg.Workstation, "find", root, "-name", pattern, "-type", "f", "-newer", markPath)
+	list, err := s.runner.Run(ctx, "", "docker", "exec", s.cfg.Workstation, "find", root, "-name", pattern, "-type", "f", "-newer", markPath, "-print0")
 	if err != nil {
 		out.Error = "could not list session files: " + err.Error()
 		return out
@@ -101,7 +101,7 @@ func (s *server) readSessions(ctx context.Context, tool, sinceText string, since
 		out.Error = "could not list session files: " + firstLine(strings.TrimSpace(list.Combined()))
 		return out
 	}
-	files := strings.Fields(list.Stdout)
+	files := splitNUL(list.Stdout)
 	sort.Strings(files)
 	var entries []transcriptEntry
 	for _, f := range files {
@@ -135,6 +135,40 @@ func (s *server) readSessions(ctx context.Context, tool, sinceText string, since
 		out.Entries = entries
 	}
 	return out
+}
+
+// splitNUL 은 find -print0 의 출력을 경로 목록으로 나눈다 — 공백이 든 경로도 깨지지 않는다.
+func splitNUL(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, "\x00") {
+		if strings.TrimSpace(p) != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// GET /api/prepared?scenario_id= — 준비 표시 파일이 있는지만 본다(가볍다). 있으면 200, 없으면 404 「환경 준비 먼저」,
+// workstation 이 안 떠 있거나 도커가 실패하면 503. 화면이 채점 잠금을 풀지 정할 때 쓴다 — 기록 본문은 제출 때만 읽는다.
+func (s *server) handlePrepared(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("scenario_id")
+	if !scenarioIDPattern.MatchString(id) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "scenario_id must be lowercase letters, digits and hyphens"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	res, err := s.runner.Run(ctx, "", "docker", "exec", s.cfg.Workstation, "test", "-f", prepareMarkDir+"/"+id+".prepared")
+	switch {
+	case err != nil:
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "could not check the prepare mark: " + err.Error()})
+	case dockerLevelFailure(res):
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "workstation unavailable: " + firstLine(strings.TrimSpace(res.Stderr))})
+	case res.ExitCode != 0:
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "환경 준비 먼저"})
+	default:
+		writeJSON(w, 200, map[string]any{"scenario_id": id, "prepared": true})
+	}
 }
 
 func withoutEntries(t toolTranscript) toolTranscript {
@@ -223,13 +257,14 @@ func parseClaudeLine(raw []byte) (transcriptEntry, bool) {
 		Timestamp         string `json:"timestamp"`
 		IsSidechain       bool   `json:"isSidechain"`
 		IsMeta            bool   `json:"isMeta"`
+		IsCompactSummary  bool   `json:"isCompactSummary"`
 		IsAPIErrorMessage bool   `json:"isApiErrorMessage"`
 		Message           struct {
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
 		} `json:"message"`
 	}
-	if json.Unmarshal(raw, &l) != nil || l.IsSidechain || l.IsMeta || l.IsAPIErrorMessage {
+	if json.Unmarshal(raw, &l) != nil || l.IsSidechain || l.IsMeta || l.IsCompactSummary || l.IsAPIErrorMessage {
 		return transcriptEntry{}, false
 	}
 	if (l.Type != "user" && l.Type != "assistant") || l.Message.Role != l.Type {

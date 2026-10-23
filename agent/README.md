@@ -34,11 +34,12 @@ workstation·Floci 를 찾고, kind 클러스터를 올리고 내리며, 브라�
   간다. 도커 자체의 실패(컨테이너 없음 등)도 `error` 로 구분한다 — `pass:false` 에 `error` 가 비어 있을 때만 학생이 틀린 것이다
 - `POST /api/setup {"scenario_id","reset":{"floci":bool,"kind":{"control_planes","workers"}|null},"setup":{"command","scripts","timeout_seconds"}|null,"ai_rules":"본문"}` —
   「환경 준비」. 단계 순서: `floci/*`(reset.floci, `/api/floci/reset` 과 같은 코드) → `kind/*`(reset.kind — 클러스터가 이미
-  맞게 있어도 **항상** 지우고 만든다) → `rules`(workstation `/work/CLAUDE.md`·`/work/AGENTS.md` 에 같은 본문) → `mark`(홈 볼륨의
-  `~/.infralab/<scenario_id>.prepared` 에 UTC 시각 `2006-01-02T15:04:05Z`) → `setup`(있으면 — 검사와 같은 실행기: 요청별 스크립트
-  디렉터리·PATH·안쪽 `timeout`, 기본 30초·최대 300초). 단계별 `steps`·`ok` 를 돌려주고 앞 단계가 실패하면 뒤는 돌리지 않는다.
+  맞게 있어도 **항상** 지우고 만든다) → `rules`(workstation `/work/CLAUDE.md`·`/work/AGENTS.md` 에 같은 본문) → `setup`(있으면 — 검사와 같은 실행기: 요청별 스크립트
+  디렉터리·PATH·안쪽 `timeout`, 기본 30초·최대 300초) → `mark`(모든 단계가 성공한 뒤에만, 홈 볼륨의 `~/.infralab/<scenario_id>.prepared` 에 UTC 시각 `2006-01-02T15:04:05Z`. 시작할 때 옛 표시를 먼저 지운다 — setup 이 실패하면 표시가 없어 채점이 열리지 않는다).
+  단계별 `steps`·`ok` 를 돌려주고 앞 단계가 실패하면 뒤는 돌리지 않는다.
   setup 이 비정상 종료·시간 초과면 `ok:false` 이고 그 단계 결과에 출력이 남는다. scenario_id 는 소문자·숫자·하이픈, 노드 수 상한은
   kind up 과 같다(400). workstation 이 떠 있지 않으면 503, 환경 작업 중이면 409
+- `GET /api/prepared?scenario_id=` — 준비 표시 파일이 있는지만 본다(`test -f`). 있으면 200 `{prepared:true}`, 없으면 404 `환경 준비 먼저`, workstation·도커 장애는 503. 화면이 채점 잠금을 정할 때 쓴다(기록 본문은 제출 때만 읽는다)
 - `GET /api/ai-transcript?scenario_id=` — 마지막 환경 준비(`/api/setup` 의 준비 표시) 이후 workstation 안 Claude Code·Codex 의
   사용자·어시스턴트 텍스트 발화. 준비 표시가 없으면 404 `환경 준비 먼저`(화면이 「준비 전」으로 읽는다). 응답
   `{scenario_id, since, transcripts:[{tool:"claude"|"codex", since, truncated, error?, entries:[{role, at, text}]}]}` — 도구마다 항목이

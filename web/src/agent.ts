@@ -107,10 +107,10 @@ export const prepareEnvironment = (
     }),
   });
 
-/** 이 시나리오의 환경 준비가 되어 있는가 — 에이전트의 기록 API 가 준비 표시가 없으면 404 를 준다. */
+/** 이 시나리오의 환경 준비가 되어 있는가 — 가벼운 /api/prepared 가 준비 표시가 없을 때만 404 를 준다. 그 밖의 오류(시간 초과·503·네트워크)는 던진다 — 「모름」이지 「준비 전」이 아니다. */
 export async function isPrepared(agentUrl: string, token: string, scenarioId: string): Promise<boolean> {
   try {
-    await agentFetch(agentUrl, token, `/api/ai-transcript?scenario_id=${encodeURIComponent(scenarioId)}`, { timeoutMs: 15000 });
+    await agentFetch(agentUrl, token, `/api/prepared?scenario_id=${encodeURIComponent(scenarioId)}`, { timeoutMs: 15000 });
     return true;
   } catch (err) {
     if (err instanceof AgentHttpError && err.status === 404) return false;

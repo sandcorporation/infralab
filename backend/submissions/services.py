@@ -6,6 +6,8 @@ n/현재 total 로 읽히고, 격자·이력·상세가 같은 수를 보인다.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from django.db.models import Max
 
 from cohorts.models import Cohort, Membership
@@ -46,6 +48,19 @@ def passed_against(submission: Submission, scenario: Scenario) -> int:
     return sum(1 for r in submission.results if r.get("pass") and r.get("check_id") in ids)
 
 
+_EPOCH = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _parse_at(text: str) -> datetime | None:
+    """발화 시각(ISO 8601, Z 또는 오프셋). 시간대가 없으면 UTC 로 본다. 읽지 못하면 None."""
+
+    try:
+        dt = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def has_transcript(submission: Submission) -> bool:
     return any(t.get("entries") for t in (submission.ai_transcript or []))
 
@@ -78,12 +93,20 @@ def normalize_transcript(raw: list | None) -> list[dict] | None:
     if not parts:
         return None
 
-    # 오래된 것부터 버린다 — at 이 ISO 시각이라 글자 순서가 시간 순서다. 같으면 올라온 순서.
-    flat = [(e["at"], i, j) for i, p in enumerate(parts) for j, e in enumerate(p["entries"])]
+    # 오래된 것부터 버린다 — at 을 시각으로 읽어 견준다(글자 순서는 시간대 표기가 다르면 틀린다). 읽지 못하는 at 은
+    # 같은 도구에서 바로 앞 발화의 시각을 따라 도착 순서를 지킨다. 같은 시각이면 올라온 순서.
+    flat = []
+    n = 0
+    for i, p in enumerate(parts):
+        last = _EPOCH
+        for j, e in enumerate(p["entries"]):
+            last = _parse_at(e["at"]) or last
+            flat.append((last, n, i, j))
+            n += 1
     total_entries = len(flat)
-    total_chars = sum(len(parts[i]["entries"][j]["text"]) for _, i, j in flat)
+    total_chars = sum(len(parts[i]["entries"][j]["text"]) for _, _, i, j in flat)
     dropped: set[tuple[int, int]] = set()
-    for _, i, j in sorted(flat):
+    for _, _, i, j in sorted(flat):
         if total_entries <= MAX_TRANSCRIPT_ENTRIES and total_chars <= MAX_TRANSCRIPT_TOTAL_CHARS:
             break
         dropped.add((i, j))

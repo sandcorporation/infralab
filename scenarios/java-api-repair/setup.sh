@@ -3,7 +3,7 @@
 # ./gradlew test 를 한 번 돌려 Gradle 배포본과 의존성을 홈 볼륨(~/.gradle)에 받아 둔다. 채점은 --offline 으로 돈다.
 set -euo pipefail
 
-TAG=v2
+TAG=v3
 REPO=https://github.com/sandcorporation/infralab-labs
 FOLDER=labs/java-api
 

@@ -120,7 +120,7 @@ func TestIntegration(t *testing.T) {
 		for _, s := range out["steps"].([]any) {
 			names += s.(map[string]any)["name"].(string) + ","
 		}
-		if !strings.Contains(names, "floci/wait-ready,rules,mark,setup,") {
+		if !strings.Contains(names, "floci/wait-ready,rules,setup,mark,") {
 			t.Errorf("step names = %s", names)
 		}
 		// 규칙 파일 두 개·setup 의 산출물·홈 볼륨의 준비 표시가 workstation 에 실제로 있다.

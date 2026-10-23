@@ -32,7 +32,7 @@ export function PrepareButton({
   agentUrl: string;
   token: string;
   prepared: boolean | null;
-  onPrepared: () => void;
+  onPrepared: (prepared: boolean | null) => void;
 }) {
   const [plan, setPlan] = useState<Prepare | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -77,9 +77,10 @@ export function PrepareButton({
       setPlan(fresh);
       const res = await prepareEnvironment(agentUrl, token, fresh);
       setOutcome({ ok: res.ok, steps: res.steps });
-      if (res.ok) onPrepared();
+      onPrepared(res.ok);
     } catch (err) {
       setError(`${plan?.setup ? "환경 준비" : "시작"} 실패: ${(err as Error).message}`);
+      onPrepared(null); // 결과를 모른다 — 다시 물어 본다
     } finally {
       setRunning(false);
     }

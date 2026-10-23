@@ -2,7 +2,7 @@
 # 고장 내기 — infralab-labs 의 labs/node-api 를 태그로 받아 /work/app 에 깨끗한 git 이력으로 놓는다.
 set -euo pipefail
 
-TAG=v2
+TAG=v3
 REPO=https://github.com/sandcorporation/infralab-labs
 FOLDER=labs/node-api
 

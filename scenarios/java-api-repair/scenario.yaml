@@ -34,10 +34,10 @@ checks:
     timeout_seconds: 240
 
   - id: service-responds
-    name: 앱이 빌드되어 뜨고 응답한다
+    name: 앱을 띄우면 /health 가 응답한다
     hint: cd /work/app && ./gradlew run --offline 이 뜨는지 본다
-    command: SERVE_WAIT=150 SERVE_ANY_STATUS=1 serve-and-curl.sh "./gradlew installDist --offline -q && build/install/java-api/bin/java-api" 3300 /health
-    expect: { contains: "HTTP " }
+    command: SERVE_WAIT=150 serve-and-curl.sh "./gradlew installDist --offline -q && build/install/java-api/bin/java-api" 3300 /health '"status":"ok"'
+    expect: { contains: '"status":"ok"' }
     timeout_seconds: 200
 
   - id: tests-untouched

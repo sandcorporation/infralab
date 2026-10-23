@@ -301,10 +301,6 @@ func (s *server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("too many checks (max %d)", maxChecksPerRequest)})
 		return
 	}
-	if len(req.Scripts) > maxScriptsPerRequest {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("too many scripts (max %d)", maxScriptsPerRequest)})
-		return
-	}
 	// 하나라도 틀리면 아무것도 돌리지 않는다 — 반쯤 돈 채점은 증거가 되지 못한다.
 	expects := make([]expectation, len(req.Checks))
 	for i, c := range req.Checks {
@@ -319,15 +315,9 @@ func (s *server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		}
 		expects[i] = e
 	}
-	for name, body := range req.Scripts {
-		if !scriptNamePattern.MatchString(name) {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("scripts: bad name %q", name)})
-			return
-		}
-		if len(body) > maxScriptBytes {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("scripts: %s is too large", name)})
-			return
-		}
+	if err := validateScripts(req.Scripts); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
 	}
 
 	ctx := r.Context()
@@ -364,6 +354,22 @@ func (s *server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		"total":         len(results),
 		"results":       results,
 	})
+}
+
+// validateScripts 는 보조 스크립트 묶음(개수·이름 패턴·크기)을 검사한다 — /api/check 와 /api/setup 이 같이 쓴다.
+func validateScripts(scripts map[string]string) error {
+	if len(scripts) > maxScriptsPerRequest {
+		return fmt.Errorf("too many scripts (max %d)", maxScriptsPerRequest)
+	}
+	for name, body := range scripts {
+		if !scriptNamePattern.MatchString(name) {
+			return fmt.Errorf("scripts: bad name %q", name)
+		}
+		if len(body) > maxScriptBytes {
+			return fmt.Errorf("scripts: %s is too large", name)
+		}
+	}
+	return nil
 }
 
 func nonce() string {
