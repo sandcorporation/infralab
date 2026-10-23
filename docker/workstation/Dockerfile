@@ -1,9 +1,12 @@
-# 학생이 브라우저 터미널로 들어가는 작업용 컨테이너 — awscli·kubectl·terraform·node·claude·codex 가 미리 들어 있다.
-# docker CLI 는 일부러 넣지 않는다 — docker 부재가 AI 의 호스트 우회 차단의 전부다.
+# 학생이 브라우저 터미널로 들어가는 작업용 컨테이너 — awscli·kubectl·terraform·node·python3·java 25·claude·codex 가 미리 들어 있다.
+# docker CLI 는 일부러 넣지 않는다 — docker 부재가 AI 의 호스트 우회 차단의 전부다. Gradle 도 넣지 않는다(프로젝트의 ./gradlew 가 받는다).
 FROM hashicorp/terraform:latest AS tf
 
+# alpine 3.21 패키지는 openjdk 21 까지다 — 25 는 Temurin 의 musl 빌드를 복사한다.
+FROM eclipse-temurin:25-jdk-alpine AS jdk
+
 FROM alpine:3.21
-RUN apk add --no-cache bash aws-cli curl jq ca-certificates vim git nodejs npm
+RUN apk add --no-cache bash aws-cli curl jq ca-certificates vim git nodejs npm python3 py3-pip
 COPY --from=tf /bin/terraform /usr/local/bin/terraform
 RUN curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
  && chmod +x /usr/local/bin/kubectl
@@ -11,7 +14,15 @@ RUN curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL h
 RUN npm install -g @anthropic-ai/claude-code @openai/codex \
  && npm cache clean --force
 RUN printf 'export PS1="\[\e[32m\]lab\[\e[0m\]:\w\$ "\nalias k=kubectl\n' > /etc/profile.d/lab.sh
-# 빌드 검증 — 하나라도 실행되지 않으면 빌드가 깨진다.
-RUN node --version && claude --version && codex --version
+COPY --from=jdk /opt/java/openjdk /opt/java/openjdk
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH=/opt/java/openjdk/bin:$PATH
+# 터미널은 로그인 셸(bash -l)이라 alpine 의 /etc/profile 이 PATH 를 다시 쓴다 — 거기서도 java 가 보이게.
+RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH="$JAVA_HOME/bin:$PATH"\n' > /etc/profile.d/java.sh
+# alpine 의 python 은 pip 전역 설치를 막는다(PEP 668) — 컨테이너가 곧 격리 환경이다.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+# 빌드 검증 — 하나라도 실행되지 않으면 빌드가 깨진다. java 는 25 여야 한다.
+RUN node --version && python3 --version && pip --version && claude --version && codex --version \
+ && java -version 2>&1 | head -1 && java -version 2>&1 | grep -q '"25'
 WORKDIR /work
 CMD ["sleep", "infinity"]

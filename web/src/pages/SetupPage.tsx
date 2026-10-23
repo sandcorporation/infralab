@@ -125,7 +125,7 @@ export default function SetupPage() {
             <pre>
               <code>docker compose up -d</code>
             </pre>
-            첫 실행은 이미지를 받느라 몇 분 걸린다(Floci 약 350MB, workstation 약 700MB, kind 노드 이미지 약 1GB 는 클러스터를
+            첫 실행은 이미지를 받느라 몇 분 걸린다(Floci 약 350MB, workstation 약 2GB, kind 노드 이미지 약 1GB 는 클러스터를
             처음 올릴 때). 옆에 생기는 <code>work</code> 폴더가 터미널의 <code>/work</code> 다.
           </li>
         </ol>
