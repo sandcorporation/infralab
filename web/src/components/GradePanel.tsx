@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AgentTimeout, AgentUnreachable, runChecks, type CheckResult } from "../agent";
 import { ApiError, formatTime, getLatestSubmission, submitResults, type ScenarioDetail, type Submission } from "../api";
-import { CheckResultList } from "./CheckResultList";
+import { GroupedCheckResultList } from "./CheckResultList";
 
 type Phase =
   | { kind: "idle" }
@@ -20,6 +20,7 @@ export function GradePanel({
   agentUrl,
   agentToken,
   ready,
+  lockedReason,
   onSubmitted,
 }: {
   cohortId: number;
@@ -27,6 +28,8 @@ export function GradePanel({
   agentUrl: string;
   agentToken: string;
   ready: boolean;
+  /** 막혀 있는 이유 — 채점 버튼 옆에 보인다. */
+  lockedReason?: string;
   onSubmitted?: (s: Submission) => void;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -89,6 +92,8 @@ export function GradePanel({
 
   const busy = phase.kind === "running" || phase.kind === "uploading";
   const hints = new Map(scenario.checks.map((c) => [c.id, c.hint]));
+  const constraints = new Map(scenario.checks.map((c) => [c.id, !!c.constraint]));
+  const hasConstraints = scenario.checks.some((c) => c.constraint);
 
   return (
     <>
@@ -97,6 +102,7 @@ export function GradePanel({
         <button onClick={grade} disabled={!ready || busy}>
           {phase.kind === "running" ? "채점 중…" : "채점"}
         </button>
+        {lockedReason && <span className="muted">{lockedReason}</span>}
         {shown && (
           <span className={shown.passed === shown.total ? "score done" : "score"}>
             {shown.passed}/{shown.total}
@@ -121,7 +127,7 @@ export function GradePanel({
       {phase.kind === "done" && <p className="notice">제출됨 · {formatTime(phase.submission.submitted_at)}</p>}
 
       {shown ? (
-        <CheckResultList
+        <GroupedCheckResultList
           rows={shown.results.map((r) => ({
             key: r.id,
             name: r.name,
@@ -131,21 +137,31 @@ export function GradePanel({
             error: r.error,
             meta: `${r.ms} ms`,
             hint: hints.get(r.id),
+            constraint: constraints.get(r.id) ?? false,
           }))}
         />
       ) : (
-        <ol className="checks">
-          {scenario.checks.map((c) => (
-            <li key={c.id}>
-              <div>{c.name}</div>
-              {c.hint && (
-                <div className="muted hint">
-                  <code>{c.hint}</code>
-                </div>
-              )}
-            </li>
-          ))}
-        </ol>
+        [false, true].map((isConstraint) => {
+          const group = scenario.checks.filter((c) => !!c.constraint === isConstraint);
+          if (group.length === 0) return null;
+          return (
+            <div key={String(isConstraint)}>
+              {hasConstraints && <h3 className="group-title">{isConstraint ? "지켜야 할 것" : "해야 할 것"}</h3>}
+              <ol className="checks">
+                {group.map((c) => (
+                  <li key={c.id}>
+                    <div>{c.name}</div>
+                    {c.hint && (
+                      <div className="muted hint">
+                        <code>{c.hint}</code>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          );
+        })
       )}
     </>
   );

@@ -183,7 +183,17 @@ export const getCohortScenarios = (cohortId: number) =>
   api<StudentScenarioSummary[]>(`/api/cohorts/${cohortId}/scenarios`);
 export const getCohortScenario = (cohortId: number, scenarioId: string) =>
   api<ScenarioDetail>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}`);
-export const submitResults = (cohortId: number, scenarioId: string, body: { agent_version: string; results: unknown[] }) =>
+/** 「환경 준비」 전용 응답 — 에이전트 /api/setup 에 그대로 넘기는 재료. */
+export type Prepare = {
+  scenario_id: string;
+  setup: { command: string; scripts: Record<string, string>; timeout_seconds: number } | null;
+  setup_reset: "floci" | "kind" | "both" | "none";
+  kind: KindRequirement | null;
+  ai_rules: string;
+};
+export const getPrepare = (cohortId: number, scenarioId: string) =>
+  api<Prepare>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}/prepare`);
+export const submitResults =(cohortId: number, scenarioId: string, body: { agent_version: string; results: unknown[] }) =>
   api<Submission>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}/submissions`, {
     method: "POST",
     body: JSON.stringify(body),

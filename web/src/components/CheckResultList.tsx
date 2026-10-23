@@ -10,7 +10,27 @@ export type ResultRow = {
   error?: string;
   meta?: string; // 소요 시간, exit 코드 등 오른쪽에 작게
   hint?: string; // 실패했을 때만 보인다
+  constraint?: boolean; // 「지켜야 할 것」 묶음
 };
+
+/** 검사 결과를 「해야 할 것」·「지켜야 할 것」 두 묶음으로 그린다. 제약이 없으면 묶음 제목 없이 한 목록. */
+export function GroupedCheckResultList({ rows, openOutput = false }: { rows: ResultRow[]; openOutput?: boolean }) {
+  const todo = rows.filter((r) => !r.constraint);
+  const keep = rows.filter((r) => r.constraint);
+  if (keep.length === 0) return <CheckResultList rows={todo} openOutput={openOutput} />;
+  return (
+    <>
+      {todo.length > 0 && (
+        <>
+          <h3 className="group-title">해야 할 것</h3>
+          <CheckResultList rows={todo} openOutput={openOutput} />
+        </>
+      )}
+      <h3 className="group-title">지켜야 할 것</h3>
+      <CheckResultList rows={keep} openOutput={openOutput} />
+    </>
+  );
+}
 
 export function CheckResultList({ rows, openOutput = false }: { rows: ResultRow[]; openOutput?: boolean }) {
   return (

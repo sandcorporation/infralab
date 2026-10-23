@@ -99,23 +99,28 @@ export function EnvActions({
         </div>
       )}
       {error && <p className="error">{error}</p>}
-      {outcome && (
-        <details open={!outcome.ok} className="steps-log">
-          <summary className={outcome.ok ? "ok" : "error"}>
-            {outcome.label} {outcome.ok ? "완료" : "실패"}
-          </summary>
-          <ol>
-            {outcome.steps.map((s) => (
-              <li key={s.name} className={s.result.startsWith("ERROR") ? "error" : ""}>
-                <strong>{s.name}</strong> <span className="muted">{Math.round(s.ms / 100) / 10}s</span>
-                <pre>
-                  <code>{s.result}</code>
-                </pre>
-              </li>
-            ))}
-          </ol>
-        </details>
-      )}
+      {outcome && <StepsLog ok={outcome.ok} label={outcome.label} steps={outcome.steps} />}
     </div>
+  );
+}
+
+/** 환경 작업의 단계별 결과 — 클러스터·Floci·환경 준비가 같은 틀을 쓴다. */
+export function StepsLog({ ok, label, steps }: { ok: boolean; label: string; steps: Step[] }) {
+  return (
+    <details open={!ok} className="steps-log">
+      <summary className={ok ? "ok" : "error"}>
+        {label} {ok ? "완료" : "실패"}
+      </summary>
+      <ol>
+        {steps.map((s) => (
+          <li key={s.name} className={s.result.startsWith("ERROR") ? "error" : ""}>
+            <strong>{s.name}</strong> <span className="muted">{Math.round(s.ms / 100) / 10}s</span>
+            <pre>
+              <code>{s.result}</code>
+            </pre>
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }

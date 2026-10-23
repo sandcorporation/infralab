@@ -3,7 +3,9 @@ import Markdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, getCohortScenario, parseId, type ScenarioDetail } from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
+import { isPrepared } from "../agent";
 import { EnvActions } from "../components/EnvActions";
+import { PrepareButton } from "../components/PrepareButton";
 import { EnvCheck, envVerdict } from "../components/EnvCheck";
 import { GradePanel } from "../components/GradePanel";
 import { RequiresTags } from "../components/ScenarioPicker";
@@ -23,6 +25,23 @@ export default function ScenarioPage() {
   useEffect(() => {
     if (probe.state === "connected") setAgentSeen(true);
   }, [probe.state]);
+
+  // 환경 준비 여부 — null 이면 아직 모른다. 에이전트의 기록 API 가 준비 표시가 없으면 404 를 주는 것을 그대로 쓴다.
+  const [prepared, setPrepared] = useState<boolean | null>(null);
+  useEffect(() => {
+    setPrepared(null);
+  }, [cohortId, scenarioId]);
+  const connected = probe.state === "connected";
+  useEffect(() => {
+    if (!connected || prepared !== null || !cohort) return;
+    let cancelled = false;
+    isPrepared(cohort.agent_url, cohort.agent_token, scenarioId)
+      .then((p) => !cancelled && setPrepared(p))
+      .catch(() => !cancelled && setPrepared(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, prepared, cohort, scenarioId]);
 
   useEffect(() => {
     if (cohortId === null) return;
@@ -68,7 +87,8 @@ export default function ScenarioPage() {
                   scenario={scenario}
                   agentUrl={cohort.agent_url}
                   agentToken={cohort.agent_token}
-                  ready={env?.ready ?? false}
+                  ready={(env?.ready ?? false) && prepared === true}
+                  lockedReason={env?.ready && prepared !== true ? "환경 준비 먼저" : undefined}
                 />
               </section>
             </>
@@ -89,7 +109,16 @@ export default function ScenarioPage() {
               {scenario.requires.floci && (
                 <p className="muted">Floci{probe.state === "connected" && ` · ${probe.status.floci}`}</p>
               )}
-              {env?.ready && <p className="badge ok">준비됨</p>}
+              {env?.ready && <p className="badge ok">환경 있음</p>}
+              <PrepareButton
+                cohortId={cohort.id}
+                scenarioId={scenario.id}
+                probe={probe}
+                agentUrl={cohort.agent_url}
+                token={cohort.agent_token}
+                prepared={prepared}
+                onPrepared={() => setPrepared(true)}
+              />
               <EnvActions requires={scenario.requires} probe={probe} agentUrl={cohort.agent_url} token={cohort.agent_token} />
             </section>
           )}
