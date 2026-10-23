@@ -46,7 +46,7 @@ def render_compose(*, agent_token: str, cohort_name: str) -> str:
     safe_name = " ".join(cohort_name.split())
     return f"""# infralab — {safe_name}
 # 이 폴더에서: docker compose up -d
-# ./work 가 workstation 의 /work 다. 에이전트 토큰이 들어 있으니 공유하지 않는다.
+# ./work 가 workstation 의 /work, 볼륨 home 이 /root 다. 에이전트 토큰이 들어 있으니 공유하지 않는다.
 
 name: infralab
 
@@ -75,6 +75,8 @@ services:
     working_dir: /work
     volumes:
       - ./work:/work
+      # 홈(/root) — claude·codex 로그인 토큰과 세션 파일이 여기 남는다.
+      - home:/root
     environment:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
@@ -91,6 +93,9 @@ services:
       # EC2·RDS 를 실제 컨테이너로 띄우기 위해 필요하다.
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [lab]
+
+volumes:
+  home:
 
 networks:
   lab:
