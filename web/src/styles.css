@@ -406,3 +406,37 @@ th {
   gap: 0.5rem;
   align-items: center;
 }
+
+.tag {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 0.6rem;
+  background: rgba(99, 102, 241, 0.15);
+  margin-left: 0.4rem;
+}
+.toggle {
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+.transcript {
+  margin-top: 1rem;
+}
+.chat {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0;
+}
+.chat li {
+  margin: 0.5rem 0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  background: rgba(127, 127, 127, 0.1);
+}
+.chat li.user {
+  background: rgba(99, 102, 241, 0.1);
+}
+.chat-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

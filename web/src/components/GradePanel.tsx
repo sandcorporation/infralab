@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
-import { AgentTimeout, AgentUnreachable, runChecks, type CheckResult } from "../agent";
-import { ApiError, formatTime, getLatestSubmission, submitResults, type ScenarioDetail, type Submission } from "../api";
+import { AgentTimeout, AgentUnreachable, fetchTranscript, runChecks, type CheckResult } from "../agent";
+import {
+  ApiError,
+  formatTime,
+  getLatestSubmission,
+  submitResults,
+  type ScenarioDetail,
+  type Submission,
+  type ToolTranscript,
+} from "../api";
 import { GroupedCheckResultList } from "./CheckResultList";
 
 type Phase =
@@ -10,7 +18,24 @@ type Phase =
   | { kind: "done"; submission: Submission }
   | { kind: "upload-failed"; reason: string };
 
-type Shown = { results: CheckResult[]; agentVersion: string; passed: number; total: number };
+type Shown = {
+  results: CheckResult[];
+  agentVersion: string;
+  passed: number;
+  total: number;
+  /** 이번 채점에 붙일 AI 대화 기록 — 끄거나 읽지 못했으면 null. 「다시 올리기」도 같은 것을 올린다. */
+  transcript: ToolTranscript[] | null;
+};
+
+const TRANSCRIPT_KEY = "infralab.attachTranscript";
+
+function loadAttach(): boolean {
+  try {
+    return localStorage.getItem(TRANSCRIPT_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
 
 // 채점 루프: 서버가 준 검사 정의 → 에이전트 /api/check → 결과를 그리고 → 같은 결과를 서버에 제출.
 // 서버 올리기가 실패해도 결과는 화면에 남고 「다시 올리기」가 된다.
@@ -36,6 +61,17 @@ export function GradePanel({
   const [shown, setShown] = useState<Shown | null>(null);
   const [latest, setLatest] = useState<Submission | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attach, setAttach] = useState(loadAttach);
+  const [transcriptNote, setTranscriptNote] = useState<string | null>(null);
+
+  function toggleAttach(on: boolean) {
+    setAttach(on);
+    try {
+      localStorage.setItem(TRANSCRIPT_KEY, on ? "on" : "off");
+    } catch {
+      /* 저장소를 못 쓰면 이 화면에서만 유지된다 */
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +98,7 @@ export function GradePanel({
           exit_code: r.exit_code,
           error: r.error ?? "",
         })),
+        ...(s.transcript ? { ai_transcript: s.transcript } : {}),
       });
       setLatest(submission);
       setPhase({ kind: "done", submission });
@@ -79,7 +116,20 @@ export function GradePanel({
         checks: scenario.checks,
         scripts: scenario.scripts,
       });
-      const s: Shown = { results: res.results, agentVersion: res.agent_version, passed: res.passed, total: res.total };
+      let transcript: ToolTranscript[] | null = null;
+      setTranscriptNote(null);
+      if (attach) {
+        // 기록을 못 읽어도 제출은 한다 — 기록 없이.
+        try {
+          const t = await fetchTranscript(agentUrl, agentToken, scenario.id);
+          transcript = t.transcripts.map(({ tool, since, truncated, entries }) => ({ tool, since, truncated, entries }));
+          const failed = t.transcripts.filter((x) => x.error).map((x) => x.tool);
+          if (failed.length > 0) setTranscriptNote(`${failed.join("·")} 대화 기록을 읽지 못했습니다.`);
+        } catch (err) {
+          setTranscriptNote(`AI 대화 기록을 읽지 못해 결과만 제출합니다 (${(err as Error).message}).`);
+        }
+      }
+      const s: Shown = { results: res.results, agentVersion: res.agent_version, passed: res.passed, total: res.total, transcript };
       setShown(s);
       await upload(s);
     } catch (err) {
@@ -114,6 +164,11 @@ export function GradePanel({
           </span>
         )}
       </div>
+      <label className="row toggle">
+        <input type="checkbox" checked={attach} disabled={busy} onChange={(e) => toggleAttach(e.target.checked)} />
+        <span>AI 대화 함께 제출</span>
+      </label>
+      {transcriptNote && <p className="muted">{transcriptNote}</p>}
       {error && <p className="error">{error}</p>}
       {phase.kind === "uploading" && <p className="muted">결과 올리는 중…</p>}
       {phase.kind === "upload-failed" && (
@@ -124,7 +179,12 @@ export function GradePanel({
           </button>
         </p>
       )}
-      {phase.kind === "done" && <p className="notice">제출됨 · {formatTime(phase.submission.submitted_at)}</p>}
+      {phase.kind === "done" && (
+        <p className="notice">
+          제출됨 · {formatTime(phase.submission.submitted_at)}
+          {phase.submission.has_transcript ? " · 대화 포함" : ""}
+        </p>
+      )}
 
       {shown ? (
         <GroupedCheckResultList

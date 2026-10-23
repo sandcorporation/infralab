@@ -12,7 +12,7 @@ from cohorts.services import my_membership, open_scenario
 
 from .models import MAX_OUTPUT_CHARS, Submission
 from .schemas import SubmissionIn, SubmissionOut, SubmissionSummaryOut
-from .services import score
+from .services import has_transcript, normalize_transcript, score
 
 student_router = Router(tags=["student"], auth=jwt_auth)
 
@@ -26,11 +26,12 @@ def summary_out(sub: Submission) -> dict:
         "agent_version": sub.agent_version,
         "passed": passed,
         "total": total,
+        "has_transcript": has_transcript(sub),
     }
 
 
 def submission_out(sub: Submission) -> dict:
-    return {**summary_out(sub), "results": sub.results}
+    return {**summary_out(sub), "results": sub.results, "ai_transcript": sub.ai_transcript}
 
 
 def _clip(text: str) -> tuple[str, bool]:
@@ -50,6 +51,7 @@ def submit(request: HttpRequest, cohort_id: int, scenario_id: str, payload: Subm
     if sorted(got) != sorted(expected):
         raise HttpError(422, f"검사 결과가 시나리오와 맞지 않습니다 (기대 {expected}, 받음 {got})")
 
+    transcript = normalize_transcript(payload.ai_transcript)
     by_id = {r.id: r for r in payload.results}
     names = {c.id: c.name for c in scenario.checks}
     results = []
@@ -75,6 +77,7 @@ def submit(request: HttpRequest, cohort_id: int, scenario_id: str, payload: Subm
         passed=sum(1 for r in results if r["pass"]),
         total=len(expected),
         results=results,
+        ai_transcript=transcript,
     )
     return Status(201, submission_out(sub))
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, formatTime, instructor, parseId, type Grid, type GridRow, type Submission, type SubmissionSummary } from "../api";
 import { CheckResultList } from "../components/CheckResultList";
+import { TranscriptMark, TranscriptView } from "../components/TranscriptView";
 
 const POLL_MS = 10000;
 
@@ -108,6 +109,7 @@ export default function InstructorGridPage() {
                             <span className={cell.passed === cell.total ? "score done" : "score"}>
                               {cell.passed}/{cell.total}
                             </span>
+                            <TranscriptMark has={cell.has_transcript} />
                             <span className="small muted">{formatTime(cell.submitted_at)}</span>
                             <span className={`small ${compareVersions(cell.agent_version, newest) < 0 ? "stale" : "muted"}`}>
                               v{cell.agent_version || "?"}
@@ -207,6 +209,7 @@ function SubmissionDrawer({
                 <button className={`link ${current?.id === h.id ? "current" : ""}`} onClick={() => show(h.id)}>
                   {formatTime(h.submitted_at)} · {h.passed}/{h.total} · v{h.agent_version || "?"}
                 </button>
+                <TranscriptMark has={h.has_transcript} />
               </li>
             ))}
           </ul>
@@ -229,6 +232,7 @@ function SubmissionDrawer({
                   meta: `exit ${r.exit_code}`,
                 }))}
               />
+              <TranscriptView transcript={current.ai_transcript} />
             </>
           )}
         </div>

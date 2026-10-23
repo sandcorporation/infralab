@@ -12,7 +12,9 @@ from cohorts.models import Cohort, Membership
 from scenarios import registry
 from scenarios.loader import Scenario
 
-from .models import Submission
+from ninja.errors import HttpError
+
+from .models import MAX_TRANSCRIPT_ENTRIES, MAX_TRANSCRIPT_ENTRY_CHARS, MAX_TRANSCRIPT_TOTAL_CHARS, Submission
 
 
 def latest_submissions_by_scenario(membership: Membership) -> dict[str, Submission]:
@@ -42,6 +44,58 @@ def latest_submissions_for_cohort(cohort: Cohort) -> dict[tuple[int, str], Submi
 def passed_against(submission: Submission, scenario: Scenario) -> int:
     ids = {c.id for c in scenario.checks}
     return sum(1 for r in submission.results if r.get("pass") and r.get("check_id") in ids)
+
+
+def has_transcript(submission: Submission) -> bool:
+    return any(t.get("entries") for t in (submission.ai_transcript or []))
+
+
+def normalize_transcript(raw: list | None) -> list[dict] | None:
+    """제출에 붙은 AI 대화 기록을 상한에 맞춰 저장 모양으로 바꾼다. 발화가 하나도 없으면 None(기록 없음).
+
+    발화 하나는 MAX_TRANSCRIPT_ENTRY_CHARS 로 자르고, 두 도구를 합친 발화 수·총 길이가 상한을 넘으면 가장 오래된
+    발화부터 버린다. 자르거나 버린 도구는 truncated 를 켠다. 도구는 하나씩만 올 수 있다.
+    """
+
+    if not raw:
+        return None
+    tools = [t.tool for t in raw]
+    if len(set(tools)) != len(tools):
+        raise HttpError(422, "AI 대화 기록은 도구마다 하나씩만 올릴 수 있습니다.")
+
+    parts = []
+    for t in raw:
+        entries = []
+        truncated = t.truncated
+        for e in t.entries:
+            text = e.text
+            if len(text) > MAX_TRANSCRIPT_ENTRY_CHARS:
+                text = text[:MAX_TRANSCRIPT_ENTRY_CHARS] + "\n…(truncated)"
+                truncated = True
+            entries.append({"role": e.role, "at": e.at, "text": text})
+        if entries:
+            parts.append({"tool": t.tool, "since": t.since, "truncated": truncated, "entries": entries})
+    if not parts:
+        return None
+
+    # 오래된 것부터 버린다 — at 이 ISO 시각이라 글자 순서가 시간 순서다. 같으면 올라온 순서.
+    flat = [(e["at"], i, j) for i, p in enumerate(parts) for j, e in enumerate(p["entries"])]
+    total_entries = len(flat)
+    total_chars = sum(len(parts[i]["entries"][j]["text"]) for _, i, j in flat)
+    dropped: set[tuple[int, int]] = set()
+    for _, i, j in sorted(flat):
+        if total_entries <= MAX_TRANSCRIPT_ENTRIES and total_chars <= MAX_TRANSCRIPT_TOTAL_CHARS:
+            break
+        dropped.add((i, j))
+        total_entries -= 1
+        total_chars -= len(parts[i]["entries"][j]["text"])
+        parts[i]["truncated"] = True
+    out = []
+    for i, p in enumerate(parts):
+        kept = [e for j, e in enumerate(p["entries"]) if (i, j) not in dropped]
+        if kept:
+            out.append({**p, "entries": kept})
+    return out or None
 
 
 def score(submission: Submission) -> tuple[int, int]:

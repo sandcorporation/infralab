@@ -154,9 +154,20 @@ export type SubmissionSummary = {
   agent_version: string;
   passed: number;
   total: number;
+  /** AI 대화 기록이 붙은 제출인가. */
+  has_transcript: boolean;
 };
-export type Submission = SubmissionSummary & { results: SubmittedResult[] };
-export type GridCell = { submission_id: number; passed: number; total: number; submitted_at: string; agent_version: string };
+export type TranscriptEntry = { role: "user" | "assistant"; at: string; text: string };
+export type ToolTranscript = { tool: "claude" | "codex"; since: string; truncated: boolean; entries: TranscriptEntry[] };
+export type Submission = SubmissionSummary & { results: SubmittedResult[]; ai_transcript: ToolTranscript[] | null };
+export type GridCell = {
+  submission_id: number;
+  passed: number;
+  total: number;
+  submitted_at: string;
+  agent_version: string;
+  has_transcript: boolean;
+};
 export type GridRow = {
   membership_id: number;
   user_id: number;
@@ -193,7 +204,11 @@ export type Prepare = {
 };
 export const getPrepare = (cohortId: number, scenarioId: string) =>
   api<Prepare>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}/prepare`);
-export const submitResults =(cohortId: number, scenarioId: string, body: { agent_version: string; results: unknown[] }) =>
+export const submitResults = (
+  cohortId: number,
+  scenarioId: string,
+  body: { agent_version: string; results: unknown[]; ai_transcript?: ToolTranscript[] },
+) =>
   api<Submission>(`/api/cohorts/${cohortId}/scenarios/${encodeURIComponent(scenarioId)}/submissions`, {
     method: "POST",
     body: JSON.stringify(body),

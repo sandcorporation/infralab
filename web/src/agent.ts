@@ -118,6 +118,23 @@ export async function isPrepared(agentUrl: string, token: string, scenarioId: st
   }
 }
 
+export type AgentTranscript = {
+  tool: "claude" | "codex";
+  since: string;
+  truncated: boolean;
+  error?: string;
+  entries: { role: "user" | "assistant"; at: string; text: string }[];
+};
+
+/** 마지막 환경 준비 이후의 Claude·Codex 대화. 준비 표시가 없으면 AgentHttpError(404). */
+export const fetchTranscript = (agentUrl: string, token: string, scenarioId: string) =>
+  agentFetch<{ scenario_id: string; since: string; transcripts: AgentTranscript[] }>(
+    agentUrl,
+    token,
+    `/api/ai-transcript?scenario_id=${encodeURIComponent(scenarioId)}`,
+    { timeoutMs: 20000 },
+  );
+
 export type CheckResult = {
   id: string;
   name: string;
