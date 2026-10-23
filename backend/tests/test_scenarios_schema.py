@@ -45,6 +45,7 @@ def test_check_definitions_are_what_the_agent_receives():
         "command": "aws s3api head-bucket --bucket lab-site",
         "timeout_seconds": 30,
         "expect": {"type": "exit_zero"},
+        "constraint": False,
     }
 
 

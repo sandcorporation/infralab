@@ -79,7 +79,7 @@ def test_scenario_detail_carries_the_full_check_definitions_for_the_agent(api):
     assert d["requires"] == {"floci": True, "kind": None}
     assert [c["id"] for c in d["checks"]] == ["bucket-exists", "versioning-enabled", "index-uploaded", "website-configured"]
     first = d["checks"][0]
-    assert set(first) == {"id", "name", "hint", "command", "timeout_seconds", "expect"}
+    assert set(first) == {"id", "name", "hint", "command", "timeout_seconds", "expect", "constraint"}
     assert first["command"] == "aws s3api head-bucket --bucket lab-site"
     assert first["expect"] == {"type": "exit_zero"}
     assert d["checks"][1]["expect"] == {"type": "equals", "value": "Enabled"}

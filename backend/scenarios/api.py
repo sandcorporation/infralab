@@ -17,7 +17,16 @@ from cohorts.services import my_membership, open_scenario, open_scenarios
 from submissions.services import latest_submissions_by_scenario, passed_against  # noqa: F401 - scenarios → submissions 읽기 의존
 
 from . import registry
-from .schemas import OpenScenariosIn, ScenarioDetailOut, ScenarioSummaryOut, StudentScenarioSummaryOut, detail, summary
+from .schemas import (
+    OpenScenariosIn,
+    PrepareOut,
+    ScenarioDetailOut,
+    ScenarioSummaryOut,
+    StudentScenarioSummaryOut,
+    detail,
+    prepare,
+    summary,
+)
 
 instructor_router = Router(tags=["instructor"], auth=instructor_auth)
 student_router = Router(tags=["student"], auth=jwt_auth)
@@ -62,3 +71,11 @@ def my_cohort_scenarios(request: HttpRequest, cohort_id: int):
 def my_cohort_scenario(request: HttpRequest, cohort_id: int, scenario_id: str):
     m = my_membership(request, cohort_id)
     return detail(open_scenario(m, scenario_id))
+
+
+@student_router.get("/cohorts/{cohort_id}/scenarios/{scenario_id}/prepare", response=PrepareOut)
+def my_cohort_scenario_prepare(request: HttpRequest, cohort_id: int, scenario_id: str):
+    """「환경 준비」·「시작」 버튼이 쓰는 응답 — 상세에는 없는 setup·되돌릴 것·AI 규칙 전문."""
+
+    m = my_membership(request, cohort_id)
+    return prepare(open_scenario(m, scenario_id))

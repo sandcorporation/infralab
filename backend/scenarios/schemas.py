@@ -4,6 +4,7 @@ from typing import Any
 
 from ninja import Schema
 
+from .ai_rules import build_ai_rules
 from .loader import Scenario
 
 
@@ -26,6 +27,8 @@ class CheckOut(Schema):
     command: str
     timeout_seconds: int
     expect: dict[str, Any]
+    #: 「지켜야 할 것」 검사면 true. 점수는 똑같이 센다.
+    constraint: bool
 
 
 class ScenarioSummaryOut(Schema):
@@ -62,5 +65,38 @@ def detail(s: Scenario) -> dict:
         **summary(s),
         "description": s.description,
         "checks": s.check_definitions(),
-        "scripts": dict(s.scripts),
+        "scripts": s.check_scripts(),
+    }
+
+
+class SetupOut(Schema):
+    """고장 내기 — 에이전트 /api/setup 의 setup 칸에 그대로 들어간다."""
+
+    command: str
+    #: 시나리오 디렉터리의 보조 스크립트 전부(setup 이 부를 수 있다).
+    scripts: dict[str, str]
+    timeout_seconds: int
+
+
+class PrepareOut(Schema):
+    """「환경 준비」 전용 — 학생 상세에는 싣지 않는 setup 이 여기서만 나간다."""
+
+    scenario_id: str
+    setup: SetupOut | None
+    setup_reset: str
+    kind: KindRequirementOut | None
+    ai_rules: str
+
+
+def prepare(s: Scenario) -> dict:
+    return {
+        "scenario_id": s.id,
+        "setup": (
+            {"command": s.setup, "scripts": dict(s.scripts), "timeout_seconds": s.setup_timeout_seconds}
+            if s.setup is not None
+            else None
+        ),
+        "setup_reset": s.setup_reset,
+        "kind": s.requires.kind.as_dict() if s.requires.kind else None,
+        "ai_rules": build_ai_rules(s),
     }

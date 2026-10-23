@@ -134,6 +134,8 @@ export type CheckDef = {
   command: string;
   timeout_seconds: number;
   expect: Record<string, unknown> & { type: string };
+  /** 「지켜야 할 것」 검사. 점수는 똑같이 센다. */
+  constraint: boolean;
 };
 export type ScenarioDetail = ScenarioSummary & { description: string; checks: CheckDef[]; scripts: Record<string, string> };
 export type SubmittedResult = {
