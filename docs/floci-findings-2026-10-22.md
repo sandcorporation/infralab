@@ -25,6 +25,9 @@
   다른 포트로 연다. 시나리오 설명과 user-data 예시가 8080 을 쓴다.
 - 보안 그룹 인바운드를 열면 포트마다 포워더 컨테이너 `floci-aws-ec2-fwd-<id>-<port>` 가 생겨 호스트 포트
   30001… 로 공개한다(socat → 인스턴스). 검사는 이걸 쓰지 않는다 — 컨테이너 이름으로 직접 간다.
+- **보안 그룹은 네트워크로 강제되지 않는다**(2026-10-23 실측). 인바운드가 하나도 없는 보안 그룹의 인스턴스에도 workstation 에서
+  `floci-aws-ec2-<id>:8080` 이 응답한다. 그래서 `ec2-unreachable` 의 「닿는다」는 인스턴스에 붙은 보안 그룹의 인바운드(0.0.0.0/0 에서
+  TCP 8080)와 8080 응답을 **둘 다** 본다(`reach-check.sh`). 인스턴스의 nginx 는 user-data 로 설치되어 약 40초 뒤에 응답한다.
 - `describe-security-groups --group-names` 대신 `--filters Name=group-name,Values=…` 를 쓴다(기본 VPC 가 아니다).
 
 ## Terraform
