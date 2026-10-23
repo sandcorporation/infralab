@@ -39,11 +39,18 @@ func (s *server) handleKindUp(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
 
-	want := req.ControlPlanes + req.Workers
 	var st stepper
+	ok := s.kindUp(ctx, &st, req.ControlPlanes, req.Workers, false)
+	writeJSON(w, 200, map[string]any{"ok": ok, "steps": st.steps})
+}
+
+// kindUp 은 노드 구성대로 클러스터를 만들고 kubeconfig·네트워크를 잇는다. recreate 면 클러스터가 이미
+// 맞게 있어도 지우고 다시 만든다(환경 준비 — 이전 시도의 잔해가 남지 않게).
+func (s *server) kindUp(ctx context.Context, st *stepper, controlPlanes, workers int, recreate bool) bool {
+	want := controlPlanes + workers
 	ok := st.run("create", func() (string, error) {
 		if out, _ := run(ctx, s.runner, "kind", "get", "clusters"); containsLine(out, s.cfg.KindCluster) {
-			if have := len(s.kindNodes(ctx)); have == want {
+			if have := len(s.kindNodes(ctx)); have == want && !recreate {
 				return "exists", nil
 			} else {
 				if out, err := run(ctx, s.runner, "kind", "delete", "cluster", "--name", s.cfg.KindCluster); err != nil {
@@ -52,8 +59,8 @@ func (s *server) handleKindUp(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		cfg := "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n"
-		cfg += strings.Repeat("  - role: control-plane\n", req.ControlPlanes)
-		cfg += strings.Repeat("  - role: worker\n", req.Workers)
+		cfg += strings.Repeat("  - role: control-plane\n", controlPlanes)
+		cfg += strings.Repeat("  - role: worker\n", workers)
 		return runInput(ctx, s.runner, cfg, "kind", "create", "cluster", "--name", s.cfg.KindCluster, "--config", "-", "--wait", "180s")
 	})
 	ok = ok && st.run("kubeconfig-into-workstation", func() (string, error) {
@@ -86,7 +93,7 @@ func (s *server) handleKindUp(w http.ResponseWriter, r *http.Request) {
 	ok = ok && st.run("verify", func() (string, error) {
 		return run(ctx, s.runner, "docker", "exec", s.cfg.Workstation, "kubectl", "get", "nodes", "-o", "wide")
 	})
-	writeJSON(w, 200, map[string]any{"ok": ok, "steps": st.steps})
+	return ok
 }
 
 func (s *server) handleKindDown(w http.ResponseWriter, r *http.Request) {

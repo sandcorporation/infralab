@@ -32,6 +32,13 @@ workstation·Floci 를 찾고, kind 클러스터를 올리고 내리며, 브라�
   정의가 하나라도 틀리면 400 이고 아무것도 돌리지 않는다. workstation 이 떠 있지 않으면 503(「전부 실패」가 아니라
   「채점 불가」). 검사 하나가 시간을 넘기면(안쪽 `timeout` + 바깥 컨텍스트) 그 검사만 `error` 로 실패하고 다음으로
   간다. 도커 자체의 실패(컨테이너 없음 등)도 `error` 로 구분한다 — `pass:false` 에 `error` 가 비어 있을 때만 학생이 틀린 것이다
+- `POST /api/setup {"scenario_id","reset":{"floci":bool,"kind":{"control_planes","workers"}|null},"setup":{"command","scripts","timeout_seconds"}|null,"ai_rules":"본문"}` —
+  「환경 준비」. 단계 순서: `floci/*`(reset.floci, `/api/floci/reset` 과 같은 코드) → `kind/*`(reset.kind — 클러스터가 이미
+  맞게 있어도 **항상** 지우고 만든다) → `rules`(workstation `/work/CLAUDE.md`·`/work/AGENTS.md` 에 같은 본문) → `mark`(홈 볼륨의
+  `~/.infralab/<scenario_id>.prepared` 에 UTC 시각 `2006-01-02T15:04:05Z`) → `setup`(있으면 — 검사와 같은 실행기: 요청별 스크립트
+  디렉터리·PATH·안쪽 `timeout`, 기본 30초·최대 300초). 단계별 `steps`·`ok` 를 돌려주고 앞 단계가 실패하면 뒤는 돌리지 않는다.
+  setup 이 비정상 종료·시간 초과면 `ok:false` 이고 그 단계 결과에 출력이 남는다. scenario_id 는 소문자·숫자·하이픈, 노드 수 상한은
+  kind up 과 같다(400). workstation 이 떠 있지 않으면 503, 환경 작업 중이면 409
 - `WS /ws/terminal?token=` — 입력은 JSON 텍스트 프레임(`{t:"i",d}` 입력, `{t:"r",c,r}` 크기), 출력은 바이너리 프레임
 
 환경을 바꾸는 작업(kind up/down)은 한 번에 하나만 돈다 — 돌고 있는 중에 들어온 요청은 409. 잘못된 메서드(GET 으로 kind/down 등)는 405.
