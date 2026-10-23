@@ -125,10 +125,18 @@ export default function SetupPage() {
             <pre>
               <code>docker compose up -d</code>
             </pre>
-            첫 실행은 이미지를 받느라 몇 분 걸린다(Floci 약 350MB, workstation 약 300MB, kind 노드 이미지 약 1GB 는 클러스터를
+            첫 실행은 이미지를 받느라 몇 분 걸린다(Floci 약 350MB, workstation 약 2GB, kind 노드 이미지 약 1GB 는 클러스터를
             처음 올릴 때). 옆에 생기는 <code>work</code> 폴더가 터미널의 <code>/work</code> 다.
           </li>
         </ol>
+        <ul className="steps">
+          <li>
+            이전 compose.yml 로 올렸다면 새로 받아 덮어쓰고 <code>docker compose up -d</code> 를 다시 한다(홈 볼륨 추가).
+          </li>
+          <li>
+            터미널에서 <code>claude</code> 또는 <code>codex</code> 를 실행해 첫 로그인을 한다. 로그인은 홈 볼륨에 남는다.
+          </li>
+        </ul>
         <p>
           끝나면 위 배지가 <strong>「에이전트 연결됨」</strong>이 된다. 안 되면 Docker Desktop 실행 여부와{" "}
           <code>docker compose ps</code> 를 확인한다.

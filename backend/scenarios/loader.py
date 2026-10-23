@@ -31,6 +31,8 @@ ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 JSONPATH_PATTERN = re.compile(r"^(\.[A-Za-z0-9_-]+(\[\d+\])*)+$")
 #: Go 의 RE2 가 거부하는 문법 — Python `re` 는 받아들이므로 따로 막는다.
 RE2_UNSUPPORTED = re.compile(r"\(\?<?[=!]|\\[1-9]")
+SETUP_RESETS = ("floci", "kind", "both", "none")
+SCRIPT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.sh$")
 DEFAULT_CHECK_TIMEOUT_SECONDS = 30
 MAX_CHECK_TIMEOUT_SECONDS = 300
 
@@ -73,6 +75,23 @@ def _scalar_text(value: Any, where: str) -> str:
     raise ScenarioError(f"{where} 는 문자열이어야 한다 — 따옴표로 감싼다 (지금 {type(value).__name__}: {value!r})")
 
 
+def _mentions(text: str, name: str) -> bool:
+    """스크립트 이름이 단어로 나오는가 — `a-check.sh` 안의 `check.sh` 같은 부분 문자열은 아니다.
+    앞에는 `/` 가 와도 된다(`$(dirname "$0")/app-lib.sh`)."""
+
+    return re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w-])", text) is not None
+
+
+def _strip_comments(body: str) -> str:
+    """셸 스크립트의 주석 줄을 뺀다 — 주석에 이름이 언급됐다고 그 스크립트를 부르는 것은 아니다."""
+
+    return "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
+
+
+#: 검사 명령 안의 맨 `이름.sh` 토큰(경로가 붙지 않은 것) — 보조 스크립트를 부르는 것으로 본다.
+_BARE_SCRIPT_TOKEN = re.compile(r"(?<![\w./-])([A-Za-z0-9][\w.-]*\.sh)(?![\w-])")
+
+
 @dataclass(frozen=True)
 class KindRequirement:
     control_planes: int = 1
@@ -99,6 +118,8 @@ class Check:
     expect: dict[str, Any]
     hint: str = ""
     timeout_seconds: int = DEFAULT_CHECK_TIMEOUT_SECONDS
+    #: 「지켜야 할 것」 검사 — 점수는 다른 검사와 똑같이 센다. 묶음만 다르다.
+    constraint: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -108,6 +129,7 @@ class Check:
             "command": self.command,
             "timeout_seconds": self.timeout_seconds,
             "expect": dict(self.expect),
+            "constraint": self.constraint,
         }
 
 
@@ -120,11 +142,32 @@ class Scenario:
     checks: tuple[Check, ...]
     #: 보조 스크립트 — 파일 이름 → 본문. 에이전트가 workstation 작업 폴더에 같은 이름으로 넣는다.
     scripts: dict[str, str] = field(default_factory=dict)
+    #: 고장 내기 — 명령 문자열이거나 같은 디렉터리 `*.sh` 이름. 없으면 「시작」만 있는 시나리오.
+    setup: str | None = None
+    setup_timeout_seconds: int = DEFAULT_CHECK_TIMEOUT_SECONDS
+    #: 환경 준비가 먼저 되돌릴 것: floci | kind | both | none. 로더가 requires 를 따라 채운다.
+    setup_reset: str = "none"
+    #: 공통 AI 규칙 뒤에 붙는 시나리오 추가 규칙(markdown).
+    ai_rules: str = ""
 
     def check_definitions(self) -> list[dict[str, Any]]:
         """에이전트 `/api/check` 에 넘기는 검사 정의 전문."""
 
         return [c.as_dict() for c in self.checks]
+
+    def check_scripts(self) -> dict[str, str]:
+        """검사가 쓰는 보조 스크립트 — 검사 명령에서 이름으로 불리는 것과, 그 스크립트가 다시 부르는 것.
+        setup 전용 스크립트(고장 내기 본문)는 학생 상세에 싣지 않으려고 뺀다."""
+
+        used: dict[str, str] = {}
+        pending = [c.command for c in self.checks]
+        while pending:
+            text = pending.pop()
+            for name, body in self.scripts.items():
+                if name not in used and _mentions(text, name):
+                    used[name] = body
+                    pending.append(_strip_comments(body))
+        return used
 
 
 # ---------- 파싱 ----------
@@ -193,7 +236,7 @@ def _parse_expect(raw: Any, where: str) -> dict[str, Any]:
 def _parse_check(raw: Any, where: str) -> Check:
     if not isinstance(raw, dict):
         raise ScenarioError(f"{where}: 검사는 맵이어야 한다")
-    _reject_unknown(raw, {"id", "name", "hint", "command", "expect", "timeout_seconds"}, where)
+    _reject_unknown(raw, {"id", "name", "hint", "command", "expect", "timeout_seconds", "constraint"}, where)
     check_id = _require(raw, "id", where, str)
     if not ID_PATTERN.match(check_id):
         raise ScenarioError(f"{where}: 검사 id 는 소문자·숫자·하이픈만 ({check_id!r})")
@@ -204,7 +247,11 @@ def _parse_check(raw: Any, where: str) -> Check:
     hint = raw.get("hint", "")
     if not isinstance(hint, str):
         raise ScenarioError(f"{where}: hint 는 문자열이어야 한다")
+    constraint = raw.get("constraint", False)
+    if not isinstance(constraint, bool):
+        raise ScenarioError(f"{where}: constraint 는 true/false 여야 한다 (지금 {type(constraint).__name__}: {constraint!r})")
     return Check(
+        constraint=constraint,
         id=check_id,
         name=_require(raw, "name", where, str),
         hint=hint,
@@ -251,7 +298,14 @@ def load_scenario(directory: Path) -> Scenario:
         raise ScenarioError(f"{where}: YAML 을 읽을 수 없다: {exc}") from exc
     if not isinstance(raw, dict):
         raise ScenarioError(f"{where}: 최상위는 맵이어야 한다")
-    _reject_unknown(raw, {"id", "title", "description", "description_file", "requires", "checks"}, where)
+    _reject_unknown(
+        raw,
+        {
+            "id", "title", "description", "description_file", "requires", "checks",
+            "setup", "setup_reset", "setup_timeout_seconds", "ai_rules",
+        },
+        where,
+    )
 
     scenario_id = _require(raw, "id", where, str)
     if not ID_PATTERN.match(scenario_id):
@@ -280,14 +334,63 @@ def load_scenario(directory: Path) -> Scenario:
         seen.add(c.id)
 
     scripts = {p.name: _read_text(p, where) for p in sorted(directory.glob("*.sh"))}
+    # 공유 스크립트(`_shared/*.sh`)는 모든 시나리오에 합친다. 같은 이름이 시나리오 디렉터리에도 있으면 갈라질 수 있어 거절한다.
+    shared_dir = directory.parent / "_shared"
+    if shared_dir.is_dir():
+        for p in sorted(shared_dir.glob("*.sh")):
+            if p.name in scripts:
+                raise ScenarioError(f"{where}: {p.name} 은 _shared 에 있다 — 시나리오 디렉터리에 복사하지 않는다")
+            scripts[p.name] = _read_text(p, where)
+    for c in checks:
+        for token in _BARE_SCRIPT_TOKEN.findall(c.command):
+            if token not in scripts:
+                raise ScenarioError(f"{where}: 검사 {c.id} 가 부르는 스크립트 {token} 이 없다")
+
+    requires = _parse_requires(raw.get("requires"), where)
+    setup, setup_timeout, setup_reset, ai_rules = _parse_setup(raw, requires, scripts, where)
 
     return Scenario(
         id=scenario_id,
         title=_require(raw, "title", where, str),
         description=description,
-        requires=_parse_requires(raw.get("requires"), where),
+        requires=requires,
         checks=checks,
         scripts=scripts,
+        setup=setup,
+        setup_timeout_seconds=setup_timeout,
+        setup_reset=setup_reset,
+        ai_rules=ai_rules,
+    )
+
+
+def _parse_setup(raw: dict, requires: Requires, scripts: dict[str, str], where: str) -> tuple[str | None, int, str, str]:
+    setup = raw.get("setup")
+    if "setup" in raw and (not isinstance(setup, str) or not setup.strip()):
+        raise ScenarioError(f"{where}: setup 은 비지 않은 문자열(명령 또는 같은 디렉터리의 *.sh 이름)이어야 한다")
+    # 공백 없는 `*.sh` 한 단어는 스크립트 이름이다 — 디렉터리에 없으면 오타로 본다.
+    if setup is not None and SCRIPT_NAME_PATTERN.match(setup.strip()) and setup.strip() not in scripts:
+        raise ScenarioError(f"{where}: setup 스크립트 {setup.strip()} 이 디렉터리에 없다")
+    timeout = raw.get("setup_timeout_seconds")
+    if "setup_timeout_seconds" in raw:
+        if setup is None:
+            raise ScenarioError(f"{where}: setup 없이 setup_timeout_seconds 를 쓸 수 없다")
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= MAX_CHECK_TIMEOUT_SECONDS:
+            raise ScenarioError(f"{where}: setup_timeout_seconds 는 1..{MAX_CHECK_TIMEOUT_SECONDS} 정수여야 한다")
+    reset = raw.get("setup_reset")
+    if reset is None:
+        reset = "both" if requires.floci and requires.kind else "floci" if requires.floci else "kind" if requires.kind else "none"
+    elif reset not in SETUP_RESETS:
+        raise ScenarioError(f"{where}: setup_reset 을 모른다 ({reset!r}) — {', '.join(SETUP_RESETS)} 중 하나")
+    if reset in ("kind", "both") and requires.kind is None:
+        raise ScenarioError(f"{where}: setup_reset {reset} 은 requires.kind 가 있어야 한다 (노드 구성을 모른다)")
+    ai_rules = raw.get("ai_rules", "")
+    if not isinstance(ai_rules, str):
+        raise ScenarioError(f"{where}: ai_rules 는 문자열(markdown)이어야 한다")
+    return (
+        setup.strip() if setup is not None else None,
+        timeout if timeout is not None else DEFAULT_CHECK_TIMEOUT_SECONDS,
+        reset,
+        ai_rules,
     )
 
 

@@ -16,7 +16,7 @@ from cohorts.services import open_scenarios
 from .api import submission_out, summary_out
 from .models import Submission
 from .schemas import SubmissionOut, SubmissionSummaryOut
-from .services import latest_submissions_for_cohort, passed_against
+from .services import has_transcript, latest_submissions_for_cohort, passed_against
 
 instructor_router = Router(tags=["instructor"], auth=instructor_auth)
 
@@ -33,6 +33,7 @@ class GridCellOut(Schema):
     total: int
     submitted_at: datetime
     agent_version: str
+    has_transcript: bool
 
 
 class GridRowOut(Schema):
@@ -69,6 +70,7 @@ def grid(request: HttpRequest, cohort_id: int):
                     total=len(s.checks),
                     submitted_at=sub.submitted_at,
                     agent_version=sub.agent_version,
+                    has_transcript=has_transcript(sub),
                 )
             )
         rows.append(

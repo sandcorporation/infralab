@@ -7,7 +7,8 @@ package main
 //
 //   AGENT_URL=http://host.docker.internal:7777 AGENT_TOKEN=<compose.yml 의 토큰> go test -tags integration -run Integration -v -count=1 -timeout 20m ./...
 //
-// 순서가 있다(TestIntegration 하나가 하위 시험을 차례로 돈다): status → check(과제 전 0/4 → 과제 수행 → 4/4)
+// 순서가 있다(TestIntegration 하나가 하위 시험을 차례로 돈다): status → 환경 준비 전 기록 404 → 환경 준비(Floci 초기화·규칙 파일·
+// 준비 표시·setup)와 준비 뒤 기록 200, 실패하는 setup → check(과제 전 0/4 → 과제 수행 → 4/4)
 // → kind up(두 번째 호출은 exists) → kind down → floci reset(버킷 사라짐) → 터미널 WS 첫 프레임.
 
 import (
@@ -90,6 +91,70 @@ func TestIntegration(t *testing.T) {
 		code, out := i.call("POST", "/api/floci/reset", nil)
 		if code != 200 || out["ok"] != true {
 			t.Fatalf("reset: %d %v", code, out)
+		}
+	})
+
+	t.Run("transcript-before-prepare-is-404", func(t *testing.T) {
+		code, out := i.call("GET", "/api/ai-transcript?scenario_id=integration-never", nil)
+		if code != 404 {
+			t.Fatalf("transcript of an unprepared scenario = %d %v, want 404", code, out)
+		}
+	})
+
+	t.Run("setup-then-transcript", func(t *testing.T) {
+		setup := map[string]any{
+			"scenario_id": "integration-lab",
+			"reset":       map[string]any{"floci": true, "kind": nil},
+			"setup": map[string]any{
+				"command":         "broken.sh",
+				"scripts":         map[string]string{"broken.sh": "#!/bin/sh\necho setup-ran > /work/integration-setup.txt\n"},
+				"timeout_seconds": 30,
+			},
+			"ai_rules": "# 통합 시험 규칙\n",
+		}
+		code, out := i.call("POST", "/api/setup", setup)
+		if code != 200 || out["ok"] != true {
+			t.Fatalf("setup: %d %v", code, out)
+		}
+		names := ""
+		for _, s := range out["steps"].([]any) {
+			names += s.(map[string]any)["name"].(string) + ","
+		}
+		if !strings.Contains(names, "floci/wait-ready,rules,setup,mark,") {
+			t.Errorf("step names = %s", names)
+		}
+		// 규칙 파일 두 개·setup 의 산출물·홈 볼륨의 준비 표시가 workstation 에 실제로 있다.
+		files := "grep -q '통합 시험 규칙' /work/CLAUDE.md && grep -q '통합 시험 규칙' /work/AGENTS.md && grep -q setup-ran /work/integration-setup.txt && test -s ~/.infralab/integration-lab.prepared"
+		code, out = i.call("POST", "/api/check", map[string]any{"checks": []map[string]any{
+			s3Check("files", "산출물", files, map[string]any{"type": "exit_zero"}),
+		}})
+		if code != 200 || out["passed"].(float64) != 1 {
+			t.Fatalf("files after setup: %d %v", code, out)
+		}
+		// 준비 뒤에는 기록 API 가 200 이고 도구마다 항목이 하나씩 온다.
+		code, out = i.call("GET", "/api/ai-transcript?scenario_id=integration-lab", nil)
+		if code != 200 {
+			t.Fatalf("transcript after setup = %d %v", code, out)
+		}
+		ts, _ := out["transcripts"].([]any)
+		if len(ts) != 2 || ts[0].(map[string]any)["tool"] != "claude" || ts[1].(map[string]any)["tool"] != "codex" {
+			t.Errorf("transcripts = %v", out["transcripts"])
+		}
+		if out["since"] == "" {
+			t.Errorf("since is empty: %v", out)
+		}
+		// 실패하는 setup 은 ok=false 이고 출력이 남는다.
+		failing := map[string]any{
+			"scenario_id": "integration-lab",
+			"reset":       map[string]any{"floci": false, "kind": nil},
+			"setup":       map[string]any{"command": "echo boom-output; exit 3", "timeout_seconds": 30},
+			"ai_rules":    "x",
+		}
+		code, out = i.call("POST", "/api/setup", failing)
+		steps := out["steps"].([]any)
+		last := steps[len(steps)-1].(map[string]any)
+		if code != 200 || out["ok"] != false || last["name"] != "setup" || !strings.Contains(last["result"].(string), "boom-output") {
+			t.Errorf("failing setup: %d %v", code, out)
 		}
 	})
 

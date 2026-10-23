@@ -186,8 +186,14 @@ func runArgs(name string, spec containerSpec) (args []string, extraNetworks []st
 func (s *server) handleFlociReset(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	name := s.cfg.Floci
 	var st stepper
+	ok := s.flociReset(ctx, &st)
+	writeJSON(w, 200, map[string]any{"ok": ok, "steps": st.steps})
+}
+
+// flociReset 은 Floci 를 같은 설정으로 다시 만든다. /api/floci/reset 과 /api/setup 이 같은 코드를 쓴다.
+func (s *server) flociReset(ctx context.Context, st *stepper) bool {
+	name := s.cfg.Floci
 	var spec containerSpec
 	ok := st.run("inspect", func() (string, error) {
 		var err error
@@ -252,5 +258,5 @@ func (s *server) handleFlociReset(w http.ResponseWriter, r *http.Request) {
 		}
 		return "", fmt.Errorf("timeout waiting for %s", name)
 	})
-	writeJSON(w, 200, map[string]any{"ok": ok, "steps": st.steps})
+	return ok
 }

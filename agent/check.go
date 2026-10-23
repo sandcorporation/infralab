@@ -301,10 +301,6 @@ func (s *server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("too many checks (max %d)", maxChecksPerRequest)})
 		return
 	}
-	if len(req.Scripts) > maxScriptsPerRequest {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("too many scripts (max %d)", maxScriptsPerRequest)})
-		return
-	}
 	// 하나라도 틀리면 아무것도 돌리지 않는다 — 반쯤 돈 채점은 증거가 되지 못한다.
 	expects := make([]expectation, len(req.Checks))
 	for i, c := range req.Checks {
@@ -319,15 +315,9 @@ func (s *server) handleCheck(w http.ResponseWriter, r *http.Request) {
 		}
 		expects[i] = e
 	}
-	for name, body := range req.Scripts {
-		if !scriptNamePattern.MatchString(name) {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("scripts: bad name %q", name)})
-			return
-		}
-		if len(body) > maxScriptBytes {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("scripts: %s is too large", name)})
-			return
-		}
+	if err := validateScripts(req.Scripts); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
 	}
 
 	ctx := r.Context()
@@ -366,6 +356,22 @@ func (s *server) handleCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// validateScripts 는 보조 스크립트 묶음(개수·이름 패턴·크기)을 검사한다 — /api/check 와 /api/setup 이 같이 쓴다.
+func validateScripts(scripts map[string]string) error {
+	if len(scripts) > maxScriptsPerRequest {
+		return fmt.Errorf("too many scripts (max %d)", maxScriptsPerRequest)
+	}
+	for name, body := range scripts {
+		if !scriptNamePattern.MatchString(name) {
+			return fmt.Errorf("scripts: bad name %q", name)
+		}
+		if len(body) > maxScriptBytes {
+			return fmt.Errorf("scripts: %s is too large", name)
+		}
+	}
+	return nil
+}
+
 func nonce() string {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
@@ -402,14 +408,20 @@ func dockerLevelFailure(res Result) bool {
 		strings.Contains(res.Stderr, "Cannot connect to the Docker daemon")
 }
 
-func (s *server) runCheck(ctx context.Context, c checkDef, e expectation, scriptDir string) checkResult {
-	timeout := defaultCheckTimeout
-	if c.TimeoutSeconds > 0 {
-		timeout = time.Duration(c.TimeoutSeconds) * time.Second
-		if timeout > maxCheckTimeout {
-			timeout = maxCheckTimeout
-		}
+// clampTimeout 은 초 단위 시간 상한을 검사와 setup 이 같은 규칙(기본 30초, 최대 300초)으로 정한다.
+func clampTimeout(seconds int) time.Duration {
+	if seconds <= 0 {
+		return defaultCheckTimeout
 	}
+	if t := time.Duration(seconds) * time.Second; t < maxCheckTimeout {
+		return t
+	}
+	return maxCheckTimeout
+}
+
+// execInWorkstation 은 명령 하나를 workstation 의 /work 에서 돌린다 — 검사와 setup 이 같은 실행기를 쓴다.
+// errMsg 가 비어 있지 않으면 「판정할 수 없었다」(시간 초과·도커 장애)이고 res 의 exit 코드는 믿지 않는다.
+func (s *server) execInWorkstation(ctx context.Context, command, scriptDir string, timeout time.Duration) (res Result, errMsg string, ms int64) {
 	// docker exec 클라이언트가 죽어도 컨테이너 안의 명령은 계속 돈다 — 안쪽에서도 timeout 으로 끊는다.
 	// 명령은 환경변수로 넘겨 셸 인용 문제를 피한다. 로그인 셸(-l)은 쓰지 않는다 — profile 이 찍는
 	// 출력이 equals/regex 판정을 더럽힌다.
@@ -418,25 +430,34 @@ func (s *server) runCheck(ctx context.Context, c checkDef, e expectation, script
 	shell := fmt.Sprintf("export PATH=%s:$PATH; timeout %d bash -c \"$INFRALAB_CMD\"", scriptDir, int(timeout.Seconds()))
 
 	start := time.Now()
-	res, err := s.runner.Run(cctx, "", "docker", "exec", "-w", "/work", "-e", "INFRALAB_CMD="+c.Command,
+	res, err := s.runner.Run(cctx, "", "docker", "exec", "-w", "/work", "-e", "INFRALAB_CMD="+command,
 		s.cfg.Workstation, "bash", "-c", shell)
-	out := checkResult{ID: c.ID, Name: c.Name, Hint: c.Hint, ExitCode: res.ExitCode, Ms: time.Since(start).Milliseconds()}
-	out.Output, out.Truncated = clip(res.Combined(), maxOutputBytes)
+	ms = time.Since(start).Milliseconds()
 	switch {
 	case err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(cctx.Err(), context.DeadlineExceeded)):
-		out.Error = fmt.Sprintf("timed out after %s", timeout)
+		errMsg = fmt.Sprintf("timed out after %s", timeout)
 	case err != nil:
-		out.Error = "could not run: " + err.Error()
+		errMsg = "could not run: " + err.Error()
 	case res.ExitCode == 124: // busybox/coreutils timeout 의 종료 코드
-		out.Error = fmt.Sprintf("timed out after %s", timeout)
+		errMsg = fmt.Sprintf("timed out after %s", timeout)
 	case dockerLevelFailure(res):
-		out.Error = "workstation unavailable: " + firstLine(strings.TrimSpace(res.Stderr))
-	default:
-		pass, why := evaluate(e, res)
-		out.Pass = pass
-		if !pass && why != "" {
-			out.Error = why
-		}
+		errMsg = "workstation unavailable: " + firstLine(strings.TrimSpace(res.Stderr))
+	}
+	return res, errMsg, ms
+}
+
+func (s *server) runCheck(ctx context.Context, c checkDef, e expectation, scriptDir string) checkResult {
+	res, errMsg, ms := s.execInWorkstation(ctx, c.Command, scriptDir, clampTimeout(c.TimeoutSeconds))
+	out := checkResult{ID: c.ID, Name: c.Name, Hint: c.Hint, ExitCode: res.ExitCode, Ms: ms}
+	out.Output, out.Truncated = clip(res.Combined(), maxOutputBytes)
+	if errMsg != "" {
+		out.Error = errMsg
+		return out
+	}
+	pass, why := evaluate(e, res)
+	out.Pass = pass
+	if !pass && why != "" {
+		out.Error = why
 	}
 	return out
 }

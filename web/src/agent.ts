@@ -16,6 +16,15 @@ export class AgentUnreachable extends Error {}
 export class AgentTimeout extends Error {}
 /** 에이전트는 떠 있지만 토큰이 다르다 — compose.yml 을 다시 받아야 한다. */
 export class AgentAuthError extends Error {}
+/** 에이전트가 돌려준 2xx 가 아닌 응답. */
+export class AgentHttpError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export async function agentFetch<T>(
   agentUrl: string,
@@ -52,7 +61,7 @@ export async function agentFetch<T>(
     } catch {
       /* 본문 없음 */
     }
-    throw new Error(msg);
+    throw new AgentHttpError(res.status, msg);
   }
   return (await res.json()) as T;
 }
@@ -71,6 +80,60 @@ export const kindDown = (agentUrl: string, token: string) =>
   agentFetch<StepsResponse>(agentUrl, token, "/api/kind/down", { method: "POST", timeoutMs: ENV_TIMEOUT_MS });
 export const flociReset = (agentUrl: string, token: string) =>
   agentFetch<StepsResponse>(agentUrl, token, "/api/floci/reset", { method: "POST", timeoutMs: ENV_TIMEOUT_MS });
+
+/** 서버의 준비 응답을 에이전트 /api/setup 에 넘긴다. Floci·kind 재생성과 setup 까지 분 단위다. */
+export const prepareEnvironment = (
+  agentUrl: string,
+  token: string,
+  prepare: {
+    scenario_id: string;
+    setup_reset: string;
+    kind: { control_planes: number; workers: number } | null;
+    setup: { command: string; scripts: Record<string, string>; timeout_seconds: number } | null;
+    ai_rules: string;
+  },
+) =>
+  agentFetch<StepsResponse>(agentUrl, token, "/api/setup", {
+    method: "POST",
+    timeoutMs: ENV_TIMEOUT_MS,
+    body: JSON.stringify({
+      scenario_id: prepare.scenario_id,
+      reset: {
+        floci: prepare.setup_reset === "floci" || prepare.setup_reset === "both",
+        kind: prepare.setup_reset === "kind" || prepare.setup_reset === "both" ? prepare.kind : null,
+      },
+      setup: prepare.setup,
+      ai_rules: prepare.ai_rules,
+    }),
+  });
+
+/** 이 시나리오의 환경 준비가 되어 있는가 — 가벼운 /api/prepared 가 준비 표시가 없을 때만 404 를 준다. 그 밖의 오류(시간 초과·503·네트워크)는 던진다 — 「모름」이지 「준비 전」이 아니다. */
+export async function isPrepared(agentUrl: string, token: string, scenarioId: string): Promise<boolean> {
+  try {
+    await agentFetch(agentUrl, token, `/api/prepared?scenario_id=${encodeURIComponent(scenarioId)}`, { timeoutMs: 15000 });
+    return true;
+  } catch (err) {
+    if (err instanceof AgentHttpError && err.status === 404) return false;
+    throw err;
+  }
+}
+
+export type AgentTranscript = {
+  tool: "claude" | "codex";
+  since: string;
+  truncated: boolean;
+  error?: string;
+  entries: { role: "user" | "assistant"; at: string; text: string }[];
+};
+
+/** 마지막 환경 준비 이후의 Claude·Codex 대화. 준비 표시가 없으면 AgentHttpError(404). */
+export const fetchTranscript = (agentUrl: string, token: string, scenarioId: string) =>
+  agentFetch<{ scenario_id: string; since: string; transcripts: AgentTranscript[] }>(
+    agentUrl,
+    token,
+    `/api/ai-transcript?scenario_id=${encodeURIComponent(scenarioId)}`,
+    { timeoutMs: 20000 },
+  );
 
 export type CheckResult = {
   id: string;

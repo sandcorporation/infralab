@@ -31,7 +31,9 @@ def test_compose_has_my_token_fixed_names_and_is_a_yaml_download(api):
     assert agent["container_name"] == "infralab-agent"
     assert agent["environment"]["WORKSTATION_CONTAINER"] == "infralab-workstation"
     assert doc["services"]["workstation"]["container_name"] == "infralab-workstation"
-    assert doc["services"]["workstation"]["volumes"] == ["./work:/work"]
+    # ./work 는 작업 폴더 그대로, 홈(/root)은 named volume — AI 로그인 토큰·세션 파일이 재생성 뒤에도 남는다.
+    assert doc["services"]["workstation"]["volumes"] == ["./work:/work", "home:/root"]
+    assert "home" in doc["volumes"]
     assert doc["services"]["workstation"]["environment"]["AWS_ENDPOINT_URL"] == "http://infralab-floci:4566"
     assert doc["services"]["floci"]["container_name"] == "infralab-floci"
     assert "/var/run/docker.sock:/var/run/docker.sock" in doc["services"]["agent"]["volumes"]

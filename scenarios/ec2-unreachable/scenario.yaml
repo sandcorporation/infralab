@@ -1,0 +1,44 @@
+id: ec2-unreachable
+title: 닿지 않는 EC2
+description: |
+  VPC 안의 EC2 인스턴스에서 nginx 가 8080 으로 동작하는데, 인터넷(`0.0.0.0/0`)에서 8080 으로 닿지 않는다.
+
+  ## 할 일
+
+  1. 원인을 찾는다.
+  2. 인스턴스의 8080 에 닿게 고친다.
+
+  이 환경에서는 인스턴스 안의 80 포트를 쓸 수 없다.
+
+requires:
+  floci: true
+  kind: null
+
+setup: setup.sh
+setup_timeout_seconds: 240
+
+ai_rules: |
+  이 환경의 Floci 는 보안 그룹을 네트워크로 강제하지 않는다. 인스턴스 컨테이너에는 보안 그룹과 무관하게 `floci-aws-ec2-<인스턴스 id>` 이름으로 닿는다.
+  그래서 「닿는다」는 인스턴스에 붙은 보안 그룹의 인바운드와 8080 응답을 함께 본다.
+
+checks:
+  - id: port-8080-reachable
+    name: 인스턴스의 8080 에 닿는다
+    hint: 인스턴스에 붙은 보안 그룹의 인바운드를 본다 — aws ec2 describe-security-groups
+    command: reach-check.sh
+    expect: { contains: "<" }
+    timeout_seconds: 60
+
+  - id: single-instance
+    name: 실행 중인 인스턴스가 1개
+    hint: 새 인스턴스를 띄우지 않는다 — 있는 인스턴스를 고친다
+    command: aws ec2 describe-instances --filters Name=instance-state-name,Values=running --query 'Reservations[].Instances[].InstanceId | length(@)' --output text
+    expect: { regex: "^\\s*1\\s*$" }
+    constraint: true
+
+  - id: only-8080-open
+    name: 보안 그룹 인바운드가 TCP 8080 하나뿐
+    hint: 필요한 포트만 연다 — 다른 포트나 모든 트래픽은 열지 않는다
+    command: check-ingress.sh
+    expect: exit_zero
+    constraint: true
