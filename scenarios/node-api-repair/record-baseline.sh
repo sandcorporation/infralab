@@ -23,6 +23,6 @@ for path in "$@"; do
     exit 1
   fi
   name=$(printf '%s' "$path" | tr '/' '_')
-  (cd "$app" && if [ -d "$path" ]; then find "$path" -type f; else echo "$path"; fi | LC_ALL=C sort | xargs -r sha256sum) > "$dir/$name.sha256"
+  (cd "$app" && if [ -d "$path" ]; then find "$path" -type f -not -path '*/__pycache__/*' -not -path '*/.pytest_cache/*'; else echo "$path"; fi | LC_ALL=C sort | xargs -r sha256sum) > "$dir/$name.sha256"
   echo "기준 기록: $path ($(wc -l < "$dir/$name.sha256") 파일)"
 done

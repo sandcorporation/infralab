@@ -1,0 +1,85 @@
+id: python-api-feature
+title: Python API 에 기능 추가
+description: |
+  `/work/app` (호스트의 `./work/app`) 에 FastAPI 로 만든 `/items` API 가 있다. 항목을 보관 처리하는 엔드포인트를 추가한다.
+
+  ## 요구사항
+
+  `POST /items/{id}/archive`
+
+  - 존재하는 항목: **200**, 본문은 그 항목에 `"archived": true` 를 더한 것 — 예: `{"id": 1, "name": "pen", "price": 3, "archived": true}`
+  - 존재하지 않는 항목: **404**, 본문은 기존 엔드포인트와 같다 — `{"detail": "not found"}`
+  - 이미 보관된 항목: **409**
+  - 보관하지 않은 항목의 기존 응답은 그대로다 (`archived` 키가 없다).
+
+  ## 할 일
+
+  1. 엔드포인트를 구현한다.
+  2. 기존 테스트(`pytest`)가 계속 통과하게 한다.
+
+  테스트 파일(`tests/`)과 `requirements.txt` 는 바꾸지 않는다.
+
+requires:
+  floci: false
+  kind: null
+
+setup: setup.sh
+setup_timeout_seconds: 240
+
+ai_rules: |
+  프로젝트는 `/work/app` 이다 (FastAPI, 테스트는 pytest, 의존성은 이미 설치되어 있다).
+  - 테스트: `cd /work/app && pytest`
+  - 실행: `cd /work/app && uvicorn app.main:app --port 8000`
+  - `tests/` 와 `requirements.txt` 는 바꾸지 않는다 (테스트 파일을 더하지도 않는다). 의존성도 더하지 않는다.
+  - 기존 엔드포인트의 응답 모양을 바꾸지 않는다.
+
+checks:
+  - id: archive-ok
+    name: 보관하면 200 과 archived true
+    hint: POST /items/{id}/archive 가 항목에 archived 를 true 로 더해 돌려준다
+    command: acceptance.sh ok
+    expect: { contains: "통과" }
+    timeout_seconds: 60
+
+  - id: archive-twice
+    name: 이미 보관된 항목은 409
+    hint: 두 번째 보관 요청은 409 (HTTPException status_code=409)
+    command: acceptance.sh twice
+    expect: { contains: "통과" }
+    timeout_seconds: 60
+
+  - id: archive-missing
+    name: 없는 항목은 404
+    hint: 없는 id 의 보관 요청은 404
+    command: acceptance.sh missing
+    expect: { contains: "통과" }
+    timeout_seconds: 60
+
+  - id: tests-pass
+    name: pytest 가 통과한다
+    hint: cd /work/app && pytest
+    command: cd /work/app && python3 -m pytest -q 2>&1
+    expect: exit_zero
+    timeout_seconds: 90
+
+  - id: tests-untouched
+    name: tests/ 를 바꾸지 않았다
+    hint: 테스트가 아니라 코드를 고친다 — 바뀐 파일은 출력에 보인다
+    command: check-baseline.sh python-api-feature tests
+    expect: exit_zero
+    constraint: true
+
+  - id: requirements-untouched
+    name: requirements.txt 를 바꾸지 않았다
+    hint: 의존성을 더하거나 바꾸지 않는다 — 바뀐 파일은 출력에 보인다
+    command: check-baseline.sh python-api-feature requirements.txt
+    expect: exit_zero
+    constraint: true
+
+  - id: api-shape-kept
+    name: 기존 /items 응답 모양이 그대로다
+    hint: 보관하지 않은 항목의 응답에 새 키를 넣지 않는다 — 어긋난 응답은 출력에 보인다
+    command: api-shape.sh
+    expect: { contains: "기존 응답 모양 유지" }
+    timeout_seconds: 60
+    constraint: true

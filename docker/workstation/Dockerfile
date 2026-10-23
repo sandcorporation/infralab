@@ -16,11 +16,13 @@ RUN npm install -g @anthropic-ai/claude-code @openai/codex \
 RUN printf 'export PS1="\[\e[32m\]lab\[\e[0m\]:\w\$ "\nalias k=kubectl\n' > /etc/profile.d/lab.sh
 COPY --from=jdk /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
-ENV PATH=/opt/java/openjdk/bin:$PATH
+ENV PATH=/root/.local/bin:/opt/java/openjdk/bin:$PATH
 # 터미널은 로그인 셸(bash -l)이라 alpine 의 /etc/profile 이 PATH 를 다시 쓴다 — 거기서도 java 가 보이게.
-RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH="$JAVA_HOME/bin:$PATH"\n' > /etc/profile.d/java.sh
+RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH="/root/.local/bin:$JAVA_HOME/bin:$PATH"\n' > /etc/profile.d/java.sh
 # alpine 의 python 은 pip 전역 설치를 막는다(PEP 668) — 컨테이너가 곧 격리 환경이다.
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
+# pip 설치는 홈(/root/.local, 홈 볼륨)으로 — 컨테이너를 다시 만들어도 남고 pytest·uvicorn 이 PATH 에 있다.
+ENV PIP_USER=1
 # 빌드 검증 — 하나라도 실행되지 않으면 빌드가 깨진다. java 는 25 여야 한다.
 RUN node --version && python3 --version && pip --version && claude --version && codex --version \
  && java -version 2>&1 | head -1 && java -version 2>&1 | grep -q '"25'

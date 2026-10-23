@@ -16,3 +16,10 @@
 - 프로젝트는 infralab-labs 태그 v2 의 labs/node-api. setup 이 shallow clone → /work/app 복사 → git init + 첫 커밋 → npm ci → record-baseline.sh 순서로 약 27초(인터넷 필요, 상한 240초).
 - 공유 스크립트 원본은 scenarios/_shared/ (record-baseline.sh · check-baseline.sh · serve-and-curl.sh), 시나리오 디렉터리마다 복사본을 두고 test_shared_scripts.py 가 원본과 같은지 지킨다. 기준은 홈 볼륨의 ~/.infralab/<id>/baseline/ 에 남고 파일 경로 → 해시 목록이다. 디렉터리에 새로 생긴 파일도 위반으로 센다.
 - 실측: 환경 준비 직후 채점 3/4(npm test 만 실패, 제약 통과) → sum·date 두 버그를 고치면 4/4 → tests/ 수정·새 테스트 추가·package-lock.json 수정은 제약 실패이고 바뀜/새로 생김 목록이 출력에 보인다 → 환경 준비를 다시 하면 /work/app 이 처음 상태(버그 있음)로 돌아간다.
+
+## python-api-feature
+
+- 프로젝트는 infralab-labs v2 의 labs/python-api. pip 설치는 PIP_USER=1 로 홈 볼륨(/root/.local)에 가고 PATH 에 /root/.local/bin 이 있어 pytest·uvicorn 이 바로 되며 컨테이너를 다시 만들어도 남는다(이미지에 추가). 환경 준비 약 16초.
+- 인수 검사는 acceptance.sh 가 앱(uvicorn, 포트 3200)을 띄워 요청하고, 공개 API 유지는 api-shape.sh 가 보관하지 않은 항목의 키가 id·name·price 뿐인지 본다. 둘 다 app-lib.sh 를 쓴다. 기준 해시는 __pycache__·.pytest_cache 를 제외한다(공유 스크립트).
+- 「없는 항목은 404」가 구현 전에도 통과하지 않게(없는 라우트도 404) 본문 {"detail": "not found"} 까지 요구한다.
+- 실측: 환경 준비 직후 채점 5/7(인수 두 건 실패, 나머지 통과) → 구현 뒤 7/7 → 모든 항목에 archived 키를 넣고 requirements.txt 를 바꾸면 4/7, 두 제약이 실패하고 어긋난 응답·바뀐 파일이 출력에 보인다.

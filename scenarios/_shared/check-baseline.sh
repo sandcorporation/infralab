@@ -22,7 +22,7 @@ for path in "$@"; do
     bad=1
     continue
   fi
-  now=$(cd "$app" 2>/dev/null && { if [ -d "$path" ]; then find "$path" -type f; elif [ -e "$path" ]; then echo "$path"; fi; } | LC_ALL=C sort | xargs -r sha256sum)
+  now=$(cd "$app" 2>/dev/null && { if [ -d "$path" ]; then find "$path" -type f -not -path '*/__pycache__/*' -not -path '*/.pytest_cache/*'; elif [ -e "$path" ]; then echo "$path"; fi; } | LC_ALL=C sort | xargs -r sha256sum)
   # 파일 이름 → 해시 대응으로 바꿔 세 종류의 차이를 가른다.
   while read -r hash file; do
     [ -z "$file" ] && continue
