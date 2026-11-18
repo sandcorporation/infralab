@@ -1,0 +1,7 @@
+# 견본 문제은행 — 시험·개발용. 실제 문제는 비공개 문제은행 저장소(problems.ref 가 가리키는 sha)에 있다.
+checks:
+  - id: hidden-index-body
+    name: index.html 본문
+    hint: index.html 에 내용을 넣는다
+    command: aws s3 cp s3://lab-site/index.html - | grep -qi html
+    expect: exit_zero

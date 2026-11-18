@@ -61,7 +61,7 @@ DASHBOARD_ORIGIN = _env("DASHBOARD_ORIGIN", "http://127.0.0.1:53040,http://127.0
 # 시나리오 YAML 디렉터리. 저장소 레이아웃(backend/ 옆 scenarios/)이 기본, compose 는 /scenarios 로 마운트한다.
 SCENARIOS_DIR = _env("SCENARIOS_DIR", str(BASE_DIR.parent / "scenarios"))
 # 비공개 문제은행(숨은 검사) 폴더 ← INFRALAB_PROBLEMS_DIR. 비면 숨은 검사를 건너뛴다.
-PROBLEMS_DIR = ""  # #69
+PROBLEMS_DIR = _env("INFRALAB_PROBLEMS_DIR", "")
 
 # ---------- 시험 모드 ----------
 # AI 프록시 주소 ← INFRALAB_EXAM_PROXY_URL, 프록시 전용 내부 API 의 공유 비밀 ← INFRALAB_EXAM_PROXY_SECRET.
