@@ -42,6 +42,14 @@ expect() { # expect <ok|fail> <이름> <저장소> [출력에 있어야 할 글]
 r="$(mk clean)"
 expect ok "토큰만 쓰면 통과" "$r"
 
+r="$(mk issue-ref)"
+printf 'export function f() {\n  throw new Error("#133");\n}\n' >"$r/web/src/stub.ts"
+expect ok "TS 문자열의 이슈 번호(#133) → 통과" "$r"
+
+r="$(mk css-digits)"
+printf '.b { color: #000; }\n' >"$r/web/src/black.css"
+expect fail "CSS 숫자만 hex(#000) → 실패" "$r" "web/src/black.css:1 색 리터럴"
+
 r="$(mk hex)"
 printf '.b {\n  color: #1f2430;\n}\n' >"$r/web/src/bad.css"
 expect fail "CSS hex 6자리 → 실패" "$r" "web/src/bad.css:2 색 리터럴 — 디자인 토큰(sandcorp-design)을 써라. 꼭 필요하면 scripts/design-allowlist.txt 에 까닭과 함께"

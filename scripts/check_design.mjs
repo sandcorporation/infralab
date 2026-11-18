@@ -87,6 +87,8 @@ function stripComments(src, css) {
 }
 
 const COLOR = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-zA-Z_-])|\b(?:rgba?|hsla?)\(/gi;
+// TS·TSX 의 문자열에는 이슈 번호(`throw new Error("#133")`)가 들어간다 — 숫자만 세 자리인 `#NNN` 은 CSS 에서만 색으로 본다.
+const ISSUE_REF = /^#[0-9]{3}$/;
 
 function walk(dir) {
   const files = [];
@@ -104,8 +106,9 @@ for (const file of existsSync(srcDir) ? walk(srcDir).sort() : []) {
   if (allowFiles.has(rel)) continue;
   const lines = stripComments(readFileSync(file, "utf8"), file.endsWith(".css")).split("\n");
   lines.forEach((line, i) => {
-    COLOR.lastIndex = 0;
-    if (!COLOR.test(line)) return;
+    const css = file.endsWith(".css");
+    const hit = [...line.matchAll(COLOR)].some((m) => css || !ISSUE_REF.test(m[0]));
+    if (!hit) return;
     if (allowLines.has(`${rel}:${i + 1}`)) return;
     failures.push(
       `${rel}:${i + 1} 색 리터럴 — 디자인 토큰(sandcorp-design)을 써라. 꼭 필요하면 scripts/design-allowlist.txt 에 까닭과 함께`,
