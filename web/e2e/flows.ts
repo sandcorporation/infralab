@@ -1,7 +1,7 @@
 // 화면 흐름 손잡이 — 강사가 시험 회차를 만들고 응시 링크를 내는 길, 응시자가 링크로 들어와 시작하는 길.
 // 버튼·라벨은 화면 글자 그대로 찾는다(바뀌면 시험이 깨져 알려 준다).
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { agentTokenFor, devLogin, makeInstructor, startAgent, stopAgent, uniqueId } from "./stack";
+import { agentTokenFor, baseOrigin, devLogin, makeInstructor, startAgent, stopAgent, uniqueId } from "./stack";
 
 export const SCENARIO_ID = "e2e-prepare";
 export const SCENARIO_TITLE = "e2e 환경 준비";
@@ -119,3 +119,49 @@ export async function openScenario(c: Candidate): Promise<void> {
 
 /** 응시 화면 머리 배지 — 「시작 전」「응시 중」「마감」. */
 export const headBadge = (p: Page) => p.getByRole("heading").locator(".sc-badge");
+
+/** 새 브라우저로 개발용 로그인한 학생 — 어느 수업 묶음에도 들지 않았다. */
+export async function newStudent(browser: Browser, label = "연습생"): Promise<{ ctx: BrowserContext; page: Page; uid: string }> {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const uid = uniqueId("student");
+  await page.goto("/login");
+  await devLogin(page, uid, label);
+  return { ctx, page, uid };
+}
+
+/** 묶음 없는 계정의 `/` 가 연습 화면으로 가고, 「연습 시작」으로 참여해 시나리오 목록이 뜰 때까지. */
+export async function startPractice(page: Page): Promise<void> {
+  await page.goto("/");
+  await page.waitForURL(/\/practice$/);
+  await page.getByRole("button", { name: "연습 시작" }).click();
+  await expect(practiceRow(page)).toBeVisible();
+}
+
+/** 연습 화면의 e2e 시나리오 행. */
+export const practiceRow = (p: Page) => p.getByRole("row").filter({ has: p.getByRole("link", { name: SCENARIO_TITLE }) });
+
+/** 이미 강사 권한이 있는 사람이 수업 묶음을 API 로 만들고, 이 학생이 가입 링크로 들어가 수업 묶음 계정이 되게 한다. */
+export async function joinClassCohort(instructor: Page, student: Page): Promise<string> {
+  const name = `e2e 수업 ${uniqueId("c").slice(-4)}`;
+  const res = await instructor.request.post("/api/instructor/cohorts", {
+    data: { name, kind: "class" },
+    headers: { Origin: baseOrigin() },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const { join_token } = (await res.json()) as { join_token: string };
+  await student.goto(`/join/${join_token}`);
+  await expect(student.getByText(`「${name}」에 가입했습니다.`)).toBeVisible();
+  return name;
+}
+
+/** 강사 권한을 가진 새 브라우저 맥락. */
+export async function newInstructor(browser: Browser): Promise<Page> {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const uid = uniqueId("instructor");
+  await page.goto("/login");
+  await devLogin(page, uid, "강사");
+  makeInstructor(uid);
+  return page;
+}
