@@ -14,8 +14,9 @@
 #                                     Never fails the workflow: a missing file, ledger issue or jq only warns.
 #   ledger.sh spec-total <S>          sum of the ledger comments with spec=#S, in USD
 #   ledger.sh day-total [YYYY-MM-DD]  sum of the ledger comments created on that KST date (default: today)
-#   ledger.sh spec-of <issue>         the spec of an issue: its GitHub sub-issue parent, else the first
-#                                     #number in its "## Parent" section, or the issue itself when it has none
+#   ledger.sh spec-of <issue>         the spec of an issue: the issue itself when it has the `spec` label,
+#                                     else its GitHub sub-issue parent, else the first #number in its
+#                                     "## Parent" section, or the issue itself when it has none
 #   ledger.sh parent-of <issue>       the same without the fallback: empty when the issue has no parent
 #   ledger.sh guard <issue>           decide whether a stage may start for <issue>. Writes go=true|false and
 #                                     reason=<why> to $GITHUB_OUTPUT (stdout when unset). Stops when the spec
@@ -137,8 +138,17 @@ parent_of() {
   echo "$p"
 }
 
+# The spec of an issue: the issue itself when it has the `spec` label (a spec may have a "## Parent"
+# umbrella of its own, #203), else its parent, else the issue itself. One issue read serves the label
+# and the "## Parent" section.
 spec_of() {
-  local p; p=$(parent_of "$1")
+  local json p
+  json=$(issue_json "$1" 2>/dev/null) || json=
+  if [ -n "$json" ] && printf '%s' "$json" | jq -e 'any(.labels[]?; .name == "spec")' >/dev/null 2>&1; then
+    echo "$1"; return
+  fi
+  p=$(sub_issue_parent "$1")
+  [ -n "$p" ] || p=$(printf '%s' "$json" | j -r '.body // ""' 2>/dev/null | parent_of_body)
   echo "${p:-$1}"
 }
 
