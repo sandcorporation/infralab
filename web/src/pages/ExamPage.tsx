@@ -7,7 +7,6 @@ import {
   enterExam,
   envExportText,
   examComposeUrl,
-  finishExam,
   formatRemaining,
   getAiConfig,
   getFinalChecks,
@@ -70,10 +69,6 @@ export default function ExamPage() {
   }
 
   const start = () => run(async () => clock?.apply(await startExam(token)));
-  const finish = () => {
-    if (!confirm("제출하고 시험을 끝냅니다. 끝낸 뒤에는 더 제출할 수 없습니다.")) return;
-    void run(async () => clock?.apply(await finishExam(token)));
-  };
 
   const status = clock?.status;
   return (
@@ -118,11 +113,6 @@ export default function ExamPage() {
             </Link>
           </p>
           {status.tools.some((t) => t === "claude_code" || t === "codex") && <AiKeySetup token={token} />}
-          <p>
-            <button className="secondary" onClick={finish} disabled={busy}>
-              제출하고 끝내기
-            </button>
-          </p>
         </>
       )}
       {status && clock.finished && (

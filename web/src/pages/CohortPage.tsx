@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ApiError,
   formatTime,
@@ -12,7 +12,9 @@ import {
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
 import { PreflightPanel, usePreflight } from "../components/PreflightPanel";
 import { RequiresTags } from "../components/ScenarioPicker";
+import { PageHead } from "../components/ui";
 import { useMyCohort } from "../hooks";
+import { useCrumbs, useInShell } from "../shell/crumbs";
 
 // 학생의 기수 화면. 환경(에이전트) 상태, 설치 안내 입구, 열린 시나리오 목록.
 export default function CohortPage() {
@@ -67,6 +69,10 @@ export function CohortView({
     };
   }, [cohortId]);
 
+  const navigate = useNavigate();
+  const inShell = useInShell();
+  useCrumbs(practice ? [{ label: backLabel }] : [{ label: backLabel, to: backTo }, { label: cohort?.name ?? "…" }]);
+
   if (error) return <p className="error">{error}</p>;
   if (!cohort) return <p className="muted">불러오는 중…</p>;
 
@@ -79,86 +85,107 @@ export function CohortView({
         ].filter((x): x is string => x !== null)
       : [];
 
+  const scenarioUrl = (id: string) => `/cohorts/${cohort.id}/scenarios/${id}`;
   return (
-    <section>
-      <p>
-        <Link to={backTo}>← {backLabel}</Link>
-      </p>
-      <div className="row">
-        <h1>{cohort.name}</h1>
-        {cohort.archived && <span className="sc-badge sc-badge--neutral">보관됨</span>}
-        <AgentStatusBadge probe={probe} />
-      </div>
-
-      <section className="card">
-        <h2>내 실습 환경</h2>
-        {(probe.state === "unreachable" || probe.state === "error") && (
-          <p className="error">
-            에이전트가 응답하지 않습니다. <Link to={`/cohorts/${cohort.id}/setup`}>설치 안내</Link>
-          </p>
-        )}
-        {probe.state === "token-mismatch" && (
-          <p className="error">
-            에이전트 토큰이 다릅니다. <Link to={`/cohorts/${cohort.id}/setup`}>compose.yml 을 다시 받아</Link>{" "}
-            <code>docker compose up -d</code> 를 다시 하세요.
-          </p>
-        )}
-        {probe.state === "connected" && envProblems.length === 0 && (
-          <p className="muted">
-            에이전트 v{probe.status.version} · Docker {probe.status.docker_server} · workstation · Floci
-            {probe.status.kind_nodes.length > 0 && ` · kind 노드 ${probe.status.kind_nodes.length}`}
-          </p>
-        )}
-        {envProblems.length > 0 && (
-          <ul className="error">
-            {envProblems.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
-        )}
-        {probe.state === "connected" && (
-          <PreflightPanel state={preflight} mode="practice" cohortId={cohort.id} />
-        )}
+    <>
+      {!inShell && (
         <p>
+          <Link to={backTo}>← {backLabel}</Link>
+        </p>
+      )}
+      <PageHead
+        title={practice ? "연습" : cohort.name}
+        badges={
+          <>
+            {cohort.archived && <span className="sc-badge sc-badge--neutral">보관됨</span>}
+            <AgentStatusBadge probe={probe} />
+          </>
+        }
+        sub={
+          probe.state === "connected" && envProblems.length === 0
+            ? `에이전트 v${probe.status.version} · Docker ${probe.status.docker_server} · workstation · Floci${
+                probe.status.kind_nodes.length > 0 ? ` · kind 노드 ${probe.status.kind_nodes.length}` : ""
+              }`
+            : undefined
+        }
+        actions={
           <Link className="button secondary" to={`/cohorts/${cohort.id}/setup`}>
             설치 안내 · compose.yml
           </Link>
-        </p>
-      </section>
+        }
+      />
 
-      <section className="card">
-        <h2>시나리오</h2>
-        {scenarioError && <p className="error">{scenarioError}</p>}
-        {scenarios && scenarios.length === 0 && <p className="muted">열린 시나리오가 없습니다.</p>}
-        {scenarios && scenarios.length > 0 && (
-          <ul className="list plain">
-            {scenarios.map((s) => (
-              <li key={s.id} className="row scenario-row">
-                <Link to={`/cohorts/${cohort.id}/scenarios/${s.id}`}>
-                  <strong>{s.title}</strong>
-                </Link>
-                <RequiresTags requires={s.requires} />
-                <span className="grow" />
-                {practice ? (
-                  <>
-                    <span className="muted small">
-                      제출 {records[s.id]?.submission_count ?? 0}
-                      {records[s.id]?.last_submitted_at && ` · ${formatTime(records[s.id].last_submitted_at as string)}`}
-                    </span>
-                    <span className={records[s.id]?.best_passed === s.total ? "score done" : "score"}>
-                      {records[s.id]?.best_passed ?? "—"}/{s.total}
-                    </span>
-                  </>
-                ) : (
-                  <span className={s.passed === s.total ? "score done" : "score"}>
-                    {s.passed === null ? "—" : s.passed}/{s.total}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </section>
+      {(probe.state === "unreachable" || probe.state === "error") && (
+        <p className="error">
+          에이전트가 응답하지 않습니다. <Link to={`/cohorts/${cohort.id}/setup`}>설치 안내</Link>
+        </p>
+      )}
+      {probe.state === "token-mismatch" && (
+        <p className="error">
+          에이전트 토큰이 다릅니다. <Link to={`/cohorts/${cohort.id}/setup`}>compose.yml 을 다시 받아</Link>{" "}
+          <code>docker compose up -d</code> 를 다시 하세요.
+        </p>
+      )}
+      {envProblems.length > 0 && (
+        <ul className="error">
+          {envProblems.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+      )}
+      {probe.state === "connected" && <PreflightPanel state={preflight} mode="practice" cohortId={cohort.id} />}
+
+      {scenarioError && <p className="error">{scenarioError}</p>}
+      {!scenarios && !scenarioError && <p className="muted">불러오는 중…</p>}
+      {scenarios && scenarios.length === 0 && <p className="muted">열린 시나리오가 없습니다.</p>}
+      {scenarios && scenarios.length > 0 && (
+        <div className="sc-table-scroll">
+          <table className="sc-table">
+            <thead>
+              <tr>
+                <th>시나리오</th>
+                <th>환경</th>
+                {practice && <th className="sc-num">제출</th>}
+                {practice && <th>마지막 제출</th>}
+                <th className="sc-num">{practice ? "최고" : "통과"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scenarios.map((s) => {
+                const passed = practice ? records[s.id]?.best_passed ?? null : s.passed;
+                return (
+                  <tr
+                    key={s.id}
+                    className="sc-table-row-link"
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest("a")) return;
+                      navigate(scenarioUrl(s.id));
+                    }}
+                  >
+                    <td>
+                      <Link to={scenarioUrl(s.id)}>{s.title}</Link>
+                    </td>
+                    <td>
+                      <RequiresTags requires={s.requires} />
+                    </td>
+                    {practice && <td className="sc-num">{records[s.id]?.submission_count ?? 0}</td>}
+                    {practice && (
+                      <td className="muted">
+                        {records[s.id]?.last_submitted_at ? formatTime(records[s.id].last_submitted_at as string) : "—"}
+                      </td>
+                    )}
+                    <td className="sc-num">
+                      <span className={passed === s.total ? "score done" : "score"}>
+                        {passed === null ? "—" : passed}/{s.total}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   );
 }

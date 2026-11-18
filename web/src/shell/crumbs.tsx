@@ -16,13 +16,18 @@ export function useCrumbList(): Crumb[] {
   return useContext(CrumbsContext)?.crumbs ?? [];
 }
 
-/** 화면이 자기 이동 경로를 상단 바에 올린다. 화면을 떠나면 비운다. */
-export function useCrumbs(crumbs: Crumb[]) {
+/** 화면이 자기 이동 경로를 상단 바에 올린다. 화면을 떠나면 비운다. null 이면 안쪽 화면에 맡긴다. */
+export function useCrumbs(crumbs: Crumb[] | null) {
   const set = useContext(CrumbsContext)?.setCrumbs;
-  const key = JSON.stringify(crumbs);
+  const key = crumbs ? JSON.stringify(crumbs) : null;
   useEffect(() => {
-    if (!set) return;
+    if (!set || key === null) return;
     set(JSON.parse(key) as Crumb[]);
     return () => set([]);
   }, [set, key]);
+}
+
+/** 사이드바·상단 바가 있는 앱 골격 안인가 — 응시자·로그인 전 화면(bare)이면 false. */
+export function useInShell(): boolean {
+  return useContext(CrumbsContext) !== null;
 }

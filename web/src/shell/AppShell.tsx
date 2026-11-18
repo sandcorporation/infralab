@@ -59,7 +59,9 @@ function Brand() {
 }
 
 function SideNav({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathname: string; onNavigate: () => void }) {
-  const current = currentNavItem(groups, pathname);
+  // 연습 시나리오는 기수와 같은 /cohorts/... 경로를 쓴다 — 화면이 올린 이동 경로의 첫 칸이 메뉴 항목이면 그것을 켠다.
+  const first = useCrumbList()[0]?.to;
+  const current = groups.flatMap((g) => g.items).find((i) => first !== undefined && i.to === first) ?? currentNavItem(groups, pathname);
   return (
     <nav className="sc-sidenav" id="app-sidenav" aria-label="주 메뉴">
       <Link to="/" className="sc-sidenav-org app-brand" onClick={onNavigate}>

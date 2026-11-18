@@ -13,6 +13,7 @@ import { RequiresTags } from "../components/ScenarioPicker";
 import { Terminal } from "../components/Terminal";
 import { useMyCohort } from "../hooks";
 import { useExamClock } from "../examAttempt";
+import { useCrumbs, useInShell } from "../shell/crumbs";
 
 export default function ScenarioPage() {
   const { id, scenarioId = "" } = useParams();
@@ -78,31 +79,71 @@ export default function ScenarioPage() {
     };
   }, [cohortId, scenarioId]);
 
+  const inShell = useInShell();
+  const [tab, setTab] = useState<PaneTab>("desc");
+  const [prepSlot, setPrepSlot] = useState<HTMLDivElement | null>(null);
+  const [gradeSlot, setGradeSlot] = useState<HTMLDivElement | null>(null);
+  useEffect(() => setTab("desc"), [scenarioId]);
+  useCrumbs(
+    isPractice
+      ? [{ label: "연습", to: "/practice" }, { label: scenario?.title ?? "…" }]
+      : [{ label: "내 기수", to: "/" }, { label: cohort?.name ?? "…", to: `/cohorts/${cohortId}` }, { label: scenario?.title ?? "…" }],
+  );
+
   if (cohortError) return <p className="error">{cohortError}</p>;
   if (!cohort) return <p className="muted">불러오는 중…</p>;
   const env = scenario ? envVerdict(probe, scenario.requires) : null;
+  const tabs: { key: PaneTab; label: string; count?: number }[] = [
+    { key: "desc", label: "설명" },
+    { key: "checks", label: "검사", count: scenario?.checks.length },
+    { key: "env", label: "환경" },
+    ...(isPractice ? [{ key: "history" as const, label: "내 기록" }] : []),
+  ];
 
+  // 작업 공간(sandcorp-design#30): 위 고정 도구줄, 아래 두 칸 — 왼쪽 설명·검사·환경 탭, 오른쪽 터미널이 남은 높이 전부.
   return (
-    <section className="scenario">
-      <p>
-        <Link to={`/cohorts/${cohort.id}`}>← {cohort.name}</Link>
-      </p>
-      <div className="row">
-        <h1>{scenario?.title ?? "…"}</h1>
+    <section className="ws">
+      <div className="ws-bar">
+        {!inShell && (
+          <Link to={`/cohorts/${cohort.id}`} className="ws-back">
+            ← {cohort.name}
+          </Link>
+        )}
+        <h1 className="ws-title">{scenario?.title ?? "…"}</h1>
         {scenario && <RequiresTags requires={scenario.requires} />}
         <AgentStatusBadge probe={probe} />
+        <span className="grow" />
+        <div className="ws-bar-actions" ref={setPrepSlot} />
+        <div className="ws-bar-actions" ref={setGradeSlot} />
       </div>
 
-      <div className="scenario-grid">
-        <div>
-          {error && <p className="error">{error}</p>}
-          {!error && !scenario && <p className="muted">불러오는 중…</p>}
+      <div className="ws-split">
+        <div className="ws-pane">
+          <div className="sc-tabs" role="tablist" aria-label="시나리오">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                id={`ws-tab-${t.key}`}
+                aria-selected={tab === t.key}
+                aria-controls={`ws-panel-${t.key}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+                {t.count !== undefined && <span className="sc-tabs-count">{t.count}</span>}
+              </button>
+            ))}
+          </div>
+          {error && <p className="error ws-pane-body">{error}</p>}
+          {!error && !scenario && <p className="muted ws-pane-body">불러오는 중…</p>}
           {scenario && (
             <>
-              <section className="card markdown">
+              {/* 탭을 바꿔도 채점 결과·준비 진행이 남도록 모두 그려 두고 숨긴다. */}
+              <div className="ws-pane-body markdown" role="tabpanel" id="ws-panel-desc" aria-labelledby="ws-tab-desc" hidden={tab !== "desc"}>
                 <Markdown>{scenario.description}</Markdown>
-              </section>
-              <section className="card">
+              </div>
+              <div className="ws-pane-body" role="tabpanel" id="ws-panel-checks" aria-labelledby="ws-tab-checks" hidden={tab !== "checks"}>
                 <EnvCheck cohortId={cohort.id} probe={probe} requires={scenario.requires} />
                 <GradePanel
                   cohortId={cohort.id}
@@ -112,52 +153,57 @@ export default function ScenarioPage() {
                   ready={(env?.ready ?? false) && prepared === true && !examEnded}
                   practice={isPractice}
                   lockedReason={examEnded ? "시험 마감" : env?.ready ? (prepared === false ? "환경 준비 먼저" : prepared === null ? "준비 확인 중…" : undefined) : undefined}
+                  barSlot={gradeSlot}
+                  onGrade={() => setTab("checks")}
                 />
-              </section>
-              {isPractice && <PracticeHistory scenarioId={scenario.id} />}
+              </div>
+              <div className="ws-pane-body" role="tabpanel" id="ws-panel-env" aria-labelledby="ws-tab-env" hidden={tab !== "env"}>
+                {/* 환경은 시나리오가 아니라 기수(에이전트)에 매인다 — 시나리오를 바꿔도 셸은 살아 있다. */}
+                <EnvCheck cohortId={cohort.id} probe={probe} requires={scenario.requires} />
+                {scenario.requires.kind && (
+                  <p className="muted">
+                    kind {scenario.requires.kind.control_planes}cp + {scenario.requires.kind.workers}w
+                    {probe.state === "connected" && ` · 노드 ${probe.status.kind_nodes.length}`}
+                  </p>
+                )}
+                {scenario.requires.floci && (
+                  <p className="muted">Floci{probe.state === "connected" && ` · ${probe.status.floci}`}</p>
+                )}
+                {env?.ready && <p className="sc-badge sc-badge--success">환경 있음</p>}
+                <PrepareButton
+                  cohortId={cohort.id}
+                  scenarioId={scenario.id}
+                  probe={probe}
+                  agentUrl={cohort.agent_url}
+                  token={cohort.agent_token}
+                  prepared={prepared}
+                  onPrepared={setPrepared}
+                  barSlot={prepSlot}
+                  onStart={() => setTab("env")}
+                />
+                <EnvActions requires={scenario.requires} probe={probe} agentUrl={cohort.agent_url} token={cohort.agent_token} />
+              </div>
+              {isPractice && (
+                <div className="ws-pane-body" role="tabpanel" id="ws-panel-history" aria-labelledby="ws-tab-history" hidden={tab !== "history"}>
+                  <PracticeHistory scenarioId={scenario.id} />
+                </div>
+              )}
             </>
           )}
         </div>
 
-        {/* 사이드는 시나리오가 아니라 기수(에이전트)에 매인다 — 시나리오를 바꿔도 셸은 살아 있다. */}
-        <aside>
-          {scenario && (
-            <section className="card">
-              <h2>환경</h2>
-              {scenario.requires.kind && (
-                <p className="muted">
-                  kind {scenario.requires.kind.control_planes}cp + {scenario.requires.kind.workers}w
-                  {probe.state === "connected" && ` · 노드 ${probe.status.kind_nodes.length}`}
-                </p>
-              )}
-              {scenario.requires.floci && (
-                <p className="muted">Floci{probe.state === "connected" && ` · ${probe.status.floci}`}</p>
-              )}
-              {env?.ready && <p className="sc-badge sc-badge--success">환경 있음</p>}
-              <PrepareButton
-                cohortId={cohort.id}
-                scenarioId={scenario.id}
-                probe={probe}
-                agentUrl={cohort.agent_url}
-                token={cohort.agent_token}
-                prepared={prepared}
-                onPrepared={setPrepared}
-              />
-              <EnvActions requires={scenario.requires} probe={probe} agentUrl={cohort.agent_url} token={cohort.agent_token} />
-            </section>
+        <div className="ws-term">
+          {agentSeen ? (
+            <Terminal key={cohort.id} agentUrl={cohort.agent_url} token={cohort.agent_token} />
+          ) : (
+            <p className="muted">
+              에이전트가 연결되면 열립니다. <Link to={`/cohorts/${cohort.id}/setup`}>설치 안내</Link>
+            </p>
           )}
-          <section className="card">
-            <h2>터미널</h2>
-            {agentSeen ? (
-              <Terminal key={cohort.id} agentUrl={cohort.agent_url} token={cohort.agent_token} />
-            ) : (
-              <p className="muted">
-                에이전트가 연결되면 열립니다. <Link to={`/cohorts/${cohort.id}/setup`}>설치 안내</Link>
-              </p>
-            )}
-          </section>
-        </aside>
+        </div>
       </div>
     </section>
   );
 }
+
+type PaneTab = "desc" | "checks" | "env" | "history";

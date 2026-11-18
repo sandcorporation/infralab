@@ -641,19 +641,167 @@ table:not(.sc-table) {
 
 /* ---------- 시나리오 ---------- */
 
-.scenario-grid {
+/* 작업 공간(시나리오 풀이·응시) — 디자인시스템에 없어 토큰으로 짠다(sandcorp-design#30).
+   화면 높이에 맞춰 페이지는 밀리지 않고, 왼쪽 칸 본문만 따로 밀린다. 터미널은 오른쪽 칸의 남은 높이 전부. */
+.sc-app:has(.ws),
+.app-bare:has(.ws) {
+  height: 100vh;
+  height: 100dvh;
+}
+.sc-app-main:has(.ws) {
+  min-height: 0;
+}
+.sc-app-page:has(> .ws),
+.app-bare-page:has(> .ws) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: none;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
+.ws {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-canvas);
+}
+.ws-title {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.ws-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ws-bar-actions:empty {
+  display: none;
+}
+.ws-bar-actions .row {
+  margin: 0;
+  flex-wrap: nowrap;
+}
+.ws-split {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 45%);
-  gap: var(--space-5);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
 }
+.ws-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-line);
+}
+.ws-pane > .sc-tabs {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 var(--space-4);
+}
+.ws-pane-body {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+.ws-pane-body[hidden] {
+  display: none;
+}
+.ws-pane-body > :first-child {
+  margin-top: 0;
+}
+.ws-pane-body .card {
+  padding-top: 0;
+  border-top: 0;
+}
+.ws-term {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+.ws-term .terminal {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-term .terminal-host {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+/* 버튼 탭(한 화면 안의 칸 바꾸기) — sc-tabs 는 링크 탭만 꾸민다(sandcorp-design#30). */
+.sc-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--color-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+.sc-tabs button:hover {
+  background: none;
+  color: var(--color-ink);
+}
+.sc-tabs button[aria-selected="true"] {
+  color: var(--color-ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--color-ink);
+}
+/* 좁은 화면: 세로로 쌓고 페이지가 밀린다. 도구줄은 위에 붙고 터미널은 화면 높이의 대부분. */
 @media (max-width: 900px) {
-  .scenario-grid {
-    grid-template-columns: 1fr;
+  .sc-app:has(.ws),
+  .app-bare:has(.ws) {
+    height: auto;
   }
-}
-.scenario-grid > .card {
-  border-top-color: var(--color-line-strong);
+  .sc-app-page:has(> .ws),
+  .app-bare-page:has(> .ws) {
+    overflow: visible;
+  }
+  .ws-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: var(--space-2) var(--space-4);
+  }
+  .exam-bar ~ .app-bare-page .ws-bar,
+  .exam-bar ~ .sc-app-page .ws-bar {
+    position: static;
+  }
+  .ws-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ws-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .ws-pane-body {
+    overflow: visible;
+    padding: var(--space-4);
+  }
+  .ws-term .terminal-host {
+    flex: none;
+    height: 70vh;
+    height: 70dvh;
+  }
 }
 .markdown h1,
 .markdown h2,
@@ -698,6 +846,7 @@ table:not(.sc-table) {
   white-space: pre-wrap;
 }
 .terminal-host {
+  overflow: hidden;
   height: 420px;
   padding: var(--space-1);
   background: var(--color-brand-ink);
@@ -793,6 +942,9 @@ button.cell:hover {
 
 /* 응시 중 상단 띠 — 회차 이름과 남은 시간. 디자인시스템에 띠 요소가 없어 토큰으로 짠다(sandcorp-design#27). */
 .exam-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
