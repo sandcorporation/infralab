@@ -38,6 +38,13 @@ func startFakeProvider() (url string, stop func(), err error) {
 // fakeProvider 는 Anthropic messages·OpenAI chat completions·responses 꼴로 결정적 응답을 준다.
 func fakeProvider() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/messages/count_tokens", func(w http.ResponseWriter, r *http.Request) {
+		body, _, _, ok := readFakeRequest(w, r)
+		if !ok {
+			return
+		}
+		writeJSON(w, map[string]any{"input_tokens": fakeInputTokens(body)})
+	})
 	mux.HandleFunc("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		body, model, stream, ok := readFakeRequest(w, r)
 		if !ok {

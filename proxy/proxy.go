@@ -43,12 +43,15 @@ type route struct {
 	tool     string // backend 가 아는 도구 이름
 	provider string // "anthropic" | "openai"
 	upstream string // 공급사 쪽 경로
+	// count 는 토큰 수만 세는 경로(Claude Code 의 /context 등). 같은 토큰 규칙으로 통과시키되 사용량 기록·요청 수 한도에는 세지 않는다.
+	count bool
 }
 
 var routes = map[string]route{
-	"/anthropic/v1/messages":      {tool: "claude_code", provider: "anthropic", upstream: "/v1/messages"},
-	"/openai/v1/responses":        {tool: "codex", provider: "openai", upstream: "/v1/responses"},
-	"/openai/v1/chat/completions": {tool: "codex", provider: "openai", upstream: "/v1/chat/completions"},
+	"/anthropic/v1/messages":              {tool: "claude_code", provider: "anthropic", upstream: "/v1/messages"},
+	"/anthropic/v1/messages/count_tokens": {tool: "claude_code", provider: "anthropic", upstream: "/v1/messages/count_tokens", count: true},
+	"/openai/v1/responses":                {tool: "codex", provider: "openai", upstream: "/v1/responses"},
+	"/openai/v1/chat/completions":         {tool: "codex", provider: "openai", upstream: "/v1/chat/completions"},
 }
 
 // reasonStatus 는 backend 의 거절 사유 → 응답 상태 코드.
@@ -119,7 +122,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// backend 에 묻기 전에 막는다 — 틀린 토큰을 몰아 보내도 backend 를 그만큼 부르지 않는다.
-	if !p.limiter.allow(token) {
+	if !rt.count && !p.limiter.allow(token) {
 		p.log.Printf("%s %s tool=%s client=%s denied reason=rate_limited status=429", r.Method, r.URL.Path, rt.tool, clientID)
 		w.Header().Set("Retry-After", "1")
 		writeError(w, rt.provider, http.StatusTooManyRequests, "rate_limited", "infralab: too many requests for this exam token")
@@ -177,6 +180,10 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	recorded := streamResponse(w, resp)
+	if rt.count {
+		p.log.Printf("%s %s tool=%s model=%s client=%s status=%d count_tokens (not recorded)", r.Method, r.URL.Path, rt.tool, model, clientID, resp.StatusCode)
+		return
+	}
 	in, out := usageFrom(recorded.Bytes())
 	p.log.Printf("%s %s tool=%s model=%s client=%s status=%d input_tokens=%d output_tokens=%d",
 		r.Method, r.URL.Path, rt.tool, model, clientID, resp.StatusCode, in, out)
