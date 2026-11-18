@@ -28,7 +28,7 @@ infralab 은 backend(Django·pytest), web(React·vitest), agent(Go) 세 부분�
 | Decompose (`factory-decompose.yml`, Opus) | `spec` 라벨, 수동 실행, 재개 | 새 spec 이면 하위 이슈(티켓)·blocked-by·`model:*` 라벨을 만들고 티켓별 인수 시험을 꺼 둔 채 쓴다(아래 「인수 시험」). 해법이 갈리면 `<!-- factory-question -->` 댓글과 `needs-decision` 을 남기고 멈춘다. 지시 `.github/factory/decompose.md` | `factory/spec-<S>` 에 시험만 커밋해 스펙 PR(`spec-pr`)을 열고 Odin 을 dispatch |
 | Odin (`factory-odin.yml`, Opus) | Decompose·재개의 dispatch | 스펙 PR 에 main 을 merge(충돌은 같은 run 의 에이전트가 양쪽을 남겨 푼다)하고, 티켓·시험을 코드·앞 spec 의 시험·ADR 과 대조해 고친다. 계약의 아직 없는 이름은 `#<티켓>` 스텁으로 둔다. `scripts/ci.sh all` 이 실패하면 한 번 더 고칠 기회. 지시 `.github/factory/odin.md` | 스펙 PR squash 병합, 열린 티켓에 `ready-for-agent`, 사슬 시작. 두 번 실패·충돌 한도(2) 초과면 spec 에 `ready-for-human` |
 | Implementer (`factory-implementer.yml`, 라벨대로 Sonnet/Opus) | `ready-for-agent` 라벨, 티켓 닫힘(`frontier`), 수동 실행, 매일 KST 00:05 | 열린 blocker 가 없을 때만. 자기 티켓의 시험을 켜고 스텁을 구현한다. workflow 가 `scripts/ci.sh all`(실패면 한 번 고칠 기회) 뒤 push·PR(`Closes #N`, `<!-- factory-checked <sha> -->`). **병합하지 않는다.** 충돌로 되돌아온 티켓은 열린 PR 에 main 을 merge 해 풀기만 한다(충돌 모드). 지시 `.github/factory/implementer.md` | Verify dispatch, 빈 트랙 채우기. 코드 실패 2번·인프라 실패 3번이면 `ready-for-human` |
-| Verify (`factory-verify.yml`, Sonnet) | Implementer·재개의 dispatch | 기계 검사(`verify.sh mech`), main 을 merge 한 뒤 `scripts/ci.sh all`(머리가 검사한 커밋 그대로면 건너뜀), 인수 판단. 지시 `.github/factory/verify.md` | 통과: squash 병합·티켓 닫기·main 에 `ci.yml` dispatch·다음 티켓. 실패: `<!-- factory-sendback kind=acceptance|conflict -->` 로 되돌림(인수 2번·충돌 3번이면 `ready-for-human`) |
+| Verify (`factory-verify.yml`, Sonnet) | Implementer·재개의 dispatch | 기계 검사(`verify.sh mech`), main 을 merge 한 뒤 `scripts/ci.sh all`(머리가 검사한 커밋 그대로면 건너뜀), 인수 판단. 지시 `.github/factory/verify.md` | 통과: squash 병합·티켓 닫기·main 에 `release.yml` dispatch(검사·이미지·production 승격, docs/ops/deploy.md)·다음 티켓. 실패: `<!-- factory-sendback kind=acceptance|conflict -->` 로 되돌림(인수 2번·충돌 3번이면 `ready-for-human`) |
 | 재개 (`factory-resume.yml`) | spec 에서 `needs-decision`·`factory-paused` 를 뗄 때, 수동 실행 | `resume.sh` 가 멈춘 단계를 정해 dispatch | 그 단계 |
 
 **사람이 손으로 만든 티켓**(spec 없이, 인수 시험 없이)도 `ready-for-agent` 를 붙이면 Implementer 가 받는다. 그때 인수 기준은 티켓 본문의 체크리스트이고, 시험은 구현 run 이 일반 시험 파일에 쓴다. 기계 검사는 표식·스텁이 없으므로 그냥 통과하고 Verify 의 인수 판단이 체크리스트를 본다.
@@ -115,5 +115,5 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 - **인수 시험·스텁**: Rust 시험 파일의 `#[ignore]` 표식·`todo!` 스텁을 위 「인수 시험」 표로. web 의 켜기는 줄 지우기가 아니라 줄 바꾸기라 `verify.sh mech` 가 「지운 표식 줄 → 같은 줄에서 `.skip`·`// #N` 만 뺀 줄」 짝을 허용한다.
 - **secret 없음 멈춤**: 원본에 없던 `token` job 을 Claude 를 쓰는 workflow 마다 맨 앞에 둔다.
 - **손 티켓**: 인수 시험 없는 티켓도 받는다(위).
-- **뺀 것**: 벤치(`bench.yml`, `bench-gate.sh`, `factory-bench-regression` 표식과 알림 종류), Windows 빌드·`release.yml`·nightly(Verify 의 병합 뒤 `release.yml` dispatch 도), `.gitattributes` 의 CRLF 시험(Windows 전용), Explore task(원본도 꺼져 있다).
+- **뺀 것**: 벤치(`bench.yml`, `bench-gate.sh`, `factory-bench-regression` 표식과 알림 종류), Windows 빌드·nightly. Verify·Odin 의 병합 뒤 `release.yml` dispatch 는 운영 배포 경로(#53)와 함께 되살렸다, `.gitattributes` 의 CRLF 시험(Windows 전용), Explore task(원본도 꺼져 있다).
 - **이름**: 봇 커밋 이름은 `github-actions[bot]`, 알림 다리 기본값(위), 원본 이슈 번호를 단 주석은 번호를 떼고 내용만 남겼다.

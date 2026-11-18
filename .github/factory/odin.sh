@@ -211,8 +211,8 @@ $(cat "$report")" || echo "::warning::could not comment on PR #$pr"
   fi
   delete_branch "$(branch_of "$s")"
   prune_runs "$(branch_of "$s")"
-  # A GITHUB_TOKEN merge fires no push event: build main here, as verify.sh does.
-  dispatch ci.yml || echo "::warning::could not dispatch ci.yml"
+  # A GITHUB_TOKEN merge fires no push event: run main's release (check + image → production) here, as verify.sh does.
+  dispatch release.yml || echo "::warning::could not dispatch release.yml"
   start_chain "$s"
 }
 

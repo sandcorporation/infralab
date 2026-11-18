@@ -44,7 +44,7 @@
 #   verify.sh pass <N> <PR> [report]     squash-merge the PR (retrying while GitHub computes
 #                                        mergeability), delete its branch and its job-less bot
 #                                        ci.yml runs (prune-runs.sh), comment the report on the
-#                                        PR, close the ticket, dispatch ci.yml on main
+#                                        PR, close the ticket, dispatch release.yml on main
 #                                        and then the next ticket (dispatch-next.sh). Exits 1 when the
 #                                        PR could not be merged (nothing else is done then).
 #
@@ -287,12 +287,12 @@ pass() {
 $(cat "$report")" >/dev/null || true
   fi
   # A GITHUB_TOKEN merge does not reliably close the ticket via `Closes #N`, and fires no
-  # `issues: closed` or push event: close it, build main and move the chain on here.
+  # `issues: closed` or push event: close it, run main's release (check + image → production) and move the chain on here.
   comment "$n" "Merged in PR #$pr$(run_link)" || true
   gh api -X PATCH "repos/$REPO/issues/$n" -f state=closed -f state_reason=completed >/dev/null \
     || echo "::warning::could not close #$n"
   remove_label "$n" in-progress
-  dispatch ci.yml || echo "::warning::could not dispatch ci.yml"
+  dispatch release.yml || echo "::warning::could not dispatch release.yml"
   next_ticket
 }
 

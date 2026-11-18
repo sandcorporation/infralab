@@ -428,8 +428,8 @@ has "branch deleted" "git/refs/heads/agent/issue-7" "$(calls)"
 eq "bot pull_request run deleted (#270)" "" "$(runs_left)"
 eq "ticket closed" closed "$(state_of issue-7)"
 eq "labels" "" "$(labels_of 7)"
-has "ci dispatched" "actions/workflows/ci.yml/dispatches -f ref=main" "$(calls)"
-lacks "no release workflow" "release.yml" "$(calls)"
+has "release dispatched" "actions/workflows/release.yml/dispatches -f ref=main" "$(calls)"
+lacks "no separate ci build" "ci.yml/dispatches" "$(calls)"
 eq "next ticket" yes "$(next_dispatched)"
 has "report on the PR" "AC-1: 충족" "$(jq -r '.[0].body' "$FAKE_GH/comments-40.json")"
 
@@ -439,7 +439,7 @@ bash "$verify" pass 7 40 > /dev/null 2>&1
 eq "exit" 1 "$?"
 eq "ticket open" open "$(state_of issue-7)"
 eq "next ticket" no "$(next_dispatched)"
-lacks "no build" "ci.yml" "$(calls)"
+lacks "no release" "release.yml" "$(calls)"
 
 # --- next-verify (#286) ------------------------------------------------------------------------
 

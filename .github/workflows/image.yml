@@ -1,0 +1,137 @@
+# 배포 이미지(#53): GitHub 호스팅 실행기에서 아키텍처마다 네이티브로 굽고 ghcr 에 올린다(QEMU 없음).
+# main push 에서는 release.yml 이 검사(ci)와 나란히 workflow_call 로 부른다. 둘 다 초록이면 release.yml 이 production 을 승격하고,
+# Jenkins 는 production 머리 sha 의 이 태그들을 받아(jenkins-shared sandcorpDeploy deployFrom) 운영 서버에 배포한다.
+#
+#   ghcr.io/sandcorporation/infralab-backend:<sha>       linux/arm64        운영 서버(compose.prod.yml)
+#   ghcr.io/sandcorporation/infralab-web:<sha>           linux/arm64        운영 서버(compose.prod.yml)
+#   ghcr.io/sandcorporation/infralab-agent:<sha>         linux/amd64+arm64  응시자 PC(학생 compose.yml)
+#   ghcr.io/sandcorporation/infralab-workstation:<sha>   linux/amd64+arm64  응시자 PC(학생 compose.yml)
+#
+# 두 아키텍처 이미지는 build 가 아키텍처마다 <sha>-amd64·<sha>-arm64 를 올리고, manifest 가 둘을 묶어 <sha> 를 만든다.
+# 빌드 캐시는 같은 패키지의 :buildcache[-<arch>] 태그(레지스트리 캐시, mode=max). GitHub 캐시는 쓰지 않는다.
+# 이미지를 더하면 build 의 include 와 Jenkinsfile 의 images 를 같이 고친다(두 아키텍처면 manifest 의 name 도).
+#
+# 보안 규칙(공개 저장소):
+#   - main push 의 release.yml(workflow_call)과 수동 실행만. pull_request·pull_request_target 으로 이미지를 굽거나 올리지 않는다.
+#   - packages: write 는 이 워크플로에만. 로그인은 GITHUB_TOKEN 하나, 다른 secrets 없음.
+#   - self-hosted·QEMU 없음. 액션은 공식(actions/*·docker/*)만, SHA 고정.
+#   - build-args 는 비밀이 아니다(VITE_KAKAO_REST_KEY 는 브라우저 번들에 들어가는 공개 값, 저장소 변수). 로그·이미지는 공개다.
+name: image
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build (${{ matrix.name }}${{ matrix.suffix }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: infralab-backend
+            dockerfile: docker/backend.prod.Dockerfile
+            context: .
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: ""
+            build_args: ""
+          - name: infralab-web
+            dockerfile: docker/web.Dockerfile
+            context: web
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: ""
+            build_args: |
+              VITE_KAKAO_REST_KEY=${{ vars.VITE_KAKAO_REST_KEY }}
+          - name: infralab-agent
+            dockerfile: agent/Dockerfile
+            context: agent
+            platform: linux/amd64
+            runner: ubuntu-24.04
+            suffix: -amd64
+            build_args: VERSION=${{ github.sha }}
+          - name: infralab-agent
+            dockerfile: agent/Dockerfile
+            context: agent
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: -arm64
+            build_args: VERSION=${{ github.sha }}
+          - name: infralab-workstation
+            dockerfile: docker/workstation/Dockerfile
+            context: docker/workstation
+            platform: linux/amd64
+            runner: ubuntu-24.04
+            suffix: -amd64
+            build_args: ""
+          - name: infralab-workstation
+            dockerfile: docker/workstation/Dockerfile
+            context: docker/workstation
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: -arm64
+            build_args: ""
+    env:
+      IMAGE_REPO: ghcr.io/sandcorporation/${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 빌드·push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE_REPO }}:${{ github.sha }}${{ matrix.suffix }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=registry,ref=${{ env.IMAGE_REPO }}:buildcache${{ matrix.suffix }}
+          cache-to: type=registry,ref=${{ env.IMAGE_REPO }}:buildcache${{ matrix.suffix }},mode=max
+
+  manifest:
+    name: manifest (${{ matrix.name }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [infralab-agent, infralab-workstation]
+    env:
+      IMAGE_REPO: ghcr.io/sandcorporation/${{ matrix.name }}
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: amd64·arm64 묶기
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          docker buildx imagetools create --tag "$IMAGE_REPO:$SHA" "$IMAGE_REPO:$SHA-amd64" "$IMAGE_REPO:$SHA-arm64"
+          docker buildx imagetools inspect "$IMAGE_REPO:$SHA"

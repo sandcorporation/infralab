@@ -1,0 +1,95 @@
+"""운영 배포 설정 — 헬스(DB 포함), 운영 설정 가드, 학생 compose 의 이미지 주소가 환경변수를 따르는지.
+
+설정 모듈은 환경변수를 읽는 순간에 값이 정해진다 — `runpy` 로 지금 환경에서 새로 실행해 그 값을 본다
+(이미 뜬 django.conf.settings 는 건드리지 않는다).
+"""
+
+import runpy
+from pathlib import Path
+from unittest import mock
+
+import pytest
+import yaml
+from django.core.exceptions import ImproperlyConfigured
+from django.db import OperationalError, connection
+from django.test import override_settings
+
+SETTINGS_FILE = str(Path(__file__).resolve().parent.parent / "config" / "settings.py")
+STUDENT_IMAGE_VARS = ("AGENT_IMAGE", "WORKSTATION_IMAGE", "FLOCI_IMAGE")
+
+
+def _fresh_settings(monkeypatch: pytest.MonkeyPatch, **env: str) -> dict[str, object]:
+    cleared = (*STUDENT_IMAGE_VARS, "DJANGO_DEBUG", "DJANGO_SECRET_KEY", "SOCIAL_AUTH_MODE")
+    for name in (*cleared, "DJANGO_ALLOWED_HOSTS", "DJANGO_CSRF_TRUSTED_ORIGINS"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    return runpy.run_path(SETTINGS_FILE)
+
+
+def _student_compose(api, images: dict[str, object]) -> dict:
+    teacher = api.login_instructor()
+    cohort = api.create_cohort(teacher)
+    student = api.login("s1")
+    api.join(student, cohort["join_token"])
+    with override_settings(**{k: images[k] for k in STUDENT_IMAGE_VARS}):
+        res = api.get(f"/api/cohorts/{cohort['id']}/compose.yml", student)
+    assert res.status_code == 200, res.content
+    return yaml.safe_load(res.content)
+
+
+@pytest.mark.django_db
+def test_health_is_200_when_the_database_answers(client):
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    assert res.json() == {"status": "ok", "db": "ok"}
+
+
+@pytest.mark.django_db
+def test_health_is_503_when_the_database_is_unreachable(client):
+    with mock.patch.object(connection, "cursor", side_effect=OperationalError("down")):
+        res = client.get("/api/health")
+    assert res.status_code == 503
+    assert res.json()["db"] == "unreachable"
+
+
+@pytest.mark.django_db
+def test_student_compose_uses_the_production_image_addresses_when_given(api, monkeypatch):
+    images = _fresh_settings(
+        monkeypatch,
+        AGENT_IMAGE="ghcr.io/sandcorporation/infralab-agent:abc123",
+        WORKSTATION_IMAGE="ghcr.io/sandcorporation/infralab-workstation:abc123",
+    )
+    doc = _student_compose(api, images)
+    assert doc["services"]["agent"]["image"] == "ghcr.io/sandcorporation/infralab-agent:abc123"
+    assert doc["services"]["workstation"]["image"] == "ghcr.io/sandcorporation/infralab-workstation:abc123"
+
+
+@pytest.mark.django_db
+def test_student_compose_keeps_the_local_images_when_not_given(api, monkeypatch):
+    # compose 의 `${X:-}` 는 안 준 변수를 빈 문자열로 넘긴다 — 빈 값도 「안 줌」이다.
+    images = _fresh_settings(monkeypatch, AGENT_IMAGE="")
+    doc = _student_compose(api, images)
+    assert doc["services"]["agent"]["image"] == "infralab/agent:dev"
+    assert doc["services"]["workstation"]["image"] == "infralab/workstation:dev"
+    assert doc["services"]["floci"]["image"] == "floci/floci:2.3.0"
+
+
+def test_production_refuses_the_development_secret_key(monkeypatch):
+    with pytest.raises(ImproperlyConfigured, match="DJANGO_SECRET_KEY"):
+        _fresh_settings(monkeypatch, DJANGO_DEBUG="false")
+
+
+def test_production_settings_trust_the_proxy_and_read_hosts_and_origins(monkeypatch):
+    s = _fresh_settings(
+        monkeypatch,
+        DJANGO_DEBUG="false",
+        DJANGO_SECRET_KEY="test-only-secret",
+        DJANGO_ALLOWED_HOSTS="infralab.sandcorp.co.kr, backend",
+        DJANGO_CSRF_TRUSTED_ORIGINS="https://infralab.sandcorp.co.kr",
+    )
+    assert s["DEBUG"] is False
+    assert s["ALLOWED_HOSTS"] == ["infralab.sandcorp.co.kr", "backend"]
+    assert s["CSRF_TRUSTED_ORIGINS"] == ["https://infralab.sandcorp.co.kr"]
+    assert s["SECURE_PROXY_SSL_HEADER"] == ("HTTP_X_FORWARDED_PROTO", "https")
+    assert s["SOCIAL_AUTH_MODE"] == "real"

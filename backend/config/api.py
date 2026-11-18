@@ -1,4 +1,6 @@
-from ninja import NinjaAPI
+from django.db import DatabaseError, connection
+from django.http import HttpRequest
+from ninja import NinjaAPI, Status
 
 from accounts.api import instructor_router as accounts_instructor_router
 from accounts.api import router as accounts_router
@@ -27,6 +29,13 @@ api.add_router("/instructor", scenarios_instructor_router)
 api.add_router("/instructor", submissions_instructor_router)
 
 
-@api.get("/health", auth=None)
-def health(request):
-    return {"status": "ok"}
+@api.get("/health", auth=None, response={200: dict[str, str], 503: dict[str, str]})
+def health(request: HttpRequest) -> Status[dict[str, str]]:
+    """배포 헬스 확인(Jenkins healthCmd·compose healthcheck). DB 에 한 번 다녀와야 200 이다."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except DatabaseError:
+        return Status(503, {"status": "error", "db": "unreachable"})
+    return Status(200, {"status": "ok", "db": "ok"})

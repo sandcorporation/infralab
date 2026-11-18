@@ -1,0 +1,84 @@
+# 운영 compose — db(Postgres)·backend(gunicorn)·web(nginx: 정적 파일 + /api 역프록시).
+# Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)가 운영 서버에서 COMPOSE_PROJECT_NAME=infralab 로 돌린다.
+# 이미지 주소(*_IMAGE)는 Jenkins 가 production 머리 sha 의 ghcr 주소로 넘긴다. 없으면 로컬에서 빌드한다.
+# 비밀·호스트 값은 서버의 ./.env 에서 온다(저장소에 없음). 이름 목록과 흐름은 docs/ops/deploy.md.
+#
+# 로컬 확인: DJANGO_SECRET_KEY=… POSTGRES_PASSWORD=… docker compose -f compose.prod.yml up --build
+name: infralab
+
+x-backend-env: &backend-env
+  DJANGO_DEBUG: "false"
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY 가 필요하다(.env)}
+  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-infralab}
+  POSTGRES_USER: ${POSTGRES_USER:-infralab}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요하다(.env)}
+  DASHBOARD_ORIGIN: ${DASHBOARD_ORIGIN:-http://127.0.0.1:18093}
+  # 학생 compose.yml 에 들어가는 이미지. Jenkins 가 배포 sha 의 ghcr 주소를 넘기고, 비면 backend 기본값(로컬 이름).
+  AGENT_IMAGE: ${INFRALAB_AGENT_IMAGE:-}
+  WORKSTATION_IMAGE: ${INFRALAB_WORKSTATION_IMAGE:-}
+  FLOCI_IMAGE: ${FLOCI_IMAGE:-}
+  GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-infralab}
+      POSTGRES_USER: ${POSTGRES_USER:-infralab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요하다(.env)}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.prod.Dockerfile
+    image: ${INFRALAB_BACKEND_IMAGE:-infralab-backend:local}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+    # /api/health 는 DB 에 한 번 다녀온다. Host 는 허용 호스트의 첫 값.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,urllib.request as u;h=os.environ.get('DJANGO_ALLOWED_HOSTS','localhost').split(',')[0].strip();u.urlopen(u.Request('http://127.0.0.1:8000/api/health',headers={'Host':h}),timeout=5)"
+      interval: 60s
+      timeout: 6s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
+    cpus: 0.8
+    mem_limit: 512m
+    restart: unless-stopped
+
+  web:
+    build:
+      context: web
+      dockerfile: ../docker/web.Dockerfile
+    image: ${INFRALAB_WEB_IMAGE:-infralab-web:local}
+    depends_on:
+      - backend
+    ports:
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-18093}:8080"
+    cpus: 0.25
+    mem_limit: 128m
+    restart: unless-stopped
+
+volumes:
+  db:
