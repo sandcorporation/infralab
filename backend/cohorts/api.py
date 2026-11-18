@@ -205,7 +205,12 @@ def my_cohort(request: HttpRequest, cohort_id: int):
 def my_compose_file(request: HttpRequest, cohort_id: int):
     """내 에이전트 토큰이 박힌 compose.yml. 설치가 파일 하나와 명령 하나가 되게."""
 
-    m = my_membership(request, cohort_id)
+    return compose_response(my_membership(request, cohort_id))
+
+
+def compose_response(m: Membership) -> HttpResponse:
+    """참여 하나의 compose.yml 내려받기 응답. 응시 전용 주소(`/api/exam/<token>/compose.yml`)도 이것을 쓴다."""
+
     body = render_compose(agent_token=m.agent_token, cohort_name=m.cohort.name)
     response = HttpResponse(body, content_type="text/yaml; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="compose.yml"'

@@ -1,6 +1,6 @@
 // 시험 모드 화면이 쓰는 순수 함수와 요청 — 응시 화면(#71·#72·#78), 시험 대시보드(#77).
 // 인수 시험: src/spec/spec_exam_*.test.ts
-import { api } from "./api";
+import { api, apiSwitchingSession } from "./api";
 
 /** GET·POST /api/exam/<토큰> 의 응시 상태(backend ExamStatusOut). 시각은 ISO 글. */
 export type ExamStatus = {
@@ -54,8 +54,14 @@ const examPath = (token: string) => `/api/exam/${encodeURIComponent(token)}`;
 
 /** 응시 상태(로그인 없음). 없거나 회수된 링크면 404. */
 export const getExamStatus = (token: string) => api<ExamStatus>(examPath(token));
-/** 이 응시만을 위한 숨은 사용자로 세션을 연다. 같은 링크는 같은 응시로 돌아온다. */
-export const enterExam = (token: string) => api<ExamStatus>(`${examPath(token)}/enter`, { method: "POST" });
+/** POST enter 의 답. `replaced_login` — 이 브라우저에 있던 다른 사용자의 로그인을 응시 세션으로 바꿨다. */
+export type ExamEnter = ExamStatus & { replaced_login: boolean };
+/** 이 응시만을 위한 숨은 사용자로 세션을 연다. 같은 링크는 같은 응시로 돌아온다. 끝날 때까지 다른 요청(me·내 기수)은
+ * 기다린다 — 다른 사용자의 세션을 바꾸는 중에 옛 쿠키로 나간 요청이 새 세션 쿠키를 지우지 않게(#122). */
+export const enterExam = (token: string) =>
+  apiSwitchingSession<ExamEnter>(`${examPath(token)}/enter`, { method: "POST" });
+/** 설치 프로그램에 붙여 넣는 compose.yml 주소 — 로그인 쿠키 없이 응시 토큰만으로 받는다. */
+export const examComposeUrl = (origin: string, token: string) => `${origin}${examPath(token)}/compose.yml`;
 /** 「제출하고 끝내기」 — 즉시 마감한다. */
 export const finishExam = (token: string) => api<ExamStatus>(`${examPath(token)}/finish`, { method: "POST" });
 

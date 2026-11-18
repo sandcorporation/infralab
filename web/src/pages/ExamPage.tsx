@@ -6,6 +6,7 @@ import { useAuth } from "../auth";
 import {
   enterExam,
   envExportText,
+  examComposeUrl,
   finishExam,
   formatRemaining,
   getAiConfig,
@@ -36,6 +37,7 @@ export default function ExamPage() {
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [replacedLogin, setReplacedLogin] = useState(false);
   // StrictMode 가 effect 를 두 번 돌려도 enter 는 한 번만.
   const entered = useRef<string | null>(null);
   const apply = clock?.apply;
@@ -46,7 +48,9 @@ export default function ExamPage() {
     enterExam(token)
       .then((s) => {
         rememberExamToken(token);
+        setReplacedLogin(s.replaced_login);
         apply(s);
+        // enter 가 세션을 바꿨다 — 상단의 로그인 표시를 응시 세션으로.
         return refreshMe();
       })
       .catch((err: ApiError) => setError(err.status === 404 ? "응시 링크가 올바르지 않거나 회수되었습니다." : err.message));
@@ -79,6 +83,9 @@ export default function ExamPage() {
       {!error && !status && <p className="muted">확인 중…</p>}
       {status && status.status === "invited" && (
         <>
+          {replacedLogin && (
+            <p className="notice">이 브라우저의 로그인은 응시 세션으로 바뀌었습니다 — 원래 계정은 시험이 끝난 뒤 다시 로그인하세요.</p>
+          )}
           <ul>
             <li>시간 제한: {status.time_limit_minutes}분 — 「시작」을 누른 때부터 흐릅니다.</li>
             <li>
@@ -90,6 +97,7 @@ export default function ExamPage() {
             <li>
               Windows 는 설치 프로그램으로 실습 환경을 준비할 수 있습니다.
               <WindowsInstallerNotice />
+              <ComposeUrlCopy token={token} />
             </li>
           </ul>
           <label className="row">
@@ -144,6 +152,32 @@ function StartButton({ cohortId, disabled, onStart }: { cohortId: number; disabl
         </button>
       </p>
     </>
+  );
+}
+
+// 설치 프로그램이 묻는 compose.yml 주소 — 로그인 쿠키 없이 응시 토큰만으로 받는다.
+function ComposeUrlCopy({ token }: { token: string }) {
+  const url = examComposeUrl(typeof window === "undefined" ? "" : window.location.origin, token);
+  const [copied, setCopied] = useState<boolean | null>(null);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return (
+    <div className="compose-url">
+      <p>설치 프로그램의 compose.yml 주소에 붙여 넣기</p>
+      <pre>{url}</pre>
+      <p>
+        <button className="secondary" onClick={() => void copy()}>
+          {copied ? "복사했습니다" : "주소 복사"}
+        </button>
+      </p>
+      {copied === false && <p className="error">복사하지 못했습니다 — 주소를 직접 골라 복사하세요.</p>}
+    </div>
   );
 }
 

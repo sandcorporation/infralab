@@ -25,6 +25,7 @@ from ninja.responses import Status
 from accounts.auth import check_origin, instructor_auth
 from cohorts.api import _cohort_out as cohort_out
 from cohorts.api import _cohorts_with_counts as cohorts_with_counts
+from cohorts.api import compose_response
 from cohorts.models import Cohort, Membership
 from cohorts.services import managed_cohorts
 from cohorts.schemas import CohortOut
@@ -34,6 +35,7 @@ from submissions.models import MAX_OUTPUT_CHARS, Submission
 
 from .models import AIExchange, ExamEvent, ExamInvite, ExamRubric, RubricEdit
 from .schemas import (
+    ExamEnterOut,
     AiConfigOut,
     ExamEventIn,
     ExamEventOut,
@@ -372,9 +374,15 @@ def exam_status(request: HttpRequest, token: str):
     return _exam_status_out(_live_invite(token))
 
 
-@exam_router.post("/exam/{token}/enter", auth=None, response=ExamStatusOut)
+@exam_router.post("/exam/{token}/enter", auth=None, response=ExamEnterOut)
 def enter_exam(request: HttpRequest, token: str):
-    """응시 한 번만을 위한 숨은 사용자로 세션을 연다. 같은 링크는 언제나 같은 사용자·같은 참여다."""
+    """응시 한 번만을 위한 숨은 사용자로 세션을 연다. 같은 링크는 언제나 같은 사용자·같은 참여다.
+
+    다른 사용자(강사·학생)로 로그인된 브라우저면 `login()` 이 그 세션을 지우고 새 키로 바꾼다 — 같은 때 옛 쿠키로
+    나간 요청은 401 이고 SessionMiddleware 가 그 응답에서 세션 쿠키를 지워, 늦게 닿으면 새 응시 세션 쿠키까지
+    없앤다(#122). 그래서 화면은 enter 가 끝난 뒤에만 인증 요청을 보내고, 바뀐 로그인은 `replaced_login` 으로 알린다.
+    같은 응시 사용자로 다시 열면 `login()` 은 세션을 그대로 둔다.
+    """
 
     check_origin(request)
     _live_invite(token)
@@ -392,8 +400,26 @@ def enter_exam(request: HttpRequest, token: str):
             invite.membership = membership
             invite.save(update_fields=["membership"])
         user = invite.membership.user
+    current = get_user(request)
+    replaced = bool(current.is_authenticated and current.pk != user.pk)
     login(request, user, backend=AUTH_BACKEND)
-    return _exam_status_out(invite)
+    return ExamEnterOut(**_exam_status_out(invite).dict(), replaced_login=replaced)
+
+
+@exam_router.get("/exam/{token}/compose.yml", auth=None)
+def exam_compose_file(request: HttpRequest, token: str):
+    """응시자의 compose.yml — 로그인 쿠키 없이 응시 토큰만으로. 설치 프로그램에 붙여 넣는 주소다.
+
+    회수됐거나 없는 링크 404, enter 전(응시자 없음) 409, 마감 뒤 410.
+    """
+
+    invite = _live_invite(token)
+    if invite.membership is None:
+        raise HttpError(409, "응시 링크로 먼저 들어오세요.")
+    if services.attempt_status(invite) == "finished":
+        raise HttpError(410, "끝난 시험입니다.")
+    membership = Membership.objects.select_related("cohort").get(pk=invite.membership_id)
+    return compose_response(membership)
 
 
 @exam_router.post("/exam/{token}/start", auth=None, response=ExamStatusOut)

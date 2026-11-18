@@ -23,7 +23,11 @@ iscc /DAppVersion=1.0.0 infralab.iss
 ## 설치 뒤 동작
 
 - 설치 중 compose.yml 주소(와 선택 대시보드 주소)를 묻고 `%APPDATA%\infralab\settings.json` 에 적는다.
-  주소가 로그인 없이 받을 수 있는 링크가 아니면 비워 두고, 브라우저로 받은 `compose.yml` 을 `%APPDATA%\infralab\` 에 저장한다.
+  - 채용 시험 응시자: 응시 화면의 「설치 프로그램의 compose.yml 주소에 붙여 넣기」 주소
+    (`https://<대시보드>/api/exam/<응시 토큰>/compose.yml`)를 붙여 넣는다. 로그인 쿠키 없이 응시 토큰만으로 받는다 —
+    회수된 링크면 404, 시험이 끝났으면 410.
+  - 수업 학생: 기수 compose.yml(`/api/cohorts/<id>/compose.yml`)은 로그인해야 받는다. 주소를 비워 두고, 설치 안내
+    화면에서 받은 `compose.yml` 을 `%APPDATA%\infralab\` 에 저장한다.
 - 바로가기(「infralab 실습 시작」)는 compose 를 받고 `docker compose up -d` 한 뒤, compose.yml 의 `AGENT_TOKEN` 으로
   `http://127.0.0.1:7777/api/preflight` 를 부른다. 실패한 항목(엔진·Linux 모드·권한)의 `help_url` 을 브라우저로 연다.
   docker 가 없거나 compose 가 실패하거나 agent 가 응답하지 않으면 Docker Desktop 안내 페이지를 연다.
