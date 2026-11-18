@@ -51,7 +51,6 @@ def _volume_targets(service: dict) -> list[str]:
     return targets
 
 
-@pytest.mark.skip(reason="#81")
 def test_proxy_service_holds_the_provider_keys_and_the_shared_secret():
     services = _compose()["services"]
 
@@ -61,7 +60,6 @@ def test_proxy_service_holds_the_provider_keys_and_the_shared_secret():
         assert name in env, f"proxy 환경에 {name} 가 없다"
 
 
-@pytest.mark.skip(reason="#81")
 def test_backend_gets_the_exam_settings_but_never_the_provider_keys():
     services = _compose()["services"]
     env = _env(services["backend"])
@@ -78,7 +76,6 @@ def test_backend_gets_the_exam_settings_but_never_the_provider_keys():
         assert not any(key in str(service.get("environment")) for key in PROVIDER_KEYS), name
 
 
-@pytest.mark.skip(reason="#81")
 def test_backend_problems_dir_is_an_absolute_path_with_a_volume():
     backend = _compose()["services"]["backend"]
     value = _env(backend)["INFRALAB_PROBLEMS_DIR"]
@@ -89,7 +86,6 @@ def test_backend_problems_dir_is_an_absolute_path_with_a_volume():
     assert path.rstrip("/") in [t.rstrip("/") for t in _volume_targets(backend)]
 
 
-@pytest.mark.skip(reason="#81")
 def test_deploy_doc_names_every_new_setting_and_the_problem_bank():
     doc = (REPO_ROOT / "docs" / "ops" / "deploy.md").read_text(encoding="utf-8")
 
