@@ -34,7 +34,7 @@ production push → Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)
 | --- | --- | --- |
 | `DJANGO_SECRET_KEY` | 예 | Django 서명 키. 개발 기본값이면 부팅이 막힌다 |
 | `POSTGRES_PASSWORD` | 예 | db 컨테이너와 backend 가 같이 쓴다 |
-| `DJANGO_ALLOWED_HOSTS` | 예 | 콤마 구분. 첫 값이 헬스 확인의 Host 헤더다 — 도메인을 맨 앞에 |
+| `DJANGO_ALLOWED_HOSTS` | 예 | 콤마 구분. 첫 값이 헬스 확인의 Host 헤더다 — 도메인을 맨 앞에. compose 안 이름 `backend`(proxy 가 부르는 Host)는 compose 가 `DJANGO_INTERNAL_HOSTS` 로 따로 늘 허용한다 |
 | `DASHBOARD_ORIGIN` | 예 | 대시보드 오리진(`https://infralab.sandcorp.co.kr`). 학생 에이전트가 이 오리진의 요청만 받는다. 첫 값이 로그인 `redirect_uri`(`…/api/auth/callback`)·토큰 `aud`(`…/api`)의 원점이고, 쿠키로 상태를 바꾸는 요청의 `Origin` 도 이 값들만 받는다 |
 | `INFRALAB_AUTH_CLIENT_ID`, `INFRALAB_AUTH_CLIENT_SECRET` | 예 | sandcorp-auth 기밀 클라이언트. 비면 로그인만 503(기동·`/api/health` 는 된다) |
 | `INFRALAB_AUTH_WEBHOOK_SECRET` | 예 | auth 웹훅(탈퇴 `user.deleted`·계정 합치기 `user.merged`) 서명 비밀. 비면 웹훅이 503 |
