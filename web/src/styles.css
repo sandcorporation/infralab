@@ -2,65 +2,243 @@
    리셋·본문·링크·포커스와 sc-* 클래스 컴포넌트는 sandcorp-design/css 가 싣는다.
    원시 색을 쓰지 않는다 — scripts/check_design.mjs 가 막는다(#135). */
 
-/* ---------- 머리띠 ---------- */
+/* ---------- 앱 골격 (sc-app: 사이드바 + 상단 바 + 본문) ---------- */
 
-.masthead .sc-masthead-row {
-  max-width: var(--page-width);
-  margin: 0 auto;
+.app-brand,
+.app-brand:hover {
+  text-decoration: none;
 }
-.brand {
-  display: inline-flex;
+.app-brand .sc-sidenav-mark {
+  background: none;
+}
+.app-brand img {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+.app-nav-group {
+  display: contents;
+}
+.sc-sidenav-heading:not(:first-child) {
+  margin-top: var(--space-3);
+}
+.sc-sidenav-item,
+.sc-sidenav-item:hover {
+  text-decoration: none;
+}
+.app-crumbs {
+  display: flex;
+  flex: 1;
   align-items: center;
   gap: var(--space-2);
 }
-.brand img {
-  width: 28px;
-  height: 28px;
+.app-crumbs .sc-topbar-crumbs {
+  flex: 1;
+}
+/* 탭이 바로 붙는 머리는 탭 선 하나로 나눈다. */
+.sc-page-head:has(+ .sc-tabs) {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.app-nav-toggle {
+  display: none;
+}
+.app-account {
+  position: relative;
+}
+/* 떠 있는 메뉴 상자 — 디자인시스템에 없어 토큰으로 짠다(sandcorp-design#29). */
+.app-menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 30;
+  min-width: 160px;
+  padding: var(--space-1);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius);
+  background: var(--color-canvas);
+}
+.app-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--color-ink);
+  font-weight: 500;
+}
+.app-menu button:hover {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.sc-app-page > .sc-page-head + .sc-tabs {
+  margin-top: calc(-1 * var(--space-3));
+}
+.sc-app-page .sc-tabs {
+  margin-bottom: 0;
+}
+.sc-app-page .card:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 .brand-product {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-weight: 500;
-  letter-spacing: 0;
-  color: var(--color-muted);
-}
-.masthead-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 0;
-  font-size: var(--text-sm);
-}
-.masthead-nav a {
-  color: var(--color-ink);
-  text-decoration: none;
-}
-.masthead-nav a:hover {
-  text-decoration: underline;
-}
-.masthead-nav > * {
-  white-space: nowrap;
-}
-@media (max-width: 559px) {
-  .masthead-user {
-    display: none;
-  }
-}
-.masthead-user {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
   color: var(--color-muted);
 }
 
+/* 휴대폰: 사이드바는 접히고 상단 바의 메뉴 단추로 여는 서랍이 된다(sandcorp-design#28). */
+@media (max-width: 720px) {
+  .app-nav-toggle {
+    display: inline-flex;
+  }
+  .sc-app .sc-sidenav {
+    display: none;
+  }
+  .sc-app[data-nav-open] .sc-sidenav {
+    position: fixed;
+    top: var(--topbar-height);
+    bottom: 0;
+    left: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: min(280px, 85vw);
+    height: auto;
+    padding: var(--space-3) 10px;
+    overflow-y: auto;
+    border-right: 1px solid var(--color-line);
+    border-bottom: 0;
+  }
+  .sc-app[data-nav-open]::after {
+    content: "";
+    position: fixed;
+    inset: var(--topbar-height) 0 0 0;
+    z-index: 19;
+    background: var(--color-scrim);
+  }
+  .sc-app[data-nav-open] .sc-sidenav-heading {
+    display: block;
+  }
+  .sc-app[data-nav-open] .sc-sidenav-item,
+  .sc-app[data-nav-open] .sc-sidenav-org {
+    justify-content: flex-start;
+    width: 100%;
+    padding: 0 var(--space-2);
+  }
+  .sc-app[data-nav-open] .sc-sidenav-org {
+    padding: var(--space-2);
+  }
+  .sc-app[data-nav-open] .sc-sidenav-label,
+  .sc-app[data-nav-open] .sc-sidenav-org-text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+  .sc-app[data-nav-open] .sc-sidenav-item[aria-current]:not([aria-current="false"])::before {
+    top: 6px;
+    right: auto;
+    bottom: 6px;
+    left: 0;
+    width: 2px;
+    height: auto;
+  }
+  .sc-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 21;
+  }
+}
+
+/* 로그인 전·응시자 화면 */
+.app-bare {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.app-bare-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+.app-bare-brand img {
+  width: 24px;
+  height: 24px;
+}
+.app-bare-page {
+  flex: 1;
+  width: 100%;
+  max-width: calc(var(--page-width) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: var(--space-6) var(--gutter) var(--space-7);
+}
 :root {
   --page-width: 1120px;
 }
 
-.page {
-  max-width: calc(var(--page-width) + 2 * var(--gutter));
-  margin: 0 auto;
-  padding: var(--space-6) var(--gutter) var(--space-7);
+/* 개요 칸: 두 칸 패널 격자 */
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+.sc-panel > h2,
+.sc-panel-title {
+  margin: 0;
+}
+.sc-panel .actions:last-child {
+  margin-bottom: 0;
+}
+.link-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.link-box code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: var(--space-2);
+}
+.sc-dialog-body .sc-field,
+.sc-dialog-body label {
+  margin-top: var(--space-3);
+}
+.sc-dialog-body input:not([type="checkbox"]) {
+  width: 100%;
+}
+.sc-dialog-foot,
+.sc-drawer-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+.events {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+.events li {
+  margin-bottom: var(--space-2);
 }
 
 /* ---------- 글 ---------- */
@@ -305,7 +483,7 @@ label:has(> input[type="checkbox"]):not(.check),
 
 /* ---------- 버튼 (sc-btn--sm 과 같은 모양) ---------- */
 
-button,
+button:not([class*="sc-"]),
 a.button {
   display: inline-flex;
   align-items: center;
@@ -324,7 +502,7 @@ a.button {
   text-decoration: none;
   cursor: pointer;
 }
-button:hover,
+button:not([class*="sc-"]):hover,
 a.button:hover {
   background: var(--color-accent);
   border-color: var(--color-accent);
@@ -666,4 +844,8 @@ blockquote.evidence {
   width: 100%;
   background: var(--color-accent);
   border-radius: var(--radius) var(--radius) 0 0;
+}
+/* 넓은 서랍 — sc-drawer 는 440px 하나라 토큰으로 넓힌다. */
+.sc-drawer.app-drawer-wide {
+  width: min(760px, 100%);
 }

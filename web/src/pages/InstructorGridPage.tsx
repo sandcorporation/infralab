@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { ApiError, formatTime, instructor, parseId, type Grid, type GridRow, type Submission, type SubmissionSummary } from "../api";
 import { CheckResultList } from "../components/CheckResultList";
 import { TranscriptMark, TranscriptView } from "../components/TranscriptView";
+import { Drawer } from "../components/ui";
 
 const POLL_MS = 10000;
 
@@ -12,7 +13,7 @@ type Selected = { membershipId: number; scenarioId: string };
 const compareVersions = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
 
 // 기수 × 시나리오 격자. 수업 중 저절로 갱신된다(폴링, 탭이 숨겨지면 멈춘다). 칸을 누르면 그 학생의 최신 제출
-// 증거와 이력이 아래에 열린다.
+// 증거와 이력이 오른쪽 서랍에 열린다. 기수 상세의 「진행」 탭이다.
 export default function InstructorGridPage() {
   const { id } = useParams();
   const cohortId = parseId(id);
@@ -66,12 +67,8 @@ export default function InstructorGridPage() {
   const selectedCell = selectedRow && selected ? selectedRow.cells[selected.scenarioId] : null;
 
   return (
-    <section>
-      <p>
-        <Link to={`/instructor/cohorts/${cohortId}`}>← 기수 관리</Link>
-      </p>
-      <div className="row">
-        <h1>진행 격자</h1>
+    <>
+      <div className="toolbar-row">
         <span className="muted">
           {updatedAt ? `${formatTime(updatedAt.toISOString())} 갱신` : ""} · {POLL_MS / 1000}초마다
         </span>
@@ -80,7 +77,7 @@ export default function InstructorGridPage() {
       {grid.scenarios.length === 0 && <p className="muted">열린 시나리오가 없습니다.</p>}
       {grid.rows.length === 0 && <p className="muted">참여자가 없습니다.</p>}
       {grid.scenarios.length > 0 && grid.rows.length > 0 && (
-        <div className="card sc-table-scroll">
+        <div className="sc-table-scroll">
           <table className="sc-table grid">
             <thead>
               <tr>
@@ -138,7 +135,7 @@ export default function InstructorGridPage() {
           onClose={() => setSelected(null)}
         />
       )}
-    </section>
+    </>
   );
 }
 
@@ -189,15 +186,16 @@ function SubmissionDrawer({
   }, [cohortId, row.membership_id, scenarioId]);
 
   return (
-    <section className="card drawer">
-      <div className="row">
-        <h2>
+    <Drawer
+      open
+      wide
+      onClose={onClose}
+      title={
+        <>
           {row.display_name || row.username} · {scenarioTitle}
-        </h2>
-        <button className="link" onClick={onClose}>
-          닫기
-        </button>
-      </div>
+        </>
+      }
+    >
       {error && <p className="error">{error}</p>}
       <div className="drawer-grid">
         <div>
@@ -237,6 +235,6 @@ function SubmissionDrawer({
           )}
         </div>
       </div>
-    </section>
+    </Drawer>
   );
 }

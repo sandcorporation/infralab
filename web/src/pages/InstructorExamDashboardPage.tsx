@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { ApiError } from "../api";
-import { InstructorTabs } from "../components/InstructorTabs";
 import { BUCKET_LABELS, bucketHeights, getExamDashboard, type ExamDashboardRow } from "../exam";
 
 // 시험 대시보드 탭 — 시험 회차마다 초대·시작·완료 수와 최종 점수 분포 막대.
@@ -16,7 +15,6 @@ export default function InstructorExamDashboardPage() {
 
   return (
     <section>
-      <InstructorTabs />
       <h1>시험 대시보드</h1>
       {error && <p className="error">{error}</p>}
       {rows === null && !error && <p className="muted">불러오는 중…</p>}

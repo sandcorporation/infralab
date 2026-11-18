@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { ApiError, formatTime, instructor, type Cohort, type CohortKind } from "../api";
-import { InstructorTabs } from "../components/InstructorTabs";
 import { KIND_LABEL, loadSelectedOrg, pickOrg, saveSelectedOrg } from "../orgSelection";
 
 export default function InstructorCohortsPage() {
@@ -51,7 +50,6 @@ export default function InstructorCohortsPage() {
 
   return (
     <section>
-      <InstructorTabs />
       {org &&
         (orgs.length > 1 ? (
           <select aria-label="조직" value={org.id} onChange={(e) => chooseOrg(Number(e.target.value))}>

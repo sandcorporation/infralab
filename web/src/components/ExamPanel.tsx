@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
+import { ConfirmDialog, Drawer, Modal } from "./ui";
 import {
   ApiError,
   examInviteUrl,
@@ -24,7 +26,7 @@ const TOOLS: { key: ExamTool; label: string }[] = [
   { key: "codex", label: "Codex" },
   { key: "local_llm", label: "로컬 LLM" },
 ];
-const STATUS_LABEL: Record<ExamInvite["status"], string> = {
+export const STATUS_LABEL: Record<ExamInvite["status"], string> = {
   invited: "초대됨",
   in_progress: "응시 중",
   finished: "끝남",
@@ -85,16 +87,15 @@ function initial(raw: Cohort["exam_settings"]): ExamSettings {
   return { ...DEFAULTS, ...(raw as Partial<ExamSettings>) };
 }
 
-/** 시험 회차의 설정 폼과 응시 링크 목록(발급·복사·회수). */
-export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Cohort) => void }) {
-  const saved = Object.keys(cohort.exam_settings).length > 0;
+export const examSettingsSaved = (cohort: Cohort) => Object.keys(cohort.exam_settings).length > 0;
+
+/** 시험 회차 설정 폼(기수 상세 「설정」 탭). */
+export function ExamSettingsForm({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Cohort) => void }) {
+  const saved = examSettingsSaved(cohort);
   const [form, setForm] = useState<ExamSettings>(() => initial(cohort.exam_settings));
-  const [invites, setInvites] = useState<ExamInvite[] | null>(null);
-  const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState<number | null>(null);
-  const [eventsOf, setEventsOf] = useState<{ id: number; events: ExamEvent[] } | null>(null);
+  const [done, setDone] = useState(false);
   const [unavailable, setUnavailable] = useState<ExamTool[]>([]);
 
   useEffect(() => {
@@ -108,6 +109,90 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
       cancelled = true;
     };
   }, []);
+
+  function toggleTool(tool: ExamTool) {
+    setDone(false);
+    setForm((f) => ({
+      ...f,
+      tools: f.tools.includes(tool) ? f.tools.filter((t) => t !== tool) : [...f.tools, tool],
+    }));
+  }
+  const edit = (patch: Partial<ExamSettings>) => {
+    setDone(false);
+    setForm((f) => ({ ...f, ...patch }));
+  };
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await instructor.setExamSettings(cohort.id, form));
+      setDone(true);
+    } catch (e) {
+      setError(`설정 저장 실패: ${(e as ApiError).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="row">
+        <label>
+          시간 제한(분)
+          <input
+            type="number"
+            min={1}
+            max={600}
+            value={form.time_limit_minutes}
+            onChange={(e) => edit({ time_limit_minutes: Number(e.target.value) })}
+          />
+        </label>
+        <label>
+          임시 토큰 한도(토큰, 0 = 무제한)
+          <input type="number" min={0} value={form.ai_token_limit} onChange={(e) => edit({ ai_token_limit: Number(e.target.value) })} />
+        </label>
+      </div>
+      <ToolOptions
+        form={form}
+        unavailable={unavailable}
+        onToggle={toggleTool}
+        onModel={(tool, model) => edit({ models: { ...form.models, [tool]: model } })}
+      />
+      <div className="row">
+        <label>
+          <input type="checkbox" checked={form.proctoring} onChange={(e) => edit({ proctoring: e.target.checked })} /> 감독
+        </label>
+        <label>
+          <input type="checkbox" checked={form.hidden_checks} onChange={(e) => edit({ hidden_checks: e.target.checked })} /> 숨은 검사
+          사용
+        </label>
+      </div>
+      <div className="row actions">
+        <button disabled={busy} onClick={save}>
+          설정 저장
+        </button>
+        {!saved && <span className="muted">설정을 저장해야 응시 링크를 발급할 수 있습니다.</span>}
+        {done && <span className="muted" role="status">저장됨</span>}
+      </div>
+      {error && <p className="error">{error}</p>}
+    </>
+  );
+}
+
+/** 응시 링크 표(기수 상세 「응시 링크」 탭): 발급(상자)·복사·회수(확인)·감독 신호(서랍). */
+export function ExamInvites({ cohort }: { cohort: Cohort }) {
+  const saved = examSettingsSaved(cohort);
+  const [params, setParams] = useSearchParams();
+  const issuing = params.get("new") === "1";
+  const [invites, setInvites] = useState<ExamInvite[] | null>(null);
+  const [label, setLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState<number | null>(null);
+  const [eventsOf, setEventsOf] = useState<{ invite: ExamInvite; events: ExamEvent[] } | null>(null);
+  const [revoking, setRevoking] = useState<ExamInvite | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,11 +218,11 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
     }
   }
 
-  function toggleTool(tool: ExamTool) {
-    setForm((f) => ({
-      ...f,
-      tools: f.tools.includes(tool) ? f.tools.filter((t) => t !== tool) : [...f.tools, tool],
-    }));
+  function setIssuing(open: boolean) {
+    const next = new URLSearchParams(params);
+    if (open) next.set("new", "1");
+    else next.delete("new");
+    setParams(next, { replace: true });
   }
 
   async function copy(i: ExamInvite) {
@@ -150,99 +235,37 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
     }
   }
 
+  const issue = () =>
+    run(async () => {
+      const created = await instructor.createExamInvite(cohort.id, label.trim());
+      setInvites((prev) => [...(prev ?? []), created]);
+      setLabel("");
+      setIssuing(false);
+    }, "링크 발급");
+
   return (
     <>
-      <section className="card">
-        <h2>시험 설정</h2>
-        <div className="row">
-          <label>
-            시간 제한(분){" "}
-            <input
-              type="number"
-              min={1}
-              max={600}
-              value={form.time_limit_minutes}
-              onChange={(e) => setForm({ ...form, time_limit_minutes: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            임시 토큰 한도(토큰, 0 = 무제한){" "}
-            <input
-              type="number"
-              min={0}
-              value={form.ai_token_limit}
-              onChange={(e) => setForm({ ...form, ai_token_limit: Number(e.target.value) })}
-            />
-          </label>
+      <div className="toolbar-row">
+        <button disabled={!saved} onClick={() => setIssuing(true)}>
+          응시 링크 발급
+        </button>
+      </div>
+      {!saved && (
+        <div className="sc-alert" role="status">
+          시험 설정을 저장해야 응시 링크를 발급할 수 있습니다. <Link to={`/instructor/cohorts/${cohort.id}/settings`}>설정으로</Link>
         </div>
-        <ToolOptions
-          form={form}
-          unavailable={unavailable}
-          onToggle={toggleTool}
-          onModel={(tool, model) => setForm({ ...form, models: { ...form.models, [tool]: model } })}
-        />
-        <div className="row">
-          <label>
-            <input
-              type="checkbox"
-              checked={form.proctoring}
-              onChange={(e) => setForm({ ...form, proctoring: e.target.checked })}
-            />{" "}
-            감독
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={form.hidden_checks}
-              onChange={(e) => setForm({ ...form, hidden_checks: e.target.checked })}
-            />{" "}
-            숨은 검사 사용
-          </label>
-        </div>
-        <div className="row actions">
-          <button
-            disabled={busy}
-            onClick={() => run(async () => onSaved(await instructor.setExamSettings(cohort.id, form)), "설정 저장")}
-          >
-            설정 저장
-          </button>
-          {!saved && <span className="muted">설정을 저장해야 응시 링크를 발급할 수 있습니다.</span>}
-        </div>
-        {error && <p className="error">{error}</p>}
-      </section>
-
-      <section className="card">
-        <h2>응시 링크 {invites?.length ?? 0}</h2>
-        <div className="row">
-          <input
-            className="grow"
-            placeholder="지원자 표시 이름(메모)"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          />
-          <button
-            disabled={busy || !saved || !label.trim()}
-            onClick={() =>
-              run(async () => {
-                const created = await instructor.createExamInvite(cohort.id, label.trim());
-                setInvites((prev) => [...(prev ?? []), created]);
-                setLabel("");
-              }, "링크 발급")
-            }
-          >
-            링크 발급
-          </button>
-        </div>
-        {invites && invites.length === 0 && <p className="muted">발급한 링크 없음</p>}
-        {invites && invites.length > 0 && (
-          <div className="sc-table-scroll">
-            <table className="sc-table">
+      )}
+      {error && <p className="error">{error}</p>}
+      {invites && invites.length === 0 && <p className="muted">발급한 링크 없음</p>}
+      {invites && invites.length > 0 && (
+        <div className="sc-table-scroll">
+          <table className="sc-table">
             <thead>
               <tr>
                 <th>지원자</th>
                 <th>상태</th>
                 <th>발급</th>
-                <th>감독 신호</th>
+                <th className="sc-num">감독 신호</th>
                 <th>링크</th>
                 <th></th>
               </tr>
@@ -257,14 +280,12 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
                     <span className="sc-badge sc-badge--neutral">{STATUS_LABEL[i.status]}</span>
                   </td>
                   <td>{formatTime(i.created_at)}</td>
-                  <td>
+                  <td className="sc-num">
                     {(i.event_count ?? 0) > 0 ? (
                       <button
                         className="link"
                         onClick={() =>
-                          eventsOf?.id === i.id
-                            ? setEventsOf(null)
-                            : run(async () => setEventsOf({ id: i.id, events: await instructor.examEvents(cohort.id, i.id) }), "감독 기록")
+                          run(async () => setEventsOf({ invite: i, events: await instructor.examEvents(cohort.id, i.id) }), "감독 기록")
                         }
                       >
                         {i.event_count}건
@@ -272,38 +293,17 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
                     ) : (
                       0
                     )}
-                    {eventsOf?.id === i.id && (
-                      <ol className="muted">
-                        {eventsOf.events.map((e, n) => (
-                          <li key={n}>
-                            {formatTime(e.at)} {SIGNAL_LABEL[e.kind] ?? e.kind}
-                            {e.detail && ` — ${e.detail}`}
-                          </li>
-                        ))}
-                      </ol>
-                    )}
                   </td>
                   <td>
                     {i.status !== "revoked" && (
-                      <>
-                        <code>{examInviteUrl(i.token)}</code> <button onClick={() => copy(i)}>{copied === i.id ? "복사됨" : "복사"}</button>
-                      </>
+                      <button className="secondary" onClick={() => copy(i)} title={examInviteUrl(i.token)}>
+                        {copied === i.id ? "복사됨" : "링크 복사"}
+                      </button>
                     )}
                   </td>
                   <td className="right">
                     {i.status !== "revoked" && (
-                      <button
-                        className="link"
-                        disabled={busy}
-                        onClick={() =>
-                          run(async () => {
-                            await instructor.revokeExamInvite(cohort.id, i.id);
-                            setInvites((prev) =>
-                              prev ? prev.map((x) => (x.id === i.id ? { ...x, status: "revoked" } : x)) : prev,
-                            );
-                          }, "회수")
-                        }
-                      >
+                      <button className="link" disabled={busy} onClick={() => setRevoking(i)}>
                         회수
                       </button>
                     )}
@@ -311,10 +311,67 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
                 </tr>
               ))}
             </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+          </table>
+        </div>
+      )}
+
+      <Modal
+        open={issuing}
+        title="응시 링크 발급"
+        onClose={() => setIssuing(false)}
+        foot={
+          <>
+            <button type="button" className="secondary" onClick={() => setIssuing(false)}>
+              취소
+            </button>
+            <button type="submit" form="issue-invite" disabled={busy || !saved || !label.trim()}>
+              발급
+            </button>
+          </>
+        }
+      >
+        <form
+          id="issue-invite"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (saved && label.trim()) issue();
+          }}
+        >
+          <label>
+            지원자 표시 이름(메모)
+            <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} />
+          </label>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={revoking !== null}
+        title="응시 링크 회수"
+        confirmLabel="회수"
+        busy={busy}
+        onClose={() => setRevoking(null)}
+        onConfirm={() =>
+          revoking &&
+          run(async () => {
+            await instructor.revokeExamInvite(cohort.id, revoking.id);
+            setInvites((prev) => (prev ? prev.map((x) => (x.id === revoking.id ? { ...x, status: "revoked" } : x)) : prev));
+            setRevoking(null);
+          }, "회수")
+        }
+      >
+        <p>{revoking?.label} — 회수한 링크로는 응시할 수 없습니다.</p>
+      </ConfirmDialog>
+
+      <Drawer open={eventsOf !== null} title={`감독 신호 · ${eventsOf?.invite.label ?? ""}`} onClose={() => setEventsOf(null)}>
+        <ol className="events">
+          {eventsOf?.events.map((e, n) => (
+            <li key={n}>
+              <span className="muted">{formatTime(e.at)}</span> {SIGNAL_LABEL[e.kind] ?? e.kind}
+              {e.detail && ` — ${e.detail}`}
+            </li>
+          ))}
+        </ol>
+      </Drawer>
     </>
   );
 }
