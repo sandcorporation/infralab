@@ -10,7 +10,9 @@ from ninja.errors import HttpError
 
 from .auth import instructor_auth, jwt_auth
 from .models import SocialAccount
-from .schemas import MeOut, RefreshIn, SocialLoginIn, TokenPairOut
+from orgs.services import my_orgs
+
+from .schemas import MeOut, OrgOut, RefreshIn, SocialLoginIn, TokenPairOut
 from .social import SocialLoginError, SocialProfile, get_adapter
 from .tokens import TokenError, issue_token_pair, rotate_refresh_token
 
@@ -89,8 +91,13 @@ def refresh(request: HttpRequest, payload: RefreshIn):
 
 
 def _me(user) -> MeOut:
+    orgs = [OrgOut(id=m.org.id, name=m.org.name, role=m.role) for m in my_orgs(user)]
     return MeOut(
-        id=user.id, username=user.username, display_name=user.display_name, is_instructor=user.is_instructor
+        id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        is_instructor=bool(orgs),
+        orgs=orgs,
     )
 
 

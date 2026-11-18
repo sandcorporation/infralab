@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 from django.core.management import call_command
 
+from orgs.models import DEFAULT_ORG_NAME, Organization
+
 
 @dataclass
 class Session:
@@ -37,9 +39,16 @@ class Api:
         body = res.json()
         return Session(access=body["access"], refresh=body["refresh"])
 
-    def login_instructor(self, uid: str = "teacher") -> Session:
+    def login_instructor(self, uid: str = "teacher", org: str = DEFAULT_ORG_NAME, role: str = "owner") -> Session:
+        """조직 `org`(없으면 만든다)의 담당자로 로그인한다. 기본은 옛 강사 자리인 「기본 조직」의 owner."""
+
         session = self.login(uid)
-        call_command("set_instructor", f"kakao:{uid}")
+        if Organization.objects.filter(name=org).exists():
+            call_command("add_org_member", org, f"kakao:{uid}", "--role", role)
+        else:
+            call_command("create_org", org, "--owner", f"kakao:{uid}")
+            if role != "owner":
+                call_command("add_org_member", org, f"kakao:{uid}", "--role", role)
         return session
 
     # ---------- 요청 ----------

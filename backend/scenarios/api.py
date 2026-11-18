@@ -7,13 +7,11 @@
 from __future__ import annotations
 
 from django.http import HttpRequest
-from django.shortcuts import get_object_or_404
 from ninja import Router
 from ninja.errors import HttpError
 
 from accounts.auth import instructor_auth, jwt_auth
-from cohorts.models import Cohort
-from cohorts.services import my_membership, open_scenario, open_scenarios
+from cohorts.services import managed_cohort, my_membership, open_scenario, open_scenarios
 from submissions.services import latest_submissions_by_scenario, passed_against  # noqa: F401 - scenarios → submissions 읽기 의존
 
 from . import registry
@@ -41,7 +39,7 @@ def list_all_scenarios(request: HttpRequest):
 def set_open_scenarios(request: HttpRequest, cohort_id: int, payload: OpenScenariosIn):
     """기수에 열어 둘 시나리오를 통째로 바꾼다. 순서가 학생 화면의 순서다."""
 
-    cohort = get_object_or_404(Cohort, pk=cohort_id)
+    cohort = managed_cohort(request, cohort_id)
     known = registry.all_scenarios()
     unknown = [sid for sid in payload.scenario_ids if sid not in known]
     if unknown:

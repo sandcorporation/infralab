@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
+from django.db.models import QuerySet
 from django.http import HttpRequest
+from django.shortcuts import get_object_or_404
 from ninja.errors import HttpError
 
 from scenarios import registry
 from scenarios.loader import Scenario
 
+from orgs.services import my_org_ids
+
 from .models import Cohort, Membership
+
+
+def managed_cohorts(user) -> QuerySet[Cohort]:
+    """내가 담당자인 조직들의 기수. 강사 표면은 기수를 언제나 여기서 찾는다 — 남의 조직 기수는 404."""
+
+    return Cohort.objects.filter(org_id__in=my_org_ids(user))
+
+
+def managed_cohort(request: HttpRequest, cohort_id: int) -> Cohort:
+    return get_object_or_404(managed_cohorts(request.auth), pk=cohort_id)
 
 
 def my_membership(request: HttpRequest, cohort_id: int) -> Membership:

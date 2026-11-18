@@ -13,7 +13,8 @@ from django.db import models
 
 
 class User(AbstractUser):
-    #: 강사 플래그. 강사는 한 명이고 manage.py `set_instructor` 로 켠다. 강사 전용 API 는 이 값으로 막는다.
+    #: 옛 전역 강사 플래그. 권한 판정에는 더 이상 쓰지 않는다 — 강사 권한은 조직 역할(`orgs.OrgMember`)이다.
+    #: 이전(cohorts 0003)이 이 값으로 「기본 조직」 owner 를 정했다. 지울지는 다음 티켓에서 정한다.
     is_instructor = models.BooleanField(default=False)
     #: 화면에 보이는 이름. 카카오 닉네임을 로그인마다 최신값으로 받는다. 없으면 빈 문자열.
     display_name = models.CharField(max_length=100, blank=True)
