@@ -89,7 +89,7 @@ def test_backend_problems_dir_is_an_absolute_path_with_a_volume():
 def test_deploy_doc_names_every_new_setting_and_the_problem_bank():
     doc = (REPO_ROOT / "docs" / "ops" / "deploy.md").read_text(encoding="utf-8")
 
-    for name in (*PROVIDER_KEYS, *BACKEND_NAMES, "infralab-problems-deploy-key", "problems.ref"):
+    for name in (*PROVIDER_KEYS, *BACKEND_NAMES, "github-farrar142", "problems.ref"):
         assert name in doc, f"deploy.md 에 {name} 가 없다"
 
 
