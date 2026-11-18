@@ -9,6 +9,7 @@ from ninja.responses import Status
 
 from accounts.auth import jwt_auth
 from cohorts.services import my_membership, open_scenario
+from exams.proctor import check_outside_proxy
 from exams.services import check_attempt
 
 from .models import MAX_OUTPUT_CHARS, Submission
@@ -81,6 +82,7 @@ def submit(request: HttpRequest, cohort_id: int, scenario_id: str, payload: Subm
         results=results,
         ai_transcript=transcript,
     )
+    check_outside_proxy(m, transcript)
     return Status(201, submission_out(sub))
 
 

@@ -82,7 +82,6 @@ def _submit_with_transcript(api, cand, cohort_id, transcript):
     return res
 
 
-@pytest.mark.skip(reason="#75")
 def test_candidate_signals_are_recorded_in_time_order(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -105,7 +104,6 @@ def test_candidate_signals_are_recorded_in_time_order(api):
     assert times == sorted(times)
 
 
-@pytest.mark.skip(reason="#75")
 def test_unknown_signal_kind_is_422(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -118,7 +116,6 @@ def test_unknown_signal_kind_is_422(api):
     assert _events(api, teacher, cohort["id"], invite["id"]).json() == []
 
 
-@pytest.mark.skip(reason="#75")
 def test_signals_before_start_and_after_finish_are_409(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -133,7 +130,6 @@ def test_signals_before_start_and_after_finish_are_409(api):
     assert _events(api, teacher, cohort["id"], invite["id"]).json() == []
 
 
-@pytest.mark.skip(reason="#75")
 def test_signals_without_proctoring_are_accepted_but_not_kept(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher, {**EXAM_SETTINGS, "proctoring": False})
@@ -145,7 +141,6 @@ def test_signals_without_proctoring_are_accepted_but_not_kept(api):
     assert _events(api, teacher, cohort["id"], invite["id"]).json() == []
 
 
-@pytest.mark.skip(reason="#75")
 def test_events_of_another_orgs_invite_are_404(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -157,7 +152,6 @@ def test_events_of_another_orgs_invite_are_404(api):
     assert _events(api, teacher, other["id"], invite["id"]).status_code == 404
 
 
-@pytest.mark.skip(reason="#75")
 def test_invite_list_counts_signals_per_candidate(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -173,7 +167,6 @@ def test_invite_list_counts_signals_per_candidate(api):
     assert {i["id"]: i["event_count"] for i in listed} == {noisy["id"]: 3, quiet["id"]: 0}
 
 
-@pytest.mark.skip(reason="#75")
 def test_claude_transcript_without_proxy_use_leaves_an_outside_proxy_signal(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -187,7 +180,6 @@ def test_claude_transcript_without_proxy_use_leaves_an_outside_proxy_signal(api)
     assert "claude" in outside[0]["detail"]
 
 
-@pytest.mark.skip(reason="#75")
 def test_claude_transcript_with_proxy_use_leaves_no_signal(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -219,7 +211,6 @@ def test_claude_transcript_with_proxy_use_leaves_no_signal(api):
     assert "ai_outside_proxy" not in kinds
 
 
-@pytest.mark.skip(reason="#75")
 def test_transcript_of_a_tool_the_exam_does_not_allow_leaves_a_signal(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -234,7 +225,6 @@ def test_transcript_of_a_tool_the_exam_does_not_allow_leaves_a_signal(api):
     assert "codex" in outside[0]["detail"]
 
 
-@pytest.mark.skip(reason="#75")
 def test_class_cohort_submissions_leave_no_signal(api):
     teacher = api.login_instructor()
     exam = _exam(api, teacher)

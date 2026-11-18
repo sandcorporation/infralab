@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { formatRemaining, getExamStatus, remainingSecondsAt, type ExamStatus } from "./exam";
+import { formatRemaining, getExamStatus, postExamEvent, remainingSecondsAt, watchProctorSignals, type ExamStatus } from "./exam";
 
 // 지원자의 응시 상태와 남은 시간. 남은 시간은 서버가 준 deadline·server_time 과 그 응답 뒤 흐른 시간으로 센다 —
 // 브라우저 시계가 틀려도 같다. 30초마다 서버에 다시 물어 「끝내기」·회수·시간 설정 변경을 따라간다.
@@ -58,6 +58,16 @@ export function ExamClockProvider({ token, children }: { token: string | null; c
     const timer = setInterval(() => setNow(performance.now()), 1000);
     return () => clearInterval(timer);
   }, [status?.status]);
+
+  const watching = !!token && status?.status === "in_progress" && status.proctoring;
+  useEffect(() => {
+    if (!watching || !token) return;
+    return watchProctorSignals(window, document, (kind, detail) => {
+      postExamEvent(token, kind, detail).catch(() => {
+        /* 신호를 못 보내도 응시를 막지 않는다 */
+      });
+    });
+  }, [watching, token]);
 
   const remaining =
     status?.deadline != null ? remainingSecondsAt(status.deadline, status.server_time, now - receivedAt.current) : null;

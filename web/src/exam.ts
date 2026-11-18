@@ -113,3 +113,35 @@ export const getFinalChecks = (token: string) => api<FinalChecks>(`${examPath(to
 /** POST /api/exam/<토큰>/final-results — 숨은 검사 결과를 한 번 올린다(204). */
 export const postFinalResults = (token: string, body: { agent_version: string; scenarios: unknown[] }) =>
   api<void>(`${examPath(token)}/final-results`, { method: "POST", body: JSON.stringify(body) });
+
+export type ProctorKind = "tab_hidden" | "focus_lost" | "paste";
+
+/** POST /api/exam/<토큰>/events — 감독 신호 한 건(204). */
+export const postExamEvent = (token: string, kind: ProctorKind, detail = "") =>
+  api<void>(`${examPath(token)}/events`, { method: "POST", body: JSON.stringify({ kind, detail }) });
+
+type Listenable = Pick<EventTarget, "addEventListener" | "removeEventListener">;
+
+/** 탭 이탈(문서가 숨겨짐)·포커스 잃음·붙여넣기를 `send` 로 넘기고, 끄는 함수를 준다. */
+export function watchProctorSignals(
+  win: Listenable,
+  doc: Listenable & { visibilityState?: string },
+  send: (kind: ProctorKind, detail: string) => void,
+): () => void {
+  const onVisibility = () => {
+    if (doc.visibilityState === "hidden") send("tab_hidden", "");
+  };
+  const onBlur = () => send("focus_lost", "");
+  const onPaste = (e: Event) => {
+    const text = (e as ClipboardEvent).clipboardData?.getData("text") ?? "";
+    send("paste", text.slice(0, 500));
+  };
+  doc.addEventListener("visibilitychange", onVisibility);
+  win.addEventListener("blur", onBlur);
+  doc.addEventListener("paste", onPaste);
+  return () => {
+    doc.removeEventListener("visibilitychange", onVisibility);
+    win.removeEventListener("blur", onBlur);
+    doc.removeEventListener("paste", onPaste);
+  };
+}

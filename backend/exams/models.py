@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from django.db import models
+from django.utils import timezone
 
 from cohorts.models import new_token
 
@@ -62,3 +63,15 @@ class AIExchange(models.Model):
 
     class Meta:
         ordering = ["created_at", "id"]
+
+
+class ExamEvent(models.Model):
+    """감독 신호 한 건 — 지원자 화면이 보낸 탭 이탈·포커스 잃음·붙여넣기와 서버가 남기는 프록시 밖 AI 사용(#75)."""
+
+    invite = models.ForeignKey(ExamInvite, related_name="events", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=30)
+    detail = models.TextField(blank=True, default="")
+    at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["at", "id"]

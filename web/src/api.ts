@@ -105,7 +105,9 @@ export type ExamInvite = {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  event_count?: number;
 };
+export type ExamEvent = { kind: string; detail: string; at: string };
 export type JoinPreview = { cohort_id: number; name: string; join_open: boolean };
 export type KindRequirement = { control_planes: number; workers: number };
 export type Requires = { floci: boolean; kind: KindRequirement | null };
@@ -252,6 +254,8 @@ export const instructor = {
       method: "POST",
       body: JSON.stringify({ label }),
     }),
+  examEvents: (cohortId: number, inviteId: number) =>
+    api<ExamEvent[]>(`/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}/events`),
   revokeExamInvite: (cohortId: number, inviteId: number) =>
     api<void>(`/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}`, { method: "DELETE" }),
 };

@@ -64,6 +64,18 @@ class ExamInviteOut(Schema):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    event_count: int = 0
+
+
+class ExamEventIn(Schema):
+    kind: Literal["tab_hidden", "focus_lost", "paste"]
+    detail: str = Field(default="", max_length=2000)
+
+
+class ExamEventOut(Schema):
+    kind: str
+    detail: str
+    at: datetime
 
 
 class ExamStatusOut(Schema):
