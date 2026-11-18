@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, getPractice, joinPractice, type PracticeStatus } from "../api";
-import { PageHead } from "../components/ui";
+import { PageHead, StatRow } from "../components/ui";
 import { useCrumbs } from "../shell/crumbs";
 import { CohortView } from "./CohortPage";
 
@@ -33,16 +33,30 @@ export default function PracticePage() {
   if (!status) return error ? <p className="error">{error}</p> : <p className="muted">불러오는 중…</p>;
   if (status.joined) return <CohortView cohortId={status.cohort_id} backTo="/practice" backLabel="연습" practice />;
 
+  return <PracticeStart scenarioCount={status.scenario_count} busy={busy} error={error} onStart={start} />;
+}
+
+/** 참여 전 빈 상태: 열린 시나리오 수와 본문의 「연습 시작」. */
+export function PracticeStart({
+  scenarioCount,
+  busy,
+  error,
+  onStart,
+}: {
+  scenarioCount: number;
+  busy: boolean;
+  error: string | null;
+  onStart: () => void;
+}) {
   return (
     <>
-      <PageHead
-        title="연습"
-        actions={
-          <button onClick={start} disabled={busy}>
-            {busy ? "시작하는 중…" : "연습 시작"}
-          </button>
-        }
-      />
+      <PageHead title="연습" />
+      <section className="practice-start">
+        <StatRow items={[{ label: "시나리오", value: scenarioCount }]} />
+        <button onClick={onStart} disabled={busy}>
+          {busy ? "시작하는 중…" : "연습 시작"}
+        </button>
+      </section>
       {error && <p className="error">{error}</p>}
     </>
   );

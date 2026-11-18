@@ -37,13 +37,17 @@ class PracticeStatusOut(Schema):
     name: str
     #: 내가 연습 묶음에 참여했는가(「연습 시작」을 눌렀는가).
     joined: bool
+    #: 연습에 열린 시나리오 수(카탈로그 전체). 참여 전 빈 상태에 보인다.
+    scenario_count: int
 
 
 @practice_router.get("/practice", response=PracticeStatusOut)
 def practice_status(request: HttpRequest):
     c = practice_cohort()
     joined = Membership.objects.filter(user=request.auth, cohort=c).exists()
-    return PracticeStatusOut(cohort_id=c.id, name=c.name, joined=joined)
+    return PracticeStatusOut(
+        cohort_id=c.id, name=c.name, joined=joined, scenario_count=len(registry.all_scenarios())
+    )
 
 
 @practice_router.post("/practice/join", response=JoinOut)

@@ -78,6 +78,19 @@
 .sc-app-page .sc-tabs {
   margin-bottom: 0;
 }
+/* .sc-app-page 는 세로 flex(align-items 기본 stretch)라 곧바로 놓인 단추가 가로 전체로 늘어난다. */
+.sc-app-page > button {
+  align-self: flex-start;
+}
+.practice-start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.practice-start > .sc-stat {
+  align-self: stretch;
+}
 .sc-app-page .card:first-child {
   padding-top: 0;
   border-top: 0;

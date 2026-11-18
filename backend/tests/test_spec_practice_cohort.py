@@ -95,6 +95,7 @@ def test_practice_status_names_the_single_practice_cohort(api):
     again = _practice(api, api.login("p2"))
 
     assert status["joined"] is False
+    assert status["scenario_count"] == len(registry.all_scenarios())
     assert again["cohort_id"] == status["cohort_id"]
     assert Cohort.objects.filter(kind="practice").count() == 1
     cohort = Cohort.objects.get(pk=status["cohort_id"])
