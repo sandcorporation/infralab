@@ -104,6 +104,10 @@ docker compose -p infralab-prodcheck -f compose.prod.yml down -v
 
 서비스·컨테이너 이름은 그대로(`db`, `infralab-db-1`). 배포는 db 를 새 볼륨으로 올리고 빈 18 에 migrate 를 돌린 뒤 backend 까지 올린다 — 그 뒤 복원한다. 명령은 운영 서버에서 돈다(DB·사용자 이름은 컨테이너의 `POSTGRES_DB`·`POSTGRES_USER`).
 
+덤프 전에 진행 중인 release.yml·Jenkins 잡이 없는지 확인하고, 진행 중 spec 에 `factory-paused` 를 달고, 로컬 병합을 멈춘다 — 덤프 뒤에 앞선 병합의 배포가 끝나면 옛 판 앱이 다시 떠서 쓰기를 받는다(2026-11-19 올리기 때 #204·#202 의 배포가 덤프 뒤 옛 판 앱을 다시 올렸다).
+
+「덤프 뒤 배포가 끝났는지」는 `/api/health` 본문의 `version`(헤더 `X-Infralab-Version`)이 올리기 PR 의 병합 sha 인지로 본다. 200 만으로는 새 판인지 옛 판인지 모른다.
+
 ```
 # 1. 쓰기를 멈추고 17 에서 덤프(병합 전)
 docker stop infralab-web-1 infralab-proxy-1 infralab-backend-1
@@ -122,7 +126,7 @@ docker start infralab-proxy-1 infralab-web-1
 
 # 4. 확인
 docker exec infralab-db-1 sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version(); select count(*) from accounts_user"'
-curl -fsS http://127.0.0.1:18093/api/health
+curl -fsS http://127.0.0.1:18093/api/health   # version 이 병합 sha
 ```
 
 - 복원은 DB 를 지우고 다시 만든다(`pg_restore --clean` 대신) — migrate 가 빈 18 에 만든 표·행(`django_migrations`, 콘텐츠 타입 등)이 덤프와 섞이지 않고, 복원 뒤 DB 가 덤프와 같다. `--single-transaction` 이라 중간에 실패하면 빈 DB 로 남는다(다시 돌리면 된다).

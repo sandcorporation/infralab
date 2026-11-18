@@ -24,6 +24,10 @@ COPY backend/ ./
 # 시나리오 YAML 은 서버가 시작 때 읽는다.
 COPY scenarios/ /scenarios/
 RUN useradd --uid 1000 --no-create-home app
+# 배포된 커밋(판). image.yml 이 이미지 태그와 같은 sha 를 넘긴다. 비면 backend 가 dev 로 읽는다.
+# 판마다 바뀌므로 캐시가 깨지지 않게 마지막 층 근처에 둔다.
+ARG INFRALAB_VERSION=
+ENV INFRALAB_VERSION=${INFRALAB_VERSION}
 USER app
 EXPOSE 8000
 CMD ["sh", "-c", "exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --timeout 30 --access-logfile -"]
