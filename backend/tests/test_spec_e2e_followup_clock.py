@@ -52,13 +52,11 @@ def _backend_env(compose_file: Path) -> dict:
 # ---------- 설정 ----------
 
 
-@pytest.mark.skip(reason="#194")
 def test_e2e_hooks_are_off_by_default(monkeypatch):
     s = _fresh_settings(monkeypatch)
     assert s["E2E_HOOKS_ENABLED"] is False
 
 
-@pytest.mark.skip(reason="#194")
 def test_e2e_hooks_turn_on_only_with_debug_and_the_env(monkeypatch):
     s = _fresh_settings(monkeypatch, DJANGO_DEBUG="true", INFRALAB_E2E_HOOKS="1")
     assert s["E2E_HOOKS_ENABLED"] is True
@@ -66,7 +64,6 @@ def test_e2e_hooks_turn_on_only_with_debug_and_the_env(monkeypatch):
     assert s["E2E_HOOKS_ENABLED"] is False
 
 
-@pytest.mark.skip(reason="#194")
 def test_production_settings_keep_e2e_hooks_off_even_with_the_env(monkeypatch):
     s = _fresh_settings(
         monkeypatch,
@@ -78,7 +75,6 @@ def test_production_settings_keep_e2e_hooks_off_even_with_the_env(monkeypatch):
     assert s["E2E_HOOKS_ENABLED"] is False
 
 
-@pytest.mark.skip(reason="#194")
 def test_only_the_e2e_compose_turns_the_hooks_on():
     assert str(_backend_env(REPO / "docker" / "compose.e2e.yaml").get("INFRALAB_E2E_HOOKS")) == "1"
     assert "INFRALAB_E2E_HOOKS" not in _backend_env(REPO / "docker" / "compose.dev.yaml")
@@ -120,7 +116,6 @@ def _status(cand: Session, invite: dict) -> dict:
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#194")
 def test_expire_exam_closes_started_attempts_of_that_cohort(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -137,7 +132,6 @@ def test_expire_exam_closes_started_attempts_of_that_cohort(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#194")
 def test_expire_exam_leaves_unstarted_attempts_and_other_cohorts_alone(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -159,7 +153,6 @@ def test_expire_exam_leaves_unstarted_attempts_and_other_cohorts_alone(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#194")
 def test_expire_exam_refuses_when_the_hooks_are_off(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -176,7 +169,6 @@ def test_expire_exam_refuses_when_the_hooks_are_off(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#194")
 def test_expire_exam_refuses_an_unknown_cohort(api):
     with override_settings(E2E_HOOKS_ENABLED=True), pytest.raises(CommandError):
         call_command("e2e_expire_exam", 987654)

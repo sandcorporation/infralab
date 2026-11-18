@@ -131,7 +131,7 @@ INFRALAB_AUTH_SCOPE = _env("INFRALAB_AUTH_SCOPE", "openid profile infralab")
 # 개발용 로그인(POST /api/auth/dev-login) — auth 없이 아무 uid 로나 들어온다. DEBUG 에서만 열린다.
 DEV_LOGIN_ENABLED = DEBUG
 # e2e 스택에서만 켜지는 시험용 길(시계 당기기 관리 명령 e2e_expire_exam). 운영(DEBUG 꺼짐)에서는 늘 꺼짐.
-E2E_HOOKS_ENABLED = False  # #194
+E2E_HOOKS_ENABLED = DEBUG and _env_bool("INFRALAB_E2E_HOOKS", False)
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 12 * 60 * 60
