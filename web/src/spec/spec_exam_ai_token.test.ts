@@ -10,7 +10,7 @@ import type { AiConfig } from "../exam";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AI 키 설정", () => {
-  it.skip("env 를 키 순서대로 export 줄로 잇는다", () => { // #72
+  it("env 를 키 순서대로 export 줄로 잇는다", () => {
     const text = envExportText({
       ANTHROPIC_BASE_URL: "https://proxy.infralab.test/anthropic",
       ANTHROPIC_AUTH_TOKEN: "tok-1",
@@ -26,15 +26,15 @@ describe("AI 키 설정", () => {
     expect(text.endsWith("\n")).toBe(false);
   });
 
-  it.skip("값 안의 따옴표·역슬래시·달러·백틱은 이스케이프한다", () => { // #72
+  it("값 안의 따옴표·역슬래시·달러·백틱은 이스케이프한다", () => {
     expect(envExportText({ K: 'a"b\\c$d`e' })).toBe('export K="a\\"b\\\\c\\$d\\`e"');
   });
 
-  it.skip("빈 env 는 빈 글이다", () => { // #72
+  it("빈 env 는 빈 글이다", () => {
     expect(envExportText({})).toBe("");
   });
 
-  it.skip("설정은 응시 토큰의 ai-config 에서 받는다", async () => { // #72
+  it("설정은 응시 토큰의 ai-config 에서 받는다", async () => {
     const config: AiConfig = {
       proxy_url: "https://proxy.infralab.test",
       token: "tok-1",

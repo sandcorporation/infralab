@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../api";
 import { useAuth } from "../auth";
-import { enterExam, finishExam, formatRemaining, rememberExamToken, startExam } from "../exam";
+import {
+  enterExam,
+  envExportText,
+  finishExam,
+  formatRemaining,
+  getAiConfig,
+  rememberExamToken,
+  startExam,
+} from "../exam";
+import type { AiConfig } from "../exam";
 import { useExamClock } from "../examAttempt";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -93,6 +102,7 @@ export default function ExamPage() {
               시나리오로 가기
             </Link>
           </p>
+          {status.tools.some((t) => t === "claude_code" || t === "codex") && <AiKeySetup token={token} />}
           <p>
             <button className="secondary" onClick={finish} disabled={busy}>
               제출하고 끝내기
@@ -104,5 +114,68 @@ export default function ExamPage() {
         <p className="notice">시험이 마감되었습니다. 수고하셨습니다 — 더 제출할 수 없습니다.</p>
       )}
     </section>
+  );
+}
+
+// 「AI 키 설정」 — 회차가 허용한 도구마다 workstation 터미널에 붙여 넣을 글. 키는 응시 한 번짜리 임시 토큰이다.
+function AiKeySetup({ token }: { token: string }) {
+  const [config, setConfig] = useState<AiConfig | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getAiConfig(token)
+      .then((c) => alive && setConfig(c))
+      .catch((err: ApiError) => alive && setError(err.message));
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  async function copy(key: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+    } catch {
+      setError("복사하지 못했습니다 — 글을 직접 골라 복사하세요.");
+    }
+  }
+
+  return (
+    <div className="ai-key-setup">
+      <h2>AI 키 설정</h2>
+      {error && <p className="error">{error}</p>}
+      {!error && !config && <p className="muted">불러오는 중…</p>}
+      {config?.tools.map((t) => {
+        const envText = envExportText(t.env);
+        return (
+          <div key={t.tool}>
+            <h3>
+              {TOOL_LABELS[t.tool] ?? t.tool} <span className="muted">({t.model})</span>
+            </h3>
+            {t.config_toml && (
+              <>
+                <p className="muted">설정 파일 ~/.codex/config.toml 에 넣으세요.</p>
+                <pre>{t.config_toml}</pre>
+                <p>
+                  <button className="secondary" onClick={() => void copy(`${t.tool}:toml`, t.config_toml)}>
+                    {copied === `${t.tool}:toml` ? "복사했습니다" : "설정 파일 복사"}
+                  </button>
+                </p>
+              </>
+            )}
+            <p className="muted">workstation 터미널에 붙여 넣으세요.</p>
+            <pre>{envText}</pre>
+            <p>
+              <button className="secondary" onClick={() => void copy(`${t.tool}:env`, envText)}>
+                {copied === `${t.tool}:env` ? "복사했습니다" : "환경변수 복사"}
+              </button>
+            </p>
+          </div>
+        );
+      })}
+      {config && <p className="muted">이 키는 이 응시에서만, 시험 시간 안에만 쓸 수 있습니다.</p>}
+    </div>
   );
 }

@@ -81,3 +81,44 @@ class ExamStatusOut(Schema):
 
 class ExamStartIn(Schema):
     consent: bool
+
+
+class AiToolConfigOut(Schema):
+    tool: str
+    model: str
+    env: dict[str, str]
+    #: Codex 설정 파일(~/.codex/config.toml) 내용. Claude Code 는 빈 글.
+    config_toml: str
+
+
+class AiConfigOut(Schema):
+    """지원자가 workstation 터미널에 붙여 넣을 AI 키 설정. 키는 진짜 공급사 키가 아닌 임시 토큰이다."""
+
+    proxy_url: str
+    token: str
+    tools: list[AiToolConfigOut]
+
+
+class ProxyAuthorizeIn(Schema):
+    token: str
+    #: claude_code·codex 가 아니면 `tool_not_allowed` 로 거절한다.
+    tool: str
+    client_id: str = Field(max_length=200)
+
+
+class ProxyVerdictOut(Schema):
+    allowed: bool
+    reason: Literal["unknown", "revoked", "outside_window", "tool_not_allowed", "limit", "in_use_elsewhere"] | None
+    model: str | None
+    remaining_tokens: int | None
+
+
+class ProxyExchangeIn(Schema):
+    token: str
+    tool: str = Field(max_length=20)
+    model: str = Field(default="", max_length=200)
+    client_id: str = Field(default="", max_length=200)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    request: str = ""
+    response: str = ""

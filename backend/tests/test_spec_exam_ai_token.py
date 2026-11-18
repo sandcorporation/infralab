@@ -116,7 +116,6 @@ def _verdict(ai_token, **kw):
 # ---------- ai-config ----------
 
 
-@pytest.mark.skip(reason="#72")
 def test_ai_config_gives_one_setting_per_allowed_tool(api):
     teacher, cohort, invite, cand = _setup(api)
 
@@ -144,7 +143,6 @@ def test_ai_config_gives_one_setting_per_allowed_tool(api):
     assert "EXAM_KEY" not in str(config)
 
 
-@pytest.mark.skip(reason="#72")
 def test_ai_config_lists_only_allowed_tools_and_keeps_the_same_token(api):
     only_claude = {**EXAM_SETTINGS, "tools": ["claude_code"], "models": {"claude_code": CLAUDE_MODEL}}
     teacher, cohort, invite, cand = _setup(api, only_claude)
@@ -156,7 +154,6 @@ def test_ai_config_lists_only_allowed_tools_and_keeps_the_same_token(api):
     assert first["token"] == second["token"]
 
 
-@pytest.mark.skip(reason="#72")
 def test_ai_config_is_409_before_start_after_finish_and_after_revoke(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -182,7 +179,6 @@ def test_ai_config_is_409_before_start_after_finish_and_after_revoke(api):
 # ---------- 프록시 확인 ----------
 
 
-@pytest.mark.skip(reason="#72")
 def test_authorize_needs_the_shared_secret(api):
     teacher, cohort, invite, cand = _setup(api)
     ai_token = _ai_config(api, cand, invite["token"])["token"]
@@ -192,7 +188,6 @@ def test_authorize_needs_the_shared_secret(api):
     assert _proxy("/api/proxy/exchanges", {"token": ai_token}, secret="wrong").status_code == 401
 
 
-@pytest.mark.skip(reason="#72")
 def test_authorize_allows_with_the_fixed_model_and_the_remaining_budget(api):
     teacher, cohort, invite, cand = _setup(api)
     ai_token = _ai_config(api, cand, invite["token"])["token"]
@@ -202,13 +197,11 @@ def test_authorize_allows_with_the_fixed_model_and_the_remaining_budget(api):
     assert codex["allowed"] is True and codex["model"] == CODEX_MODEL
 
 
-@pytest.mark.skip(reason="#72")
 def test_authorize_refuses_an_unknown_token(api):
     verdict = _verdict("no-such-token")
     assert verdict["allowed"] is False and verdict["reason"] == "unknown"
 
 
-@pytest.mark.skip(reason="#72")
 def test_authorize_refuses_after_the_deadline(api):
     from exams.models import ExamInvite
 
@@ -221,7 +214,6 @@ def test_authorize_refuses_after_the_deadline(api):
     assert verdict["allowed"] is False and verdict["reason"] == "outside_window"
 
 
-@pytest.mark.skip(reason="#72")
 def test_authorize_refuses_a_tool_the_exam_does_not_allow(api):
     only_claude = {**EXAM_SETTINGS, "tools": ["claude_code"], "models": {"claude_code": CLAUDE_MODEL}}
     teacher, cohort, invite, cand = _setup(api, only_claude)
@@ -232,7 +224,6 @@ def test_authorize_refuses_a_tool_the_exam_does_not_allow(api):
     assert _verdict(ai_token)["allowed"] is True
 
 
-@pytest.mark.skip(reason="#72")
 def test_exchanges_are_recorded_and_spend_the_budget(api):
     from exams.models import AIExchange
 
@@ -250,7 +241,6 @@ def test_exchanges_are_recorded_and_spend_the_budget(api):
     assert _exchange("no-such-token").status_code == 404
 
 
-@pytest.mark.skip(reason="#72")
 def test_authorize_refuses_when_the_budget_is_spent(api):
     teacher, cohort, invite, cand = _setup(api)
     ai_token = _ai_config(api, cand, invite["token"])["token"]
@@ -261,7 +251,6 @@ def test_authorize_refuses_when_the_budget_is_spent(api):
     assert verdict["allowed"] is False and verdict["reason"] == "limit"
 
 
-@pytest.mark.skip(reason="#72")
 def test_a_second_client_is_refused_while_the_first_is_in_use_and_takes_over_after_five_minutes(api):
     from exams.models import AIToken
 
@@ -283,7 +272,6 @@ def test_a_second_client_is_refused_while_the_first_is_in_use_and_takes_over_aft
 # ---------- 회수 ----------
 
 
-@pytest.mark.skip(reason="#72")
 def test_instructor_revokes_the_token_at_once(api):
     teacher, cohort, invite, cand = _setup(api)
     ai_token = _ai_config(api, cand, invite["token"])["token"]
@@ -300,7 +288,6 @@ def test_instructor_revokes_the_token_at_once(api):
     assert verdict["allowed"] is False and verdict["reason"] == "revoked"
 
 
-@pytest.mark.skip(reason="#72")
 def test_finishing_the_exam_revokes_the_token(api):
     teacher, cohort, invite, cand = _setup(api)
     ai_token = _ai_config(api, cand, invite["token"])["token"]
