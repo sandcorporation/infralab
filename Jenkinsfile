@@ -13,7 +13,7 @@
 // 함께 받는다. 그 sha 이미지가 ghcr 에 다 오른 뒤에만 학생에게 그 주소가 나간다.
 //
 // 문제은행(비공개): problems.ref 가 고정한 커밋을 워크스페이스 problems/ 에 받는다 — compose.prod.yml 의 backend 가
-// INFRALAB_PROBLEMS_HOST_DIR(기본 ./problems)를 /problems 로 붙인다. optional: 자격 infralab-problems-deploy-key 가 없거나
+// INFRALAB_PROBLEMS_HOST_DIR(기본 ./problems)를 /problems 로 붙인다. optional: 자격 github-farrar142(infralab 잡이 쓰는 대표 계정 SSH 키 — 조직 비공개 저장소 읽기)이 없거나
 // ref 가 0 들이거나 받기에 실패하면 경고만 남기고 배포를 계속한다(숨은 검사만 건너뛴다).
 @Library('sandcorp') _
 
@@ -38,7 +38,7 @@ sandcorpDeploy(
   extraServices: ['proxy', 'web'],
   extraCheckouts: [
     [url: 'git@github.com:sandcorporation/infralab-problems.git', refFile: 'problems.ref', dir: 'problems',
-     credentialsId: 'infralab-problems-deploy-key', optional: true],
+     credentialsId: 'github-farrar142', optional: true],
   ],
   healthCmd: '''python -c "import os, urllib.request as u; host = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost').split(',')[0].strip(); print(u.urlopen(u.Request('http://127.0.0.1:8000/api/health?scope=ready', headers={'Host': host}), timeout=5).read().decode())"''',
 )

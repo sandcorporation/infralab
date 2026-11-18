@@ -67,15 +67,15 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 - [ ] sandcorp-auth 에 기밀 클라이언트 등록(auth 조율자): redirect_uri `https://infralab.sandcorp.co.kr/api/auth/callback`, 리소스 `https://infralab.sandcorp.co.kr/api` 와 그 스코프 `infralab`(일반 사용자 허용), 클라이언트의 「일반 사용자 허용」, 웹훅 URL `https://infralab.sandcorp.co.kr/api/auth/webhook`. 나온 client id·secret·웹훅 비밀을 `.env` 에.
 - [ ] GitHub ruleset: `production` 브랜치 강제 push·삭제 금지(승격은 fast-forward 만).
 - [ ] ghcr 패키지 다섯(`infralab-backend`·`-web`·`-proxy`·`-agent`·`-workstation`)의 공개 범위 — 응시자 PC 가 로그인 없이 pull 하려면 agent·workstation 은 공개.
-- [x] 시험 모드 Jenkins 배선(#82): proxy 이미지(`images`·`extraServices`), 문제은행 받기(`extraCheckouts` optional, 자격 `infralab-problems-deploy-key`, `problems.ref`), 공개 주소 `/exam-proxy/`(web nginx).
-- [ ] 시험 모드 서버 몫: `.env` 에 공급사 키 둘·채점 키, `INFRALAB_EXAM_PROXY_URL=https://infralab.sandcorp.co.kr/exam-proxy`. Jenkins 자격 `infralab-problems-deploy-key`(문제은행 저장소의 읽기 전용 deploy key) 등록과 `problems.ref` 에 고정 sha — 그 전에는 배포 로그에 「경고: 다른 저장소 받기 건너뜀(optional)」이 남고 숨은 검사만 건너뛴다.
+- [x] 시험 모드 Jenkins 배선(#82): proxy 이미지(`images`·`extraServices`), 문제은행 받기(`extraCheckouts` optional, 자격 `github-farrar142`, `problems.ref`), 공개 주소 `/exam-proxy/`(web nginx).
+- [ ] 시험 모드 서버 몫: `.env` 에 공급사 키 둘·채점 키, `INFRALAB_EXAM_PROXY_URL=https://infralab.sandcorp.co.kr/exam-proxy`. `problems.ref` 에 고정 sha(받기 자격은 infralab 잡이 이미 쓰는 `github-farrar142` — 새 키 없음) — 그 전에는 배포 로그에 「경고: 다른 저장소 받기 건너뜀(optional)」이 남고 숨은 검사만 건너뛴다.
 - [ ] 첫 강사 지정: `docker compose -f compose.prod.yml run --rm backend python manage.py set_instructor sandcorp:<sub>` — 「기본 조직」 owner 로 넣는다. Sandcorp 계정으로 한 번 로그인한 뒤에 한다(그 전에는 사용자가 없다). `sub` 는 `/api/accounts/me` 의 `username` 에서 본다.
 
 ## 시험 모드(AI 프록시·문제은행)
 
 - `compose.prod.yml` 의 `proxy` 서비스를 Jenkins 가 backend 다음에 web 과 함께 띄운다(`extraServices`). 공개 포트는 없고, 지원자 PC 는 `https://infralab.sandcorp.co.kr/exam-proxy` 로 부른다 — web(nginx)이 접두어를 떼고 proxy 로 넘긴다(스트리밍 버퍼링 끔, 600초). 한도: nginx 가 본문 32 MiB·IP(`X-Forwarded-For` 끝 주소)별 20r/s(burst 200), proxy 가 임시 토큰별 분당 120(burst 60). 토큰이 없거나 틀리면 401(공급사 꼴 오류). 경로 시험은 `bash scripts/check_exam_proxy_route.sh`(CI `exam-proxy-route`).
 - `INFRALAB_EXAM_PROXY_SECRET` 이 비면 proxy 가 기동하지 않는다(재시작 반복) — 다른 서비스와 배포는 그대로다.
-- 문제은행은 비공개 저장소다. Jenkins 자격 이름은 `infralab-problems-deploy-key`(읽기 전용 deploy key), 받을 커밋은 저장소 루트 `problems.ref` 에 적는다(0 들이면 받지 않는다). Jenkins 가 워크스페이스 `problems/` 에 받는다(선택 — 자격이 없거나 받기에 실패해도 경고만). 받은 폴더가 호스트 `INFRALAB_PROBLEMS_HOST_DIR`(기본 `./problems`)이고 backend 에 `INFRALAB_PROBLEMS_DIR` 로 붙는다. 공개 이미지에는 굽지 않는다.
+- 문제은행은 비공개 저장소다. Jenkins 자격은 infralab 잡이 이미 쓰는 `github-farrar142`(대표 계정 SSH 키, 조직 비공개 저장소 읽기), 받을 커밋은 저장소 루트 `problems.ref` 에 적는다(0 들이면 받지 않는다). Jenkins 가 워크스페이스 `problems/` 에 받는다(선택 — 자격이 없거나 받기에 실패해도 경고만). 받은 폴더가 호스트 `INFRALAB_PROBLEMS_HOST_DIR`(기본 `./problems`)이고 backend 에 `INFRALAB_PROBLEMS_DIR` 로 붙는다. 공개 이미지에는 굽지 않는다.
 - 공급사 키·공유 비밀은 서버 `.env` 에만 둔다. 공급사 키는 proxy 만 받는다.
 
 ## 로컬에서 운영 compose 확인
