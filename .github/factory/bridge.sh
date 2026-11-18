@@ -12,6 +12,8 @@
 #   <!-- factory-budget-spec -->         a spec stopped at its budget (`factory-paused`)
 #   <!-- factory-budget-daily DATE -->   the whole factory stopped at the daily budget (ledger issue)
 #   <!-- factory-human -->               a ticket handed to a person
+#   <!-- factory-local -->               a ticket touching workflow or .claude files, left to a local worker
+#                                        (local-ticket.sh: `ready-for-human` + `local`)
 #   <!-- factory-queue-empty S -->       the last spec S of FACTORY_SPEC_QUEUE was started (ledger issue)
 #   <!-- factory-idle Q -->              every spec of the queue is labelled; the factory is idle (ledger)
 #   <!-- factory-human-check S -->       spec S's tickets are merged but its check issue has unchecked
@@ -29,8 +31,17 @@
 #
 # The recipient depends on the kind (owner's decision 2026-11-18): a question and a human-check go to
 # the boss (BRIDGE_TO_BOSS), because only the owner decides or checks them by hand; every other kind (budget-spec, budget-daily, human,
-# queue-empty, idle) goes straight to the repository's coordinator (BRIDGE_TO_COORD), who
+# local, queue-empty, idle) goes straight to the repository's coordinator (BRIDGE_TO_COORD), who
 # acts on it.
+#
+# A kind that goes to the coordinator is also sent, one mail each, to every recipient in BRIDGE_CC
+# (2026-11-19: the factory stopped on a ticket handed to a person and the boss never heard of it, because
+# only the coordinator was told). The coordinator's mail keeps the key <name>-factory-<comment id>; a CC
+# recipient's key is <name>-factory-<comment id>-cc-<recipient with every character outside
+# [A-Za-z0-9._-] made ->. A comment id in the state file means every recipient has it, so markers sent
+# before BRIDGE_CC was set are never sent to the new recipients (no flood of old markers when it is first
+# set). When one recipient fails, the ones that succeeded are remembered as "<comment id> <recipient>"
+# lines and only the others are tried again on the next run.
 #
 # <name> is the repository name (the part of FACTORY_REPO after the slash).
 #
@@ -43,6 +54,8 @@
 #   FACTORY_REPO          owner/name (default sandcorporation/infralab); gh must be logged in
 #   BRIDGE_TO_BOSS        recipient of questions and human-checks (default sandcorp/boss)
 #   BRIDGE_TO_COORD       recipient of every other kind (default <name>/coordinator)
+#   BRIDGE_CC             more recipients of the coordinator's kinds, separated by spaces (default none);
+#                         the coordinator itself is skipped if listed
 #   BRIDGE_TO             removed (it sent every kind to one place) and ignored: a warning is printed when
 #                         it is still set and the two variables above (or their defaults) are used, so a
 #                         leftover BRIDGE_TO can never send a question to the coordinator.
@@ -50,7 +63,8 @@
 #   BRIDGE_LOOKBACK_DAYS  how far back to read comments (default 14)
 #   BRIDGE_SINCE          ISO 8601 time to read from instead (tests)
 #   XDG_STATE_HOME        the state file is $XDG_STATE_HOME/<name>-factory-bridge/sent (default under
-#                         ~/.local/state), one comment id per line
+#                         ~/.local/state), one comment id per line (or "<comment id> <recipient>" while a
+#                         CC send is still owed)
 #
 # Exits 1 when a send failed (the others are still sent). Needs bash, gh, jq and switchboard.
 set -u
@@ -58,6 +72,7 @@ REPO=${FACTORY_REPO:-sandcorporation/infralab}
 NAME=${REPO##*/}
 TO_BOSS=${BRIDGE_TO_BOSS:-sandcorp/boss}
 TO_COORD=${BRIDGE_TO_COORD:-$NAME/coordinator}
+CC=${BRIDGE_CC:-}
 if [ -n "${BRIDGE_TO:-}" ]; then
   echo "bridge: BRIDGE_TO is ignored; use BRIDGE_TO_BOSS (questions) and BRIDGE_TO_COORD (the rest)" >&2
 fi
@@ -71,6 +86,12 @@ case "${1:-}" in
   "") ;;
   *) echo "usage: bridge.sh [--seed]" >&2; exit 2 ;;
 esac
+
+# key <comment id> <recipient> <primary recipient>: the idempotency key of that mail.
+key() {
+  if [ "$2" = "$3" ]; then echo "$NAME-factory-$1"; return; fi
+  echo "$NAME-factory-$1-cc-$(printf '%s' "$2" | tr -c 'A-Za-z0-9._-' '-')"
+}
 
 # Strip any CR jq prints (CRLF output on some platforms).
 j() { jq "$@" | tr -d '\r'; }
@@ -98,6 +119,7 @@ matches=$(printf '%s' "$comments" | j -s -r '
      elif ($b | contains("<!-- factory-budget-spec -->")) then "budget-spec"
      elif ($b | contains("<!-- factory-budget-daily ")) then "budget-daily"
      elif ($b | contains("<!-- factory-human -->")) then "human"
+     elif ($b | contains("<!-- factory-local -->")) then "local"
      elif ($b | contains("<!-- factory-queue-empty ")) then "queue-empty"
      elif ($b | contains("<!-- factory-idle ")) then "idle"
      elif ($b | contains("<!-- factory-human-check ")) then "human-check"
@@ -164,6 +186,9 @@ while IFS=$'\t' read -r id kind n author; do
     human)
       label="사람 넘김"
       todo="공장이 이 이슈를 사람에게 넘겼다(ready-for-human). 위 댓글의 까닭을 보고 이어 받는다." ;;
+    local)
+      label="로컬 작업자 몫"
+      todo="공장이 이 티켓을 공장 밖에 두었다(ready-for-human + local, workflow·.claude 파일). 로컬 작업자가 구현한다." ;;
     queue-empty)
       label="spec 큐 바닥남"
       todo="다음 spec을 FACTORY_SPEC_QUEUE에 넣는다(조율자 몫)." ;;
@@ -184,13 +209,30 @@ $body
 할 일: $todo"
   to=$TO_COORD
   case "$kind" in question|human-check) to=$TO_BOSS ;; esac
-  if switchboard send --to "$to" --task "$NAME-factory" --idempotency-key "$NAME-factory-$id" \
-    --subject "[$NAME 공장] $label: #$n $title" --body "$text" > /dev/null; then
+  recipients=$to
+  if [ "$to" = "$TO_COORD" ]; then
+    for r in $CC; do
+      case " $recipients " in *" $r "*) ;; *) recipients="$recipients $r" ;; esac
+    done
+  fi
+  done_to=
+  ok=true
+  for r in $recipients; do
+    if grep -qxF -- "$id $r" "$SENT"; then continue; fi
+    if switchboard send --to "$r" --task "$NAME-factory" --idempotency-key "$(key "$id" "$r" "$to")" \
+      --subject "[$NAME 공장] $label: #$n $title" --body "$text" > /dev/null; then
+      done_to="$done_to $r"
+      echo "bridge: sent $kind #$n to $r (comment $id)"
+    else
+      echo "bridge: could not send $kind #$n to $r (comment $id); will retry" >&2
+      ok=false
+      failed=1
+    fi
+  done
+  if $ok; then
     remember "$id"
-    echo "bridge: sent $kind #$n to $to (comment $id)"
   else
-    echo "bridge: could not send $kind #$n (comment $id); will retry" >&2
-    failed=1
+    for r in $done_to; do remember "$id $r"; done
   fi
 done <<< "$matches"
 

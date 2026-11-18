@@ -541,7 +541,8 @@ jobs:
       # (`ready-for-human`, ADR-0001).
       # Any other failure (runner, network, installer, agent action crash) has nothing to do
       # with the code: retry on the same model , and hand the ticket
-      # to the managing session only after three of them.
+      # to the managing session only after three of them. The handover comment carries
+      # <!-- factory-human --> so the mail bridge tells the coordinator (#188).
       - name: Record failure
         if: failure() && steps.guard.outputs.go == 'true'
         run: |
@@ -556,7 +557,8 @@ jobs:
           gh issue edit "$N" --repo "$REPO" --remove-label in-progress
           if [ "$fails" -ge "$limit" ]; then
             gh issue edit "$N" --repo "$REPO" --add-label ready-for-human
-            gh issue comment "$N" --repo "$REPO" --body "Implementer failed $fails times ($what). The managing session takes this ticket out of the factory."
+            gh issue comment "$N" --repo "$REPO" --body "<!-- factory-human -->
+          Implementer failed $fails times ($what). The managing session takes this ticket out of the factory."
           else
             gh issue edit "$N" --repo "$REPO" --add-label ready-for-agent
           fi
