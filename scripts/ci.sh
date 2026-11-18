@@ -3,7 +3,7 @@
 #   scripts/ci.sh <backend|web|agent|factory|release|all>
 # 필요: backend=uv + 접근 가능한 Postgres(POSTGRES_HOST·PORT 등, 기본 127.0.0.1:55440),
 #       web=node+npm, agent=go(agent/·proxy/), factory=bash·jq·git (가짜 gh 로 공장 스크립트 시험),
-#       release=bash·git (production 승격 스크립트 시험, 로컬 bare 저장소).
+#       release=bash·git·jq·python3 (production 승격 스크립트 시험, 로컬 bare 저장소, 병합 장치 시험).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -49,6 +49,9 @@ release() {
   bash scripts/check_image_pins_test.sh
   bash scripts/check_workstation_env_test.sh
   bash scripts/retry_test.sh
+  # 병합 장치(#164): CI 초록일 때만 병합하는 스크립트와 직접 병합을 막는 Claude Code 훅.
+  bash scripts/pr-merge_test.sh
+  bash .claude/hooks/block-direct-merge_test.sh
 }
 
 case "${1:-}" in
