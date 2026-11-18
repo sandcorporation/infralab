@@ -93,7 +93,7 @@ def test_me_lists_orgs_and_is_instructor_follows_them(api):
     assert api.me(s)["is_instructor"] is False
     assert api.me(s)["orgs"] == []
 
-    call_command("create_org", "A 학교", "--owner", "kakao:someone")
+    call_command("create_org", "A 학교", "--owner", "sandcorp:someone")
     me = api.me(s)
     assert me["is_instructor"] is True
     assert [(o["name"], o["role"]) for o in me["orgs"]] == [("A 학교", "owner")]
@@ -104,12 +104,12 @@ def test_me_lists_orgs_and_is_instructor_follows_them(api):
 def test_add_org_member_by_name_or_id_and_role_change(api):
     api.login("boss")
     s = api.login("helper")
-    call_command("create_org", "A 학교", "--owner", "kakao:boss")
-    call_command("add_org_member", "A 학교", "kakao:helper", "--role", "staff")
+    call_command("create_org", "A 학교", "--owner", "sandcorp:boss")
+    call_command("add_org_member", "A 학교", "sandcorp:helper", "--role", "staff")
     me = api.me(s)
     assert [(o["name"], o["role"]) for o in me["orgs"]] == [("A 학교", "staff")]
 
-    call_command("add_org_member", str(me["orgs"][0]["id"]), "kakao:helper")
+    call_command("add_org_member", str(me["orgs"][0]["id"]), "sandcorp:helper")
     assert api.me(s)["orgs"][0]["role"] == "owner"
 
 
@@ -117,12 +117,12 @@ def test_add_org_member_by_name_or_id_and_role_change(api):
 def test_org_commands_fail_clearly(api):
     api.login("boss")
     with pytest.raises(CommandError, match="사용자가 없습니다"):
-        call_command("create_org", "A 학교", "--owner", "kakao:nobody")
-    call_command("create_org", "A 학교", "--owner", "kakao:boss")
+        call_command("create_org", "A 학교", "--owner", "sandcorp:nobody")
+    call_command("create_org", "A 학교", "--owner", "sandcorp:boss")
     with pytest.raises(CommandError, match="이미 있습니다"):
-        call_command("create_org", "A 학교", "--owner", "kakao:boss")
+        call_command("create_org", "A 학교", "--owner", "sandcorp:boss")
     with pytest.raises(CommandError, match="조직이 없습니다"):
-        call_command("add_org_member", "없는 조직", "kakao:boss")
+        call_command("add_org_member", "없는 조직", "sandcorp:boss")
 
 
 @pytest.mark.django_db

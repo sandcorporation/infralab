@@ -16,7 +16,7 @@ def test_set_instructor_opens_the_instructor_api(api):
     s = api.login("teacher-1")
     assert api.get("/api/instructor/me", s).status_code == 403
 
-    call_command("set_instructor", "kakao:teacher-1")
+    call_command("set_instructor", "sandcorp:teacher-1")
 
     assert api.get("/api/instructor/me", s).status_code == 200
     assert api.me(s)["is_instructor"] is True
@@ -27,7 +27,7 @@ def test_set_instructor_off_closes_it_again(api):
     s = api.login_instructor("teacher-2")
     assert api.get("/api/instructor/me", s).status_code == 200
 
-    call_command("set_instructor", "kakao:teacher-2", "--off")
+    call_command("set_instructor", "sandcorp:teacher-2", "--off")
 
     assert api.get("/api/instructor/me", s).status_code == 403
 
@@ -35,4 +35,4 @@ def test_set_instructor_off_closes_it_again(api):
 @pytest.mark.django_db
 def test_set_instructor_for_unknown_user_fails_clearly():
     with pytest.raises(CommandError, match="사용자가 없습니다"):
-        call_command("set_instructor", "kakao:nobody")
+        call_command("set_instructor", "sandcorp:nobody")

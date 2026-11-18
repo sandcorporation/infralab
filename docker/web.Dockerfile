@@ -8,9 +8,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . ./
-# 카카오 REST API 키는 브라우저 번들에 들어가는 공개 값이다(비밀 아님). 비우면 화면은 Fake 로그인만 보인다.
-ARG VITE_KAKAO_REST_KEY=
-ENV VITE_KAKAO_REST_KEY=$VITE_KAKAO_REST_KEY
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime

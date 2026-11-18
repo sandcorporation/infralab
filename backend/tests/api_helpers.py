@@ -1,25 +1,29 @@
 """시험용 시나리오 헬퍼 — 사람(학생·강사)을 만들고 API 를 친다.
 
-Fake 소셜 어댑터의 토큰 형식은 ``"<uid>:<email>[:<nickname>]"`` 이다.
+로그인은 개발용 `POST /api/auth/dev-login`(사용자 이름 `sandcorp:<uid>`)으로 Django 세션을 연다. 사람마다
+쿠키 항아리가 따로 있어야 하므로 `Session` 이 자기 테스트 클라이언트를 갖는다. 상태를 바꾸는 요청에는 브라우저처럼
+대시보드 `Origin` 을 붙인다(세션 인증의 CSRF 확인).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from django.conf import settings
 from django.core.management import call_command
+from django.test import Client
 
 from orgs.models import DEFAULT_ORG_NAME, Organization
 
 
+def dashboard_origin() -> str:
+    return settings.DASHBOARD_ORIGINS[0]
+
+
 @dataclass
 class Session:
-    access: str
-    refresh: str
-
-    @property
-    def headers(self) -> dict[str, str]:
-        return {"HTTP_AUTHORIZATION": f"Bearer {self.access}"}
+    client: Client
+    username: str
 
 
 class Api:
@@ -28,51 +32,53 @@ class Api:
 
     # ---------- 인증 ----------
 
-    def login(self, uid: str = "u1", email: str = "", nickname: str = "", provider: str = "kakao") -> Session:
-        token = f"{uid}:{email or uid + '@example.com'}" + (f":{nickname}" if nickname else "")
-        res = self.client.post(
-            f"/api/auth/social/{provider}/login",
-            data={"access_token": token},
+    def login(self, uid: str = "u1", nickname: str = "") -> Session:
+        client = Client()
+        res = client.post(
+            "/api/auth/dev-login",
+            data={"uid": uid, "nickname": nickname},
             content_type="application/json",
         )
-        assert res.status_code == 200, res.content
-        body = res.json()
-        return Session(access=body["access"], refresh=body["refresh"])
+        assert res.status_code == 204, res.content
+        return Session(client=client, username=f"sandcorp:{uid}")
 
     def login_instructor(self, uid: str = "teacher", org: str = DEFAULT_ORG_NAME, role: str = "owner") -> Session:
         """조직 `org`(없으면 만든다)의 담당자로 로그인한다. 기본은 옛 강사 자리인 「기본 조직」의 owner."""
 
         session = self.login(uid)
         if Organization.objects.filter(name=org).exists():
-            call_command("add_org_member", org, f"kakao:{uid}", "--role", role)
+            call_command("add_org_member", org, session.username, "--role", role)
         else:
-            call_command("create_org", org, "--owner", f"kakao:{uid}")
+            call_command("create_org", org, "--owner", session.username)
             if role != "owner":
-                call_command("add_org_member", org, f"kakao:{uid}", "--role", role)
+                call_command("add_org_member", org, session.username, "--role", role)
         return session
 
     # ---------- 요청 ----------
 
+    def _client(self, session: Session | None) -> Client:
+        return session.client if session else self.client
+
     def get(self, path: str, session: Session | None = None):
-        return self.client.get(path, **(session.headers if session else {}))
+        return self._client(session).get(path)
 
     def post(self, path: str, data=None, session: Session | None = None):
-        return self.client.post(
-            path, data=data or {}, content_type="application/json", **(session.headers if session else {})
+        return self._client(session).post(
+            path, data=data or {}, content_type="application/json", HTTP_ORIGIN=dashboard_origin()
         )
 
     def put(self, path: str, data=None, session: Session | None = None):
-        return self.client.put(
-            path, data=data or {}, content_type="application/json", **(session.headers if session else {})
+        return self._client(session).put(
+            path, data=data or {}, content_type="application/json", HTTP_ORIGIN=dashboard_origin()
         )
 
     def patch(self, path: str, data=None, session: Session | None = None):
-        return self.client.patch(
-            path, data=data or {}, content_type="application/json", **(session.headers if session else {})
+        return self._client(session).patch(
+            path, data=data or {}, content_type="application/json", HTTP_ORIGIN=dashboard_origin()
         )
 
     def delete(self, path: str, session: Session | None = None):
-        return self.client.delete(path, **(session.headers if session else {}))
+        return self._client(session).delete(path, HTTP_ORIGIN=dashboard_origin())
 
     def me(self, session: Session) -> dict:
         res = self.get("/api/accounts/me", session)

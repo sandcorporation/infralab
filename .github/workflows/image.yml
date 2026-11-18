@@ -15,7 +15,7 @@
 #   - main push 의 release.yml(workflow_call)과 수동 실행만. pull_request·pull_request_target 으로 이미지를 굽거나 올리지 않는다.
 #   - packages: write 는 이 워크플로에만. 로그인은 GITHUB_TOKEN 하나, 다른 secrets 없음.
 #   - self-hosted·QEMU 없음. 액션은 공식(actions/*·docker/*)만, SHA 고정.
-#   - build-args 는 비밀이 아니다(VITE_KAKAO_REST_KEY 는 브라우저 번들에 들어가는 공개 값, 저장소 변수). 로그·이미지는 공개다.
+#   - build-args 는 비밀이 아니다(버전 sha 뿐). 로그·이미지는 공개다.
 name: image
 
 on:
@@ -52,8 +52,7 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
             suffix: ""
-            build_args: |
-              VITE_KAKAO_REST_KEY=${{ vars.VITE_KAKAO_REST_KEY }}
+            build_args: ""
           - name: infralab-agent
             dockerfile: agent/Dockerfile
             context: agent

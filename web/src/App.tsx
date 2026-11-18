@@ -1,7 +1,6 @@
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import LoginPage from "./pages/LoginPage";
-import KakaoCallbackPage from "./pages/KakaoCallbackPage";
 import JoinPage from "./pages/JoinPage";
 import MyCohortsPage from "./pages/MyCohortsPage";
 import InstructorCohortsPage from "./pages/InstructorCohortsPage";
@@ -56,7 +55,6 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/auth/kakao/callback" element={<KakaoCallbackPage />} />
         <Route path="/join/:token" element={<JoinPage />} />
         <Route path="/org-invite/:token" element={<OrgInvitePage />} />
         <Route element={<RequireAuth />}>

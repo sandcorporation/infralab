@@ -19,7 +19,7 @@ STUDENT_IMAGE_VARS = ("AGENT_IMAGE", "WORKSTATION_IMAGE", "FLOCI_IMAGE")
 
 
 def _fresh_settings(monkeypatch: pytest.MonkeyPatch, **env: str) -> dict[str, object]:
-    cleared = (*STUDENT_IMAGE_VARS, "DJANGO_DEBUG", "DJANGO_SECRET_KEY", "SOCIAL_AUTH_MODE")
+    cleared = (*STUDENT_IMAGE_VARS, "DJANGO_DEBUG", "DJANGO_SECRET_KEY")
     for name in (*cleared, "DJANGO_ALLOWED_HOSTS", "DJANGO_CSRF_TRUSTED_ORIGINS"):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
@@ -92,4 +92,5 @@ def test_production_settings_trust_the_proxy_and_read_hosts_and_origins(monkeypa
     assert s["ALLOWED_HOSTS"] == ["infralab.sandcorp.co.kr", "backend"]
     assert s["CSRF_TRUSTED_ORIGINS"] == ["https://infralab.sandcorp.co.kr"]
     assert s["SECURE_PROXY_SSL_HEADER"] == ("HTTP_X_FORWARDED_PROTO", "https")
-    assert s["SOCIAL_AUTH_MODE"] == "real"
+    assert s["DEV_LOGIN_ENABLED"] is False
+    assert s["SESSION_COOKIE_SECURE"] is True

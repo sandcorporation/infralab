@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { loginUrl } from "../api";
 import { useAuth } from "../auth";
-import { kakaoEnabled, startKakaoLogin } from "../kakao";
 
-// 개발용(Fake) 로그인 폼은 개발 서버(DEV)이거나 명시 변수 VITE_DEV_LOGIN=1 일 때만 보인다.
-// 운영 빌드는 카카오 키가 없어도 폼을 띄우지 않는다.
+// 개발용 로그인 폼은 개발 서버(DEV)이거나 명시 변수 VITE_DEV_LOGIN=1 일 때만 보인다(backend 도 DEBUG 에서만 받는다).
+// 운영 빌드는 Sandcorp 계정 버튼 하나 — 카카오·GitHub·Google 선택은 auth 쪽 화면이다.
 function devLoginAllowed(): boolean {
   return import.meta.env.DEV || import.meta.env.VITE_DEV_LOGIN === "1";
 }
@@ -13,10 +13,11 @@ export default function LoginPage() {
   const { me, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [params] = useSearchParams();
   const returnTo = (location.state as { from?: string } | null)?.from ?? "/";
   const [uid, setUid] = useState("");
   const [nickname, setNickname] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(params.get("error") ? "로그인하지 못했습니다. 다시 시도하세요." : null);
   const [busy, setBusy] = useState(false);
 
   if (me) return <Navigate to={returnTo} replace />;
@@ -26,8 +27,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      // Fake 어댑터 토큰 형식: "<uid>:<email>[:<nickname>]"
-      await login("kakao", `${uid}:${uid}@example.com${nickname ? `:${nickname}` : ""}`);
+      await login(uid, nickname);
       navigate(returnTo, { replace: true });
     } catch (err) {
       setError((err as Error).message);
@@ -39,13 +39,7 @@ export default function LoginPage() {
   return (
     <section className="card narrow">
       <h1>로그인</h1>
-      {kakaoEnabled ? (
-        <button className="kakao" onClick={() => startKakaoLogin(returnTo)}>
-          카카오로 로그인
-        </button>
-      ) : !devLoginAllowed() ? (
-        <p className="muted">로그인 준비 중</p>
-      ) : (
+      {devLoginAllowed() ? (
         <>
           <p className="muted">개발용 로그인</p>
           <form onSubmit={fakeLogin} className="stack">
@@ -62,6 +56,8 @@ export default function LoginPage() {
             </button>
           </form>
         </>
+      ) : (
+        <button className="sso" onClick={() => window.location.assign(loginUrl(returnTo))}>Sandcorp 계정으로 로그인</button>
       )}
       {error && <p className="error">{error}</p>}
     </section>

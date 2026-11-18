@@ -47,8 +47,8 @@ def test_migration_keeps_the_running_class_working(api):
     Membership = old.get_model("cohorts", "Membership")
     Submission = old.get_model("submissions", "Submission")
 
-    User.objects.create(username="kakao:teacher", is_instructor=True)
-    student = User.objects.create(username="kakao:student")
+    User.objects.create(username="sandcorp:teacher", is_instructor=True)
+    student = User.objects.create(username="sandcorp:student")
     c1 = Cohort.objects.create(name="1기", open_scenario_ids=[S3])
     c2 = Cohort.objects.create(name="2기", join_open=True)
     m = Membership.objects.create(user=student, cohort=c1)
@@ -87,7 +87,7 @@ def test_migration_keeps_the_running_class_working(api):
 @pytest.mark.django_db(transaction=True)
 def test_migration_on_an_empty_database_creates_no_org(api):
     old = _before()
-    old.get_model("accounts", "User").objects.create(username="kakao:plain")
+    old.get_model("accounts", "User").objects.create(username="sandcorp:plain")
 
     _migrate(_latest())
 

@@ -13,7 +13,7 @@
 
 ## 🧭 무엇을 하는 서비스인가
 
-- **수강생**: 소셜 로그인(카카오) 후 강사가 준 가입 링크로 기수에 들어갑니다. 안내에 따라 받은 `compose.yml` 을 자기 PC에서 `docker compose up` 하면 실습 환경(workstation·Floci·에이전트)이 뜹니다. 시나리오 화면에서 문제를 읽고, 화면 안 브라우저 터미널로 직접 고친 뒤 채점합니다. 통과 여부와 힌트가 바로 나옵니다.
+- **수강생**: Sandcorp 계정으로 로그인한 뒤 강사가 준 가입 링크로 기수에 들어갑니다. 안내에 따라 받은 `compose.yml` 을 자기 PC에서 `docker compose up` 하면 실습 환경(workstation·Floci·에이전트)이 뜹니다. 시나리오 화면에서 문제를 읽고, 화면 안 브라우저 터미널로 직접 고친 뒤 채점합니다. 통과 여부와 힌트가 바로 나옵니다.
 - **강사**: 기수를 만들고 가입 링크를 관리하며, 수강생 × 시나리오 격자로 진행 상황을 봅니다. 칸을 누르면 제출 이력, 검사별 통과·실패와 원시 출력, 제출에 붙은 AI 대화 기록(Claude Code·Codex)을 볼 수 있습니다.
 - **서버는 학생 PC에 접근하지 않습니다.** 서버 주소도 서버 자격증명도 학생 PC의 에이전트는 모릅니다. 브라우저가 서버와 에이전트 사이에서 요청과 결과를 옮깁니다.
 
@@ -59,7 +59,7 @@ flowchart LR
         FL["Floci<br/>AWS 에뮬레이터"]
         KD["kind<br/>Kubernetes"]
     end
-    SPA -- "REST (JWT)" --> API
+    SPA -- "REST (세션 쿠키)" --> API
     API --- DB
     SC -. "시작 때 로드" .-> API
     SPA -- "REST · WebSocket 터미널<br/>(에이전트 토큰)" --> AG
@@ -77,7 +77,7 @@ flowchart LR
 | 폴더 | 내용 |
 | --- | --- |
 | `agent/` | 학생 PC 에서 도는 Go 단일 바이너리(`infra-agent`). 검사 실행, 환경 준비, Floci·kind 제어, 브라우저 터미널 중계. 자세한 API 는 [`agent/README.md`](agent/README.md) |
-| `backend/` | Django 5.2 + django-ninja API. 앱: `accounts`(소셜 로그인·JWT), `cohorts`, `scenarios`, `submissions` |
+| `backend/` | Django 5.2 + django-ninja API. 앱: `accounts`(sandcorp-auth 로그인·세션), `cohorts`, `scenarios`, `submissions` |
 | `web/` | React 18 + Vite + TypeScript, Mantine 8, xterm.js. [`web/README.md`](web/README.md) |
 | `docker/` | 개발용 compose(`compose.dev.yaml`), backend 이미지(개발·운영), web 운영 이미지, 학생용 `workstation` 이미지 |
 | `scenarios/` | 시나리오 YAML 과 setup·검사 스크립트. `_shared/` 는 시나리오 공용 스크립트 |
@@ -97,7 +97,7 @@ docker compose -f docker/compose.dev.yaml up
 | backend | 58040 | `INFRALAB_API_PORT` |
 | Postgres | 55440 | `INFRALAB_DB_PORT` |
 
-- `VITE_KAKAO_REST_KEY` 를 주면 카카오 로그인, 비우면 Fake 로그인만 보입니다(backend 도 같은 값을 보고 어댑터를 고릅니다).
+- 개발 스택은 DEBUG 라 로그인 화면이 개발용 로그인(아이디만 넣으면 `sandcorp:<아이디>` 사용자)입니다. 운영 로그인은 sandcorp-auth(`INFRALAB_AUTH_*`, [`docs/ops/deploy.md`](docs/ops/deploy.md)).
 - 시나리오 YAML 은 서버가 시작할 때 읽으니, 고치면 backend 를 재기동하세요.
 - 학생 PC 쪽 compose(에이전트·workstation·Floci)는 서버가 학생마다 만들어 주는 별개 파일입니다. 에이전트·workstation 이미지는 로컬에서 빌드해 씁니다.
 

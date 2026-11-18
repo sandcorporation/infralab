@@ -1,4 +1,5 @@
-// 서버 API 클라이언트. 토큰 쌍은 localStorage 에 두고(프로토타입), 401 이면 리프레시를 한 번 시도한다.
+// 서버 API 클라이언트. 인증은 backend 의 Django 세션 쿠키(HttpOnly)다 — 화면은 토큰을 갖지 않는다.
+// 로그인은 sandcorp-auth 로 가는 /api/auth/login(운영) 또는 개발용 /api/auth/dev-login.
 
 export class ApiError extends Error {
   constructor(
@@ -9,57 +10,12 @@ export class ApiError extends Error {
   }
 }
 
-export type TokenPair = { access: string; refresh: string };
-
-const KEY = "infralab.tokens";
-
-export function loadTokens(): TokenPair | null {
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as TokenPair) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveTokens(t: TokenPair | null) {
-  try {
-    if (t) localStorage.setItem(KEY, JSON.stringify(t));
-    else localStorage.removeItem(KEY);
-  } catch {
-    /* 저장소를 못 쓰면 이 탭에서만 로그인 상태다 */
-  }
-}
-
-/** 토큰이 더 쓸 수 없게 됐을 때(리프레시 거부) 화면 전체에 알리는 이벤트 — AuthProvider 가 듣고 로그아웃 상태로 바꾼다. */
+/** 세션이 없거나 끝났을 때(401) 화면 전체에 알리는 이벤트 — AuthProvider 가 듣고 로그아웃 상태로 바꾼다. */
 export const UNAUTHENTICATED_EVENT = "infralab:unauthenticated";
 
-let refreshing: Promise<TokenPair | null> | null = null;
-
-async function refreshTokens(): Promise<TokenPair | null> {
-  const current = loadTokens();
-  if (!current) return null;
-  if (!refreshing) {
-    refreshing = (async () => {
-      const res = await fetch("/api/auth/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh: current.refresh }),
-      });
-      if (res.status === 401) {
-        saveTokens(null);
-        window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
-        return null;
-      }
-      if (!res.ok) return null; // 일시적 오류 — 토큰은 남긴다
-      const pair = (await res.json()) as TokenPair;
-      saveTokens(pair);
-      return pair;
-    })().finally(() => {
-      refreshing = null;
-    });
-  }
-  return refreshing;
+/** auth 로그인 시작 주소. 돌아올 경로는 같은 사이트 경로만 backend 가 받는다. */
+export function loginUrl(next: string): string {
+  return `/api/auth/login?${new URLSearchParams({ next })}`;
 }
 
 async function errorMessage(res: Response): Promise<string> {
@@ -74,17 +30,12 @@ async function errorMessage(res: Response): Promise<string> {
   return `${res.status} ${res.statusText}`;
 }
 
-/** 인증 헤더를 붙여 요청하고, 401 이면 리프레시 뒤 한 번 다시 시도한다. 성공 응답만 돌려준다. */
-async function request(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
-  const tokens = loadTokens();
+/** 세션 쿠키를 실어 요청한다. 401 이면 로그아웃 상태를 알린다. 성공 응답만 돌려준다. */
+async function request(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (tokens) headers.set("Authorization", `Bearer ${tokens.access}`);
-  const res = await fetch(path, { ...init, headers });
-  if (res.status === 401 && tokens && retry) {
-    const fresh = await refreshTokens();
-    if (fresh) return request(path, init, false);
-  }
+  const res = await fetch(path, { ...init, headers, credentials: "same-origin" });
+  if (res.status === 401) window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
   return res;
 }
@@ -194,11 +145,9 @@ export type Grid = { scenarios: { id: string; title: string; total: number }[]; 
 
 // ---------- 호출 ----------
 
-export const socialLogin = (provider: string, accessToken: string) =>
-  api<TokenPair & { token_type: string }>(`/api/auth/social/${provider}/login`, {
-    method: "POST",
-    body: JSON.stringify({ access_token: accessToken }),
-  });
+export const devLogin = (uid: string, nickname: string) =>
+  api<void>("/api/auth/dev-login", { method: "POST", body: JSON.stringify({ uid, nickname }) });
+export const logoutSession = () => api<void>("/api/auth/logout", { method: "POST" });
 export const getMe = () => api<Me>("/api/accounts/me");
 export const getMyCohorts = () => api<MyCohort[]>("/api/cohorts");
 export const getMyCohort = (id: number) => api<MyCohortDetail>(`/api/cohorts/${id}`);
