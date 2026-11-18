@@ -11,11 +11,11 @@ const klass: MyCohort = { id: 3, name: "1기", archived: false, joined_at: "2026
 const archived: MyCohort = { id: 4, name: "0기", archived: true, joined_at: "2026-03-01T00:00:00Z" };
 
 describe("첫 화면 진입 규칙", () => {
-  it.skip("속한 수업·시험 묶음이 없으면 연습 화면으로 간다", () => { // #133
+  it("속한 수업·시험 묶음이 없으면 연습 화면으로 간다", () => {
     expect(shouldOpenPractice([])).toBe(true);
   });
 
-  it.skip("묶음이 하나라도 있으면 지금처럼 「내 기수」다", () => { // #133
+  it("묶음이 하나라도 있으면 지금처럼 「내 기수」다", () => {
     expect(shouldOpenPractice([klass])).toBe(false);
     expect(shouldOpenPractice([archived])).toBe(false);
     expect(shouldOpenPractice([klass, archived])).toBe(false);
