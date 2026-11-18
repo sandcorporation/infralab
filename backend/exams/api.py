@@ -26,6 +26,7 @@ from accounts.auth import check_origin, instructor_auth
 from cohorts.api import _cohort_out as cohort_out
 from cohorts.api import _cohorts_with_counts as cohorts_with_counts
 from cohorts.models import Cohort, Membership
+from cohorts.services import managed_cohorts
 from cohorts.schemas import CohortOut
 
 from . import ai, grading, services
@@ -255,7 +256,40 @@ def edit_rubric_item(request: HttpRequest, cohort_id: int, invite_id: int, key: 
 
 @instructor_router.get("/exam-dashboard")
 def exam_dashboard(request: HttpRequest):
-    raise NotImplementedError("#77")
+    """내 조직들의 시험 회차마다 초대·시작·끝난 수와 끝난 응시의 최종 점수 분포(5구간). 회수한 링크는 세지 않는다."""
+
+    now = timezone.now()
+    cohorts = managed_cohorts(request.auth).filter(kind=Cohort.Kind.EXAM).order_by("id")
+    rows = []
+    for cohort in cohorts:
+        invites = list(
+            cohort.exam_invites.filter(revoked_at=None).select_related("cohort", "membership")
+        )
+        buckets = [0] * 5
+        started = finished = 0
+        for invite in invites:
+            status = services.attempt_status(invite, now)
+            if status == "invited":
+                continue
+            started += 1
+            if status != "finished":
+                continue
+            finished += 1
+            percent = services.score(invite)["final_percent"]
+            if percent is not None:
+                buckets[min(4, max(0, percent) // 20)] += 1
+        rows.append(
+            {
+                "cohort_id": cohort.id,
+                "org_id": cohort.org_id,
+                "name": cohort.name,
+                "invited": len(invites),
+                "started": started,
+                "finished": finished,
+                "score_buckets": buckets,
+            }
+        )
+    return rows
 
 
 # ---------- 지원자 ----------

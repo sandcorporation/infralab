@@ -7,12 +7,12 @@ import { describe, expect, it } from "vitest";
 import { bucketHeights } from "../exam";
 
 describe("점수 분포 막대", () => {
-  it.skip("가장 큰 구간을 1 로 두고 나머지는 그 비율이다", () => { // #77
+  it("가장 큰 구간을 1 로 두고 나머지는 그 비율이다", () => {
     expect(bucketHeights([2, 4, 0, 1, 0])).toEqual([0.5, 1, 0, 0.25, 0]);
     expect(bucketHeights([0, 0, 3, 0, 0])).toEqual([0, 0, 1, 0, 0]);
   });
 
-  it.skip("빈 회차는 모두 0 이다", () => { // #77
+  it("빈 회차는 모두 0 이다", () => {
     expect(bucketHeights([0, 0, 0, 0, 0])).toEqual([0, 0, 0, 0, 0]);
   });
 });

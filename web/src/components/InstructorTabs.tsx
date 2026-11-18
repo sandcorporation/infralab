@@ -7,6 +7,7 @@ export function InstructorTabs() {
       <NavLink to="/instructor" end>
         기수
       </NavLink>
+      <NavLink to="/instructor/exams">시험 대시보드</NavLink>
       <NavLink to="/instructor/org">조직</NavLink>
     </nav>
   );
