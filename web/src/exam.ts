@@ -80,13 +80,15 @@ export function rememberedExamToken(): string | null {
 export const isExamUser = (username: string | undefined) => !!username?.startsWith("exam-invite:");
 
 /** env 를 키 순서대로 `export K="V"` 줄로 잇는다(끝 줄바꿈 없음, 값 안의 " \ $ ` 는 앞에 \). */
-export function envExportText(_env: Record<string, string>): string {
-  throw new Error("#72");
+export function envExportText(env: Record<string, string>): string {
+  return Object.entries(env)
+    .map(([k, v]) => `export ${k}="${v.replace(/["\\$`]/g, "\\$&")}"`)
+    .join("\n");
 }
 
-/** AI 키 설정을 받는다(GET /api/exam/<토큰>/ai-config). */
-export function getAiConfig(_token: string): Promise<AiConfig> {
-  throw new Error("#72");
+/** AI 키 설정을 받는다(GET /api/exam/<토큰>/ai-config). 응시 중이 아니거나 회수됐으면 409. */
+export function getAiConfig(token: string): Promise<AiConfig> {
+  return api<AiConfig>(`${examPath(token)}/ai-config`);
 }
 
 /** 점수 분포 막대 높이 — 가장 큰 구간을 1 로 둔 비율, 모두 0 이면 모두 0. */
