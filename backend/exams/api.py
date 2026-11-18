@@ -133,8 +133,8 @@ def create_exam_invite(request: HttpRequest, cohort_id: int, payload: ExamInvite
 
 @instructor_router.get("/cohorts/{cohort_id}/exam-invites", response=list[ExamInviteOut])
 def list_exam_invites(request: HttpRequest, cohort_id: int):
+    cohort = _exam_cohort(request, cohort_id)
     invites = cohort.exam_invites.annotate(event_count=Count("events")).order_by("id")
-    invites = cohort.exam_invites.annotate(event_count=Count("events"))
     return [_invite_out(i, i.event_count) for i in invites]
 
 
