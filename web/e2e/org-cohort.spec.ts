@@ -46,7 +46,8 @@ test("담당자: 기수 목록 → 기수 관리 → 격자 → 제출이 있는
 
   const drawer = boss.getByRole("dialog");
   await expect(drawer.getByRole("heading", { name: /격자학생/ })).toBeVisible();
-  await expect(drawer.getByText("ready-file", { exact: true })).toBeVisible();
+  // 서버는 검사 이름을 시나리오 정의(`ready.txt 가 있다`)에서 붙인다 — 올린 이름이 아니다.
+  await expect(drawer.getByText("ready.txt 가 있다", { exact: true })).toBeVisible();
   await expect(drawer.getByText("ready", { exact: true })).toBeVisible();
   await expect(drawer.getByRole("heading", { name: /1\/1/ })).toBeVisible();
 });
