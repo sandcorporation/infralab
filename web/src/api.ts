@@ -377,3 +377,34 @@ export function joinUrl(token: string): string {
 export function formatTime(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
 }
+
+export type PracticeScenarioRow = {
+  id: string;
+  title: string;
+  total: number;
+  best_passed: number | null;
+  submission_count: number;
+  last_submitted_at: string | null;
+};
+export const getPracticeScenarios = () => api<PracticeScenarioRow[]>("/api/practice/scenarios");
+export type PracticeHistoryRow = {
+  id: number;
+  submitted_at: string;
+  passed: number;
+  total: number;
+  has_transcript: boolean;
+  has_feedback: boolean;
+};
+export const getPracticeHistory = (scenarioId: string) =>
+  api<PracticeHistoryRow[]>(`/api/practice/scenarios/${encodeURIComponent(scenarioId)}/submissions`);
+export type PracticeSubmissionDetail = {
+  id: number;
+  scenario_id: string;
+  submitted_at: string;
+  passed: number;
+  total: number;
+  has_transcript: boolean;
+  results: { check_id: string; name: string; pass: boolean; output: string; truncated: boolean; error?: string }[];
+  feedback: PracticeFeedback | null;
+};
+export const getPracticeSubmission = (id: number) => api<PracticeSubmissionDetail>(`/api/practice/submissions/${id}`);

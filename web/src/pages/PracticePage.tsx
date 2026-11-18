@@ -28,7 +28,7 @@ export default function PracticePage() {
   }
 
   if (!status) return error ? <p className="error">{error}</p> : <p className="muted">불러오는 중…</p>;
-  if (status.joined) return <CohortView cohortId={status.cohort_id} backTo="/practice" backLabel="연습" />;
+  if (status.joined) return <CohortView cohortId={status.cohort_id} backTo="/practice" backLabel="연습" practice />;
 
   return (
     <section className="card narrow">

@@ -19,7 +19,9 @@ from cohorts.models import Cohort, Membership
 from cohorts.schemas import JoinOut
 from exams import grading
 from exams.api import HIDDEN_USER_PREFIX
+from scenarios import registry
 from submissions.models import Submission
+from submissions.services import has_transcript, passed_against, score
 
 from .models import PracticeFeedback
 from .services import practice_cohort
@@ -199,16 +201,105 @@ def feedback_quota(request: HttpRequest):
 # ---------- 내 기록 ----------
 
 
-@practice_router.get("/practice/scenarios")
+class PracticeScenarioOut(Schema):
+    id: str
+    title: str
+    total: int
+    best_passed: int | None
+    submission_count: int
+    last_submitted_at: datetime | None
+
+
+class PracticeHistoryOut(Schema):
+    id: int
+    submitted_at: datetime
+    passed: int
+    total: int
+    has_transcript: bool
+    has_feedback: bool
+
+
+class PracticeSubmissionOut(Schema):
+    id: int
+    scenario_id: str
+    submitted_at: datetime
+    passed: int
+    total: int
+    has_transcript: bool
+    results: list[dict]
+    feedback: FeedbackOut | None
+
+
+def _my_practice_membership(request: HttpRequest) -> Membership:
+    m = Membership.objects.filter(user=request.auth, cohort__kind=Cohort.Kind.PRACTICE).first()
+    if m is None:
+        raise HttpError(404, "연습을 시작하지 않았습니다.")
+    return m
+
+
+@practice_router.get("/practice/scenarios", response=list[PracticeScenarioOut])
 def my_practice_scenarios(request: HttpRequest):
-    raise NotImplementedError("#136")
+    m = _my_practice_membership(request)
+    subs: dict[str, list[Submission]] = {}
+    for sub in Submission.objects.filter(membership=m).order_by("id"):
+        subs.setdefault(sub.scenario_id, []).append(sub)
+    rows = []
+    for sid, scenario in registry.all_scenarios().items():
+        mine = subs.get(sid, [])
+        rows.append(
+            PracticeScenarioOut(
+                id=sid,
+                title=scenario.title,
+                total=len(scenario.checks),
+                best_passed=max((passed_against(s, scenario) for s in mine), default=None),
+                submission_count=len(mine),
+                last_submitted_at=max((s.submitted_at for s in mine), default=None),
+            )
+        )
+    return rows
 
 
-@practice_router.get("/practice/scenarios/{scenario_id}/submissions")
+@practice_router.get("/practice/scenarios/{scenario_id}/submissions", response=list[PracticeHistoryOut])
 def my_practice_history(request: HttpRequest, scenario_id: str):
-    raise NotImplementedError("#136")
+    if registry.get(scenario_id) is None:
+        raise HttpError(404, "시나리오를 찾을 수 없습니다.")
+    m = _my_practice_membership(request)
+    subs = Submission.objects.filter(membership=m, scenario_id=scenario_id).order_by("-id")
+    with_feedback = set(PracticeFeedback.objects.filter(submission__in=subs).values_list("submission_id", flat=True))
+    out = []
+    for sub in subs:
+        passed, total = score(sub)
+        out.append(
+            PracticeHistoryOut(
+                id=sub.id,
+                submitted_at=sub.submitted_at,
+                passed=passed,
+                total=total,
+                has_transcript=has_transcript(sub),
+                has_feedback=sub.id in with_feedback,
+            )
+        )
+    return out
 
 
-@practice_router.get("/practice/submissions/{submission_id}")
+@practice_router.get("/practice/submissions/{submission_id}", response=PracticeSubmissionOut)
 def my_practice_submission(request: HttpRequest, submission_id: int):
-    raise NotImplementedError("#136")
+    sub = Submission.objects.filter(
+        id=submission_id,
+        membership__user=request.auth,
+        membership__cohort__kind=Cohort.Kind.PRACTICE,
+    ).first()
+    if sub is None:
+        raise HttpError(404, "연습 제출을 찾을 수 없습니다.")
+    fb = PracticeFeedback.objects.filter(submission=sub).first()
+    passed, total = score(sub)
+    return PracticeSubmissionOut(
+        id=sub.id,
+        scenario_id=sub.scenario_id,
+        submitted_at=sub.submitted_at,
+        passed=passed,
+        total=total,
+        has_transcript=has_transcript(sub),
+        results=sub.results,
+        feedback=_feedback_out(fb) if fb else None,
+    )

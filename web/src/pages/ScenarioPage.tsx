@@ -5,6 +5,7 @@ import { ApiError, getCohortScenario, getPractice, parseId, type ScenarioDetail 
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
 import { isPrepared } from "../agent";
 import { EnvActions } from "../components/EnvActions";
+import { PracticeHistory } from "../components/PracticeHistory";
 import { PrepareButton } from "../components/PrepareButton";
 import { EnvCheck, envVerdict } from "../components/EnvCheck";
 import { GradePanel } from "../components/GradePanel";
@@ -113,6 +114,7 @@ export default function ScenarioPage() {
                   lockedReason={examEnded ? "시험 마감" : env?.ready ? (prepared === false ? "환경 준비 먼저" : prepared === null ? "준비 확인 중…" : undefined) : undefined}
                 />
               </section>
+              {isPractice && <PracticeHistory scenarioId={scenario.id} />}
             </>
           )}
         </div>
