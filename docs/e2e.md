@@ -15,6 +15,7 @@ bash scripts/check_workstation_image.sh --build   # workstation 이미지 실행
 - 연습 시나리오도 이 e2e 시나리오다(연습 묶음은 서버의 모든 시나리오를 연다). 공통 조작 `newStudent`·`startPractice`·`joinClassCohort` 는 `web/e2e/flows.ts` 에 있다.
 - 시나리오는 `web/e2e/fixtures/scenarios/` 의 둘: `e2e-prepare`(준비가 `/work/app/ready.txt` 를 만들고, 검사 하나)와 `e2e-untouched`(「제출 없는 시나리오」 행을 보이려고 둔 것 — 시험이 제출하지 않는다).
 - 연습 피드백은 공급사 키 없는 스택의 가짜 채점기(결정적)가 매긴다. AI 대화는 학생이 AI 도구로 남긴 세션 기록을 workstation 홈(`/root/.claude/projects/…jsonl`)에 심어(`plantClaudeSession`) 「AI 대화 함께 제출」로 올린다 — 진짜 AI 없이. 에이전트는 준비 표시보다 나중에 바뀐 파일만 읽으므로(초 단위) 환경 준비 뒤에 심는다.
+- AI 프록시: e2e 스택은 `proxy`(`proxy/`)를 가짜 공급사 모드(`INFRALAB_PROXY_FAKE_PROVIDER=1`)로 올린다 — 진짜 키·외부 네트워크 없이 결정적 대답 `infralab fake provider reply.` 를 준다. backend 는 e2e 전용 공유 비밀로 이 프록시를 부르고(공급사 키가 「있음」으로 알려져 회차 설정에서 Claude Code·Codex 를 고른다), 지원자에게 주는 공개 주소도 compose 안 주소 `http://proxy:58090` 이다(workstation 이 같은 compose 망). 개발·운영 compose 에는 가짜 공급사 모드가 없다.
 - 숨은 검사: backend 는 `INFRALAB_PROBLEMS_DIR=/e2e-problems`(`web/e2e/fixtures/problems`, 견본 문제은행)를 읽고 e2e 시나리오에 검사 하나가 붙는다. `problems-sample/` 에 두지 않은 까닭: 그 폴더의 모든 `<id>` 는 저장소 `scenarios/` 에 있어야 하는데(backend 시험이 그렇게 읽는다) e2e 시나리오는 저장소 시나리오가 아니다. 실제 문제은행 내용은 넣지 않는다.
 - 재시도 없음, workers 1. 실패하면 `web/test-results/` 에 trace 가 남는다(CI 는 아티팩트 `e2e-traces`).
 
@@ -47,6 +48,8 @@ release 뒤 스모크로 두지 않은 까닭: 목적이 병합 전에 잡는 �
 | 내 기록: 두 번 제출 → 목록의 최고·제출 수·마지막 제출(미제출 「—」), 제출 이력 두 줄, 한 줄을 열면 검사별 결과·피드백 | `practice-feedback.spec.ts` | #144 |
 | 마감 뒤: 시계를 당기면(e2e 전용 관리 명령 `e2e_expire_exam`) 머리 배지 「마감」·마감 안내, 시나리오 화면의 채점이 막힘 — 1분을 기다리지 않는다 | `exam-deadline.spec.ts` | #96 — 마감 판정·안내를 되돌리면 실패한다 |
 | 숨은 검사 켠 시험: 환경 준비 → 응시 화면에서 끝내기 → 「채점 마무리 중」 → 「제출 완료」, 숨은 검사 결과가 서버(보고서 API 숨은 검사 1/1)에 올라감 | `hidden-checks.spec.ts` | #100 — 결과 업로드를 되돌리면 보고서가 「대기」에 머물러 실패한다 |
+| AI 키 설정: 응시 중 「설정 파일 복사」「환경변수 복사」 → 「복사했습니다」·붙여 넣기 안내, 붙여 넣은 설정으로 workstation 의 `ANTHROPIC_BASE_URL` 이 프록시이고 그 길의 요청이 가짜 공급사 대답(고정 모델)을 받음, 담당자 화면에서 회수 → 같은 임시 토큰의 다음 요청 401 | `exam-ai-proxy.spec.ts` | #97·#98 — 키 설정 주소·토큰, 프록시 판정(회수 → `revoked`)을 되돌리면 실패한다 |
+| AI 키 설정 칸 — 시작 전·마감 뒤: 허용 도구가 있어도 시작 전·마감 뒤(시계를 당긴다)에는 칸이 없음 | `exam-ai-proxy.spec.ts` | #97 |
 | workstation: root·로그인 셸 IS_SANDBOX=1·claude 가 root 거부 안 함(네트워크 없음) | `scripts/check_workstation_image.sh` | #125 — `IS_SANDBOX` 를 비우면 거부 문구로 실패한다 |
 
 ## spec #45·#62·#130 의 사람 확인 항목
@@ -72,11 +75,11 @@ release 뒤 스모크로 두지 않은 까닭: 목적이 병합 전에 잡는 �
 | #96 | 시나리오 화면에서 채점·제출, 상단 띠에 남은 시간 | 옮김: 「환경 준비 → 준비됨 → 채점」(채점·제출), 「응시 흐름」(띠) |
 | #96 | 시간 제한 1분 회차에서 마감 뒤 채점 막힘·「마감」 안내 | 옮김: 「마감 뒤」(시계를 당기는 e2e 전용 관리 명령 — `INFRALAB_E2E_HOOKS` 는 e2e compose 만 주고 DEBUG 일 때만 켜진다) |
 | #96 | 라이트·다크 1280px 사진 | 남김: 보기 판단 |
-| #97 | 「AI 키 설정」 복사 → workstation 에서 `ANTHROPIC_BASE_URL` 이 프록시 | 후속: AI 도구는 공급사 키가 있어야 켜진다 — 가짜 공급사 키로 |
-| #97 | 「환경변수 복사」「설정 파일 복사」 뒤 「복사했습니다」, 시작 전·마감 뒤 칸 없음 | 후속: 위와 같음 |
+| #97 | 「AI 키 설정」 복사 → workstation 에서 `ANTHROPIC_BASE_URL` 이 프록시 | 옮김: 「AI 키 설정」(가짜 공급사 모드 프록시) |
+| #97 | 「환경변수 복사」「설정 파일 복사」 뒤 「복사했습니다」, 시작 전·마감 뒤 칸 없음 | 옮김: 「AI 키 설정」(복사), 「AI 키 설정 칸 — 시작 전·마감 뒤」 |
 | #98 | `docker build proxy/` | 옮김(이미): `exam-proxy-route` 잡이 프록시 이미지를 빌드해 돈다 |
-| #98 | 가짜 공급사 모드로 프록시를 띄우는 명령 | 후속 |
-| #98 | 담당자 화면에서 임시 토큰 회수 → 다음 요청 401 | 후속: e2e 스택에 프록시를 더해야 한다 |
+| #98 | 가짜 공급사 모드로 프록시를 띄우는 명령 | 옮김: e2e 스택이 `proxy` 를 `INFRALAB_PROXY_FAKE_PROVIDER=1` 로 띄운다(`docker/compose.e2e.yaml`), 개발·운영 compose 에는 없음을 `backend/tests/test_spec_e2e_followup_proxy.py` 가 본다 |
+| #98 | 담당자 화면에서 임시 토큰 회수 → 다음 요청 401 | 옮김: 「AI 키 설정」(응시 링크 표의 「회수」 → 같은 토큰의 다음 요청 401) |
 | #98 | workstation → 프록시 원격 주소·`client_id` 가 지원자마다 안정 | 남김: 실제 학생 PC 네트워크(NAT) |
 | #100 | 견본 문제은행으로 시험을 끝까지 치러 「채점 마무리 중」→「제출 완료」 | 옮김: 「숨은 검사 켠 시험」(견본 문제은행은 `web/e2e/fixtures/problems`) |
 | #101 | 탭 전환·창 밖 클릭·붙여넣기 뒤 감독 기록에 신호가 시각순 | 옮김: 「응시 흐름」(탭 이탈·붙여넣기 시각순), 「터미널 Ctrl+V」 |
@@ -106,4 +109,4 @@ release 뒤 스모크로 두지 않은 까닭: 목적이 병합 전에 잡는 �
 | #144 | 시나리오의 제출 이력 두 줄 | 옮김: 「내 기록」 |
 | #144 | 이력 한 줄 → 검사별 결과·피드백 | 옮김: 「내 기록」 |
 
-셈: 50항목 중 옮김 25(일부 포함), 남김 12, 후속 13(#103 은 후속으로 셈). 새로 더한 회귀: #126·#124·#125.
+셈: 50항목 중 옮김 29(일부 포함), 남김 12, 후속 9(#103 은 후속으로 셈). 새로 더한 회귀: #126·#124·#125.
