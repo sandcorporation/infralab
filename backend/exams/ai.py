@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from cohorts.compose import AGENT_CONTAINER, AGENT_PORT
 
-from . import services
+from . import providers, services
 from .models import AIExchange, AIToken, ExamInvite
 
 #: 마지막 사용 뒤 이 시간 안에는 다른 클라이언트가 같은 토큰을 쓸 수 없다.
@@ -53,10 +53,13 @@ def revoke(invite: ExamInvite, now: datetime | None = None) -> None:
 
 
 def tool_configs(invite: ExamInvite, token: str) -> list[dict]:
-    """회차가 허용한 도구마다 workstation 터미널에 붙여 넣을 설정."""
+    """회차가 허용한 도구마다 workstation 터미널에 붙여 넣을 설정.
+
+    공급사 키가 AI 프록시에 없는 도구(저장 뒤에 키가 빠진 회차)는 뺀다 — 프록시가 어차피 503 으로 막는다.
+    """
 
     exam = invite.cohort.exam_settings or {}
-    allowed = set(exam.get("tools", []))
+    allowed = set(exam.get("tools", [])) - set(providers.unavailable_tools())
     models = exam.get("models", {})
     base = proxy_url()
     out = []

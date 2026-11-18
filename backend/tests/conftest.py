@@ -11,3 +11,14 @@ def api(client):
     from tests.api_helpers import Api
 
     return Api(client)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_provider_cache():
+    """AI 프록시 공급사 설정 여부는 30초 기억한다 — 시험끼리 섞이지 않게 비운다."""
+
+    from exams import providers
+
+    providers.clear_cache()
+    yield
+    providers.clear_cache()

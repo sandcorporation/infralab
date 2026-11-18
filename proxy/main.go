@@ -6,6 +6,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -50,18 +51,17 @@ func configFromEnv() config {
 func main() {
 	cfg := configFromEnv()
 	logger := log.New(os.Stderr, "", log.LstdFlags)
-	if cfg.ProxySecret == "" {
-		logger.Fatal("INFRALAB_EXAM_PROXY_SECRET is required")
-	}
 	cfg, stop, err := applyFakeProvider(cfg)
 	if err != nil {
 		logger.Fatalf("fake provider: %v", err)
 	}
 	defer stop()
-	if cfg.FakeProviderMode {
-		logger.Printf("fake provider mode: deterministic replies, no real provider keys used")
-	} else if cfg.AnthropicKey == "" && cfg.OpenAIKey == "" {
-		logger.Printf("warning: neither INFRALAB_ANTHROPIC_EXAM_KEY nor INFRALAB_OPENAI_EXAM_KEY is set")
+	notes, err := startupCheck(cfg)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	for _, n := range notes {
+		logger.Print(n)
 	}
 	addr := getenv("INFRALAB_PROXY_ADDR", ":58090")
 	logger.Printf("infralab-proxy %s listening on %s (backend: %s)", version, addr, cfg.BackendURL)
@@ -71,6 +71,25 @@ func main() {
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 	logger.Fatal(srv.ListenAndServe())
+}
+
+// startupCheck 는 기동을 막을 설정 오류와 알릴 말을 돌려준다. 공유 비밀만 필수다.
+// 공급사 키는 하나만 있어도(둘 다 없어도) 뜬다 — 빈 공급사 경로는 503 provider_not_configured 로 답한다.
+func startupCheck(cfg config) ([]string, error) {
+	if cfg.ProxySecret == "" {
+		return nil, errors.New("INFRALAB_EXAM_PROXY_SECRET is required")
+	}
+	if cfg.FakeProviderMode {
+		return []string{"fake provider mode: deterministic replies, no real provider keys used"}, nil
+	}
+	var notes []string
+	if cfg.AnthropicKey == "" {
+		notes = append(notes, "warning: INFRALAB_ANTHROPIC_EXAM_KEY is not set; /anthropic/ answers 503 provider_not_configured")
+	}
+	if cfg.OpenAIKey == "" {
+		notes = append(notes, "warning: INFRALAB_OPENAI_EXAM_KEY is not set; /openai/ answers 503 provider_not_configured")
+	}
+	return notes, nil
 }
 
 // applyFakeProvider 는 가짜 공급사 모드면 프로세스 안 가짜 공급사를 띄우고 공급사 주소·키를 그쪽으로 바꾼다.

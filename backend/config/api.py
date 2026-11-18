@@ -69,11 +69,11 @@ def _db_answers() -> bool:
 
 
 def _proxy_answers() -> bool:
-    """AI 프록시 `/healthz` — 비밀이 설정된 운영(프록시를 쓰는 배포)에서만 본다. 1초 제한."""
+    """AI 프록시 `/healthz`(내부 주소) — 비밀이 설정된 운영(프록시를 쓰는 배포)에서만 본다. 1초 제한."""
     if not settings.EXAM_PROXY_SECRET:
         return True
     try:
-        with urllib.request.urlopen(f"{settings.EXAM_PROXY_URL}/healthz", timeout=1) as res:
+        with urllib.request.urlopen(f"{settings.EXAM_PROXY_INTERNAL_URL}/healthz", timeout=1) as res:
             return res.status == 200
     except Exception:  # noqa: BLE001 — 어떤 실패든 「proxy 실패」 하나로 보고한다
         return False

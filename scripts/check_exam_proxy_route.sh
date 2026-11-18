@@ -38,6 +38,8 @@ for _ in $(seq 1 30); do
 done
 expect_status 'healthz' 200 "$base/exam-proxy/healthz"
 expect_status '모르는 경로 404' 404 -X POST "$base/exam-proxy/v1/messages" -d '{}'
+expect_status '/providers 는 공개 길에 없다' 404 "$base/exam-proxy/providers" -H 'Authorization: Bearer anything'
+expect_status '/providers? 쿼리 붙여도 404' 404 "$base/exam-proxy/providers?x=1"
 
 A="$base/exam-proxy/anthropic"
 O="$base/exam-proxy/openai/v1"
