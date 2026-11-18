@@ -124,7 +124,7 @@ func TestIntegration(t *testing.T) {
 			t.Errorf("step names = %s", names)
 		}
 		// 규칙 파일 두 개·setup 의 산출물·홈 볼륨의 준비 표시가 workstation 에 실제로 있다.
-		files := "grep -q '통합 시험 규칙' /work/CLAUDE.md && grep -q '통합 시험 규칙' /work/AGENTS.md && grep -q setup-ran /work/integration-setup.txt && test -s ~/.infralab/integration-lab.prepared"
+		files := "grep -q '통합 시험 규칙' /work/CLAUDE.md && grep -q '통합 시험 규칙' /work/AGENTS.md && grep -q setup-ran /work/integration-setup.txt && test -s /work/.infralab/integration-lab.prepared"
 		code, out = i.call("POST", "/api/check", map[string]any{"checks": []map[string]any{
 			s3Check("files", "산출물", files, map[string]any{"type": "exit_zero"}),
 		}})

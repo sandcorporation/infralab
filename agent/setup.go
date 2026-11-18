@@ -9,12 +9,17 @@ import (
 	"time"
 )
 
+// prepareMarkPath — 시나리오 준비 표시 파일. 있으면 준비됨(채점 잠금 풀림), 본문은 준비 시각(UTC).
+func prepareMarkPath(scenarioID string) string {
+	return prepareMarkDir + "/" + scenarioID + ".prepared"
+}
+
 // /api/setup — 「환경 준비」. 브라우저가 서버의 준비 응답을 넘기면 한 번에
 //
 //  1. Floci 재생성 (reset.floci)
 //  2. kind 재생성 — 클러스터가 이미 맞게 있어도 지우고 다시 만든다 (reset.kind)
 //  3. 규칙 파일 쓰기 — /work/CLAUDE.md 와 /work/AGENTS.md 에 같은 본문
-//  4. 준비 표시 — 홈 볼륨의 ~/.infralab/<scenario_id>.prepared 에 UTC 시각
+//  4. 준비 표시 — /work/.infralab/<scenario_id>.prepared 에 UTC 시각
 //  5. setup 실행 (있으면) — 검사와 같은 실행기
 //
 // 을 하고 단계별 결과와 ok 를 돌려준다. 앞 단계가 실패하면 뒤는 돌리지 않는다.
@@ -23,8 +28,10 @@ import (
 //        "setup": {command, scripts, timeout_seconds}|null, "ai_rules": "본문"}
 
 const (
-	maxRulesBytes    = 64 * 1024
-	prepareMarkDir   = "/root/.infralab"
+	maxRulesBytes = 64 * 1024
+	// 준비 표시는 준비한 결과(/work)와 같은 자리에 둔다. 홈(/root)은 기수마다 다른 compose 폴더가 같은 볼륨
+	// (infralab_home)을 이어 쓰므로, 거기 두면 다른 기수 폴더의 빈 /work 에서도 「준비됨」이 된다(#124).
+	prepareMarkDir   = "/work/.infralab"
 	rulesDirInWorkst = "/work"
 )
 
@@ -98,7 +105,7 @@ func (s *server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// 이전 준비의 표시는 이 준비가 끝나기 전까지 무효다 — 중간에 실패하면 옛 표시가 채점을 열어 두지 않게 먼저 지운다.
-	markPath := prepareMarkDir + "/" + req.ScenarioID + ".prepared"
+	markPath := prepareMarkPath(req.ScenarioID)
 	_, _ = run(ctx, s.runner, "docker", "exec", s.cfg.Workstation, "rm", "-f", markPath)
 
 	var st stepper

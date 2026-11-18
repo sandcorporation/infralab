@@ -40,8 +40,8 @@ func TestAITranscript_CompactSummariesAreNotStudentWords(t *testing.T) {
 
 func TestPrepared_IsAFileExistenceCheckOnly(t *testing.T) {
 	fake := withRunningWorkstation(newFakeRunner())
-	fake.respond("docker exec infralab-workstation test -f /root/.infralab/web-down.prepared", "", 0)
-	fake.respondFull("docker exec infralab-workstation test -f /root/.infralab/never.prepared", Result{ExitCode: 1})
+	fake.respond("docker exec infralab-workstation test -f /work/.infralab/web-down.prepared", "", 0)
+	fake.respondFull("docker exec infralab-workstation test -f /work/.infralab/never.prepared", Result{ExitCode: 1})
 	srv := newTestServer(t, fake)
 	if res := do(t, srv, "GET", "/api/prepared?scenario_id=web-down", "", authed(nil)); res.StatusCode != 200 {
 		t.Errorf("prepared → %d, want 200", res.StatusCode)

@@ -12,7 +12,7 @@ import (
 
 // GET /api/ai-transcript?scenario_id= — 마지막 「환경 준비」 이후 workstation 안의 Claude Code·Codex 대화.
 //
-// 홈 볼륨의 준비 표시(~/.infralab/<id>.prepared)가 없으면 404 — 화면은 이것을 「환경 준비 먼저」로 읽는다.
+// 준비 표시(/work/.infralab/<id>.prepared)가 없으면 404 — 화면은 이것을 「환경 준비 먼저」로 읽는다.
 // 있으면 표시 시각 이후에 바뀐 세션 파일을 runner(docker exec find/cat)로 읽어, 그 시각 이후의 사용자·어시스턴트
 // 텍스트 발화만 추린다. 도구 호출·도구 결과·사고·시스템 메시지는 뺀다. 형식은 docs/ai-session-formats-2026-10-23.md.
 //
@@ -57,7 +57,7 @@ func (s *server) handleAITranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	markPath := prepareMarkDir + "/" + id + ".prepared"
+	markPath := prepareMarkPath(id)
 	res, err := s.runner.Run(ctx, "", "docker", "exec", s.cfg.Workstation, "cat", markPath)
 	switch {
 	case err != nil:
@@ -169,7 +169,7 @@ func (s *server) handlePrepared(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	res, err := s.runner.Run(ctx, "", "docker", "exec", s.cfg.Workstation, "test", "-f", prepareMarkDir+"/"+id+".prepared")
+	res, err := s.runner.Run(ctx, "", "docker", "exec", s.cfg.Workstation, "test", "-f", prepareMarkPath(id))
 	switch {
 	case err != nil:
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "could not check the prepare mark: " + err.Error()})
