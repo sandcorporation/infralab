@@ -256,6 +256,8 @@ jobs:
           # Opus only for hard tickets (decompose.md: concurrency, permissions, migrations, secrets); never Fable.
           model=claude-sonnet-5-5
           case ",$labels," in *,model:opus,*) model=claude-opus-5-5;; esac
+          # $r is jq's variable (counts after the last factory-reset), not the shell's.
+          # shellcheck disable=SC2016
           fails=$(gh issue view "$N" --repo "$REPO" --json comments --jq '[.comments[].body] | (map(startswith("<!-- factory-reset -->")) | rindex(true)) as $r | [.[(if $r == null then 0 else $r + 1 end):][] | select(contains("<!-- factory-implementer-failed -->") or startswith("<!-- factory-sendback"))] | length')
           if [ "$fails" -gt 0 ]; then model=claude-opus-5-5; fi
           echo "::notice::#$N runs on $model (earlier code failures and send-backs: $fails)"
