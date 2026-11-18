@@ -108,6 +108,32 @@ export type ExamInvite = {
   event_count?: number;
 };
 export type ExamEvent = { kind: string; detail: string; at: string };
+export type ExamScore = {
+  public_passed: number;
+  public_total: number;
+  hidden_passed: number;
+  hidden_total: number;
+  hidden_status: "done" | "pending" | "skipped";
+  final_percent: number | null;
+};
+export type RubricItem = {
+  key: string;
+  label: string;
+  score: number;
+  llm_score: number;
+  evidence: string[];
+  edited: boolean;
+};
+export type RubricEdit = { key: string; from_score: number; to_score: number; reason: string; by: string; at: string };
+export type ExamReport = {
+  invite_id: number;
+  label: string;
+  status: ExamInvite["status"];
+  score: ExamScore;
+  rubric: { grader: string; graded_at: string; items: RubricItem[] } | null;
+  local_model_unverified: boolean;
+  edits: RubricEdit[];
+};
 export type JoinPreview = { cohort_id: number; name: string; join_open: boolean };
 export type KindRequirement = { control_planes: number; workers: number };
 export type Requires = { floci: boolean; kind: KindRequirement | null };
@@ -258,6 +284,15 @@ export const instructor = {
     api<ExamEvent[]>(`/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}/events`),
   revokeExamInvite: (cohortId: number, inviteId: number) =>
     api<void>(`/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}`, { method: "DELETE" }),
+  examReport: (cohortId: number, inviteId: number) =>
+    api<ExamReport>(`/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}/report`),
+  gradeExamReport: (cohortId: number, inviteId: number) =>
+    api<ExamReport>(`/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}/report/grade`, { method: "POST" }),
+  editRubricItem: (cohortId: number, inviteId: number, key: string, score: number, reason: string) =>
+    api<ExamReport>(
+      `/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}/report/rubric/${encodeURIComponent(key)}`,
+      { method: "PATCH", body: JSON.stringify({ score, reason }) },
+    ),
 };
 
 export const previewOrgInvite = (token: string) =>

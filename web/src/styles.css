@@ -457,3 +457,14 @@ th {
   font-variant-numeric: tabular-nums;
   font-size: 1.1em;
 }
+/* 지원자 보고서(#76): 근거 인용과 로컬 모델 경고 */
+.warn {
+  color: var(--warn);
+}
+blockquote.evidence {
+  margin: 0 0 4px;
+  padding: 2px 8px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+  white-space: pre-wrap;
+}

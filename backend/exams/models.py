@@ -75,3 +75,32 @@ class ExamEvent(models.Model):
 
     class Meta:
         ordering = ["at", "id"]
+
+
+class ExamRubric(models.Model):
+    """응시 한 번의 LLM 루브릭(#76). 다시 채점하면 덮어쓴다 — 담당자 수정 이력(`RubricEdit`)은 남는다.
+
+    `items` 는 [{key, score, llm_score, evidence, edited}] — `llm_score` 는 채점기가 준 원래 점수,
+    `score` 는 담당자 수정을 반영한 지금 점수.
+    """
+
+    invite = models.OneToOneField(ExamInvite, related_name="rubric", on_delete=models.CASCADE)
+    grader = models.CharField(max_length=30)
+    graded_at = models.DateTimeField()
+    items = models.JSONField(default=list)
+
+
+class RubricEdit(models.Model):
+    """담당자의 루브릭 점수 수정 한 번(#76). 다시 채점해도 지우지 않는다."""
+
+    invite = models.ForeignKey(ExamInvite, related_name="rubric_edits", on_delete=models.CASCADE)
+    key = models.CharField(max_length=40)
+    from_score = models.IntegerField()
+    to_score = models.IntegerField()
+    reason = models.TextField()
+    #: 고친 담당자의 표시 이름(그때의 것).
+    by = models.CharField(max_length=150)
+    at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["at", "id"]

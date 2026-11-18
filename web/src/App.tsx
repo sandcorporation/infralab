@@ -11,6 +11,7 @@ import ScenarioPage from "./pages/ScenarioPage";
 import InstructorOrgPage from "./pages/InstructorOrgPage";
 import OrgInvitePage from "./pages/OrgInvitePage";
 import InstructorGridPage from "./pages/InstructorGridPage";
+import InstructorExamReportPage from "./pages/InstructorExamReportPage";
 import ExamPage from "./pages/ExamPage";
 import { isExamUser, rememberedExamToken } from "./exam";
 import { ExamBar, ExamClockProvider } from "./examAttempt";
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/instructor/org" element={<InstructorOrgPage />} />
           <Route path="/instructor/cohorts/:id" element={<InstructorCohortPage />} />
           <Route path="/instructor/cohorts/:id/grid" element={<InstructorGridPage />} />
+          <Route path="/instructor/cohorts/:id/exam-invites/:inviteId/report" element={<InstructorExamReportPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ApiError,
   examInviteUrl,
@@ -206,7 +207,9 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
             <tbody>
               {invites.map((i) => (
                 <tr key={i.id}>
-                  <td>{i.label}</td>
+                  <td>
+                    <Link to={`/instructor/cohorts/${cohort.id}/exam-invites/${i.id}/report`}>{i.label}</Link>
+                  </td>
                   <td>
                     <span className="tag">{STATUS_LABEL[i.status]}</span>
                   </td>

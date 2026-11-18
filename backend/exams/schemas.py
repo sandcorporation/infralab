@@ -165,3 +165,52 @@ class ExamScoreOut(Schema):
     hidden_total: int
     hidden_status: Literal["done", "pending", "skipped"]
     final_percent: int | None
+
+
+class RubricItemOut(Schema):
+    key: str
+    label: str
+    score: int
+    llm_score: int
+    evidence: list[str]
+    edited: bool
+
+
+class RubricOut(Schema):
+    grader: str
+    graded_at: datetime
+    items: list[RubricItemOut]
+
+
+class RubricEditOut(Schema):
+    key: str
+    from_score: int
+    to_score: int
+    reason: str
+    by: str
+    at: datetime
+
+
+class ExamReportOut(Schema):
+    """지원자 보고서 — 결과 점수와 과정 루브릭(채점 전엔 null), 담당자 수정 이력(#76)."""
+
+    invite_id: int
+    label: str
+    status: Literal["invited", "in_progress", "finished", "revoked"]
+    score: ExamScoreOut
+    rubric: RubricOut | None
+    local_model_unverified: bool
+    edits: list[RubricEditOut]
+
+
+class RubricEditIn(Schema):
+    score: int = Field(ge=0, le=5)
+    reason: str = Field(max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("사유를 적어야 합니다.")
+        return v
