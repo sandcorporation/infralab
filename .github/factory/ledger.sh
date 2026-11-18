@@ -7,9 +7,11 @@
 #   <!-- ledger -->
 #   spec=#S node=<stage> issue=#N run=<run id> cost=<USD> turns=… input=… output=… cache_read=… cache_write=…
 #
-#   ledger.sh record <node> <issue>   read the action's execution file and comment its cost, turns and
-#                                     tokens on the ledger. Never fails the workflow: a missing file,
-#                                     ledger issue or jq only warns.
+#   ledger.sh record <node> <issue> [key=value …]
+#                                     read the action's execution file and comment its cost, turns and
+#                                     tokens on the ledger, then the given pairs (Decompose: tickets=N, the
+#                                     spec's sub-issues, so turns per ticket compare across runs, #185).
+#                                     Never fails the workflow: a missing file, ledger issue or jq only warns.
 #   ledger.sh spec-total <S>          sum of the ledger comments with spec=#S, in USD
 #   ledger.sh day-total [YYYY-MM-DD]  sum of the ledger comments created on that KST date (default: today)
 #   ledger.sh spec-of <issue>         the spec of an issue: its GitHub sub-issue parent, else the first
@@ -168,7 +170,10 @@ output() {
 }
 
 record() {
-  local node=$1 issue=$2
+  local node=$1 issue=$2 extra
+  shift 2
+  extra=$(printf ' %s' "$@") # key=value pairs appended to the line (decompose: tickets=N, #185)
+  [ $# -gt 0 ] || extra=
   local exec="${RUNNER_TEMP:-/tmp}/claude-execution-output.json"
   if [ ! -f "$exec" ]; then warn "no execution file for $node #$issue; nothing recorded"; return 0; fi
   if ! command -v jq >/dev/null 2>&1; then warn "jq is missing; $node #$issue not recorded"; return 0; fi
@@ -181,7 +186,7 @@ record() {
   mv "$exec" "${RUNNER_TEMP:-/tmp}/factory-runs/${node}-${issue}-$(now).json" 2>/dev/null || true
 
   local spec; spec=$(spec_of "$issue")
-  local line="spec=#${spec:-$issue} node=$node issue=#$issue run=${GITHUB_RUN_ID:-local} $usage"
+  local line="spec=#${spec:-$issue} node=$node issue=#$issue run=${GITHUB_RUN_ID:-local} $usage$extra"
   local n; n=$(ensure_ledger)
   if [ -z "$n" ]; then warn "could not find or create the factory-ledger issue; not recorded: $line"; return 0; fi
   if post_comment "$n" "<!-- ledger -->
@@ -312,14 +317,14 @@ stats() {
 }
 
 usage() {
-  echo "usage: ledger.sh record <node> <issue> | spec-total <spec> | day-total [YYYY-MM-DD] | spec-of <issue> | parent-of <issue> | guard <issue> | event <kind> <issue> [key=value …] | stats" >&2
+  echo "usage: ledger.sh record <node> <issue> [key=value …] | spec-total <spec> | day-total [YYYY-MM-DD] | spec-of <issue> | parent-of <issue> | guard <issue> | event <kind> <issue> [key=value …] | stats" >&2
   exit 2
 }
 
 [ -n "$REPO" ] || { echo "ledger.sh: REPO (or GITHUB_REPOSITORY) is not set" >&2; case "${1:-}" in record|event) exit 0 ;; esac; exit 2; }
 
 case "${1:-}" in
-  record) [ $# -eq 3 ] || usage; record "$2" "$3" ;;
+  record) [ $# -ge 3 ] || usage; shift; record "$@" ;;
   spec-total) [ $# -eq 2 ] || usage; spec_total "$2" ;;
   day-total) [ $# -le 2 ] || usage; day_total "${2:-}" ;;
   spec-of) [ $# -eq 2 ] || usage; spec_of "$2" ;;

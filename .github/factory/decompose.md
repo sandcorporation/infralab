@@ -13,11 +13,15 @@ You only write files and issues. **Never run `git commit`, `git push` or open a 
 
 ## 1. Read
 
+Read only what the slicing and the tests need. Every turn re-reads everything before it, so a file you read early is paid for again on every later turn: find with `Grep`/`Glob` first, then `Read` with `offset`/`limit` around the hit. Never read a whole file over about 200 lines.
+
 - The spec issue, body and all comments: `gh issue view <spec> --json number,title,body,labels,comments`. **Answer comments are binding**: when a comment answers an earlier `<!-- factory-question -->` comment (it was posted after it, by a person), follow the answer exactly and do not ask the same question again.
 - In decomposed mode, every listed ticket the same way.
-- `CLAUDE.md` and `README.md` (its 「시험」 section), then every file under `docs/agents/`. `docs/agents/issue-tracker.md` defines how to create issues, sub-issues and blocked-by edges. Follow it, including its fallbacks for older `gh`.
-- `GLOSSARY.md` (when it exists) and the ADRs in `docs/adr/` that touch the spec's area. Use the glossary's terms in ticket titles, bodies and test names, and respect the ADRs.
-- The codebase, enough to know what already exists: the public API your tests will call, the existing tests of the area (their helpers, temp-folder patterns, waiting on results), and the merged acceptance tests of earlier specs (the spec files of section 4). Look for prefactoring that would make the slices easier, and make it the first ticket.
+- `CLAUDE.md` (short) and only the 「🧪 시험」 section of `README.md` (from that heading to the next `## `).
+- `GLOSSARY.md`. Use its terms in ticket titles, bodies and test names.
+- ADRs: `grep -n '^#' docs/adr/*.md` first, then only the sections that touch the spec's area, and respect them. ADR 0001 matters only when the spec changes the factory itself; its 「인수 시험」 rules are already in section 4 below.
+- Do not read `docs/agents/`: section 3's command creates the issues, sub-issues, blocked-by edges and labels.
+- The codebase, enough to know what already exists: the public API your tests will call, the existing tests of the area (their helpers, temp-folder patterns, waiting on results), and the merged acceptance tests of earlier specs (the spec files of section 4) of the same area. Look for prefactoring that would make the slices easier, and make it the first ticket.
 
 ## 2. Draft vertical slices (new mode)
 
@@ -32,26 +36,40 @@ Aim for the coarsest breakdown that keeps every ticket inside one context window
 
 ## 3. Publish the tickets (new mode)
 
-Publish one issue per ticket, **blockers first**, so each ticket's edges can reference real issue numbers:
+Publish **all tickets with one command**, after you have drafted every one of them:
 
-- Make each ticket a **sub-issue** of the spec.
-- Record blocking edges as GitHub's **native** blocked-by dependencies.
+1. Write the list to `.factory-tmp/tickets.json` (git ignores that folder), **blockers first**:
+
+   ```json
+   [
+     {"key": "store", "title": "…", "model": "sonnet", "body": "## What to build\n\n…"},
+     {"key": "screen", "title": "…", "model": "opus", "blocked_by": ["store"], "body_file": ".factory-tmp/screen.md"},
+     {"key": "ci", "title": "…", "local": "workflows", "blocked_by": ["store", 812], "body": "…"}
+   ]
+   ```
+
+   - `key`: a short name the later entries' `blocked_by` use. `blocked_by`: strings are keys of **earlier** entries, numbers are existing issues. List only the tickets that genuinely gate it; `[]` or none when it can start immediately.
+   - `body` (a JSON string) or `body_file` (a file you wrote): the ticket body below **without** its `## Parent` and `## Blocked by` sections. The command adds both with the real issue numbers.
+   - `model`: `sonnet` or `opus` (rules below). `local`: `workflows` or `claude` for a ticket that is not for the factory (rules below); a local ticket takes no model.
+2. Run `bash .github/factory/decompose.sh create-tickets <spec> .factory-tmp/tickets.json`. Per ticket it creates the issue, makes it a **sub-issue** of the spec, records the blocking edges as GitHub's **native** blocked-by dependencies, adds the model label, and for a local ticket adds its marker line, `local` and `ready-for-human`. It prints `#<n> <key> <title>` per ticket: use those numbers in the report and in the test markers of section 4.
+3. If it fails, it names the tickets that already exist. Fix the cause (the file, or wait and retry a failed `gh` call) and **run the same command again**: a ticket with the same title for this spec is found, not created twice, and its missing links and labels are added. Do not create or link tickets by hand.
+
+(`decompose.sh create-ticket <spec> --title T --body-file F [--model sonnet|opus] [--local workflows|claude] [--blocked-by N,M]` does the same for one ticket and prints its number. Prefer the list.)
+
+Rules for the tickets:
+
 - **Do not apply `ready-for-agent`.** Odin applies it after reviewing and merging the spec PR.
-- Apply exactly one **model label** to each ticket, choosing the model the Implementer run will use:
-  - `model:sonnet` (the default): the ticket follows a pattern the codebase already has, its acceptance criteria are mechanical to check, or it is mostly tooling, docs or wiring.
-  - `model:opus`: only hard tickets — the ticket touches concurrency, permissions and authentication, data migrations, secrets or tokens (the AI proxy, agent tokens), the agent's control of Docker and processes, or sets a first public interface (API, model, agent endpoint) later tickets will copy while the spec leaves its design open.
-  Most tickets are `model:sonnet`, including UI and app wiring on top of an existing pattern. When unsure, pick `model:sonnet`: a code failure retries on Opus anyway. Never Fable. Record each choice and its reason in the report.
-- **A ticket that must change anything under `.github/workflows/` or `.claude/` is not for the factory.** The factory's push token has no `workflows` permission, and the factory's agent (Claude Code) is refused every edit under `.claude/` (hooks, settings, agent files) as a sensitive file — #166 failed three runs that way. Give it `ready-for-human` and `local` (no model label needed; create the labels when missing), put the line 「workflow 파일 — 로컬 작업자 몫」 and the marker `<!-- factory-touches-workflows -->` in its body (for `.claude/`: 「`.claude/` 파일 — 로컬 작업자 몫」 and `<!-- factory-touches-claude -->`) (the check reads the marker and the label, not path text), and still make it a sub-issue with its blockers. Give a ticket that only reads or mentions workflows no such label and no marker; never write the marker in a ticket the factory implements. Say which tickets are local in the report.
+- Choose exactly one **model** per ticket, the model the Implementer run will use:
+  - `sonnet` (the default): the ticket follows a pattern the codebase already has, its acceptance criteria are mechanical to check, or it is mostly tooling, docs or wiring.
+  - `opus`: only hard tickets — the ticket touches concurrency, permissions and authentication, data migrations, secrets or tokens (the AI proxy, agent tokens), the agent's control of Docker and processes, or sets a first public interface (API, model, agent endpoint) later tickets will copy while the spec leaves its design open.
+  Most tickets are `sonnet`, including UI and app wiring on top of an existing pattern. When unsure, pick `sonnet`: a code failure retries on Opus anyway. Never Fable. Record each choice and its reason in the report.
+- **A ticket that must change anything under `.github/workflows/` or `.claude/` is not for the factory.** The factory's push token has no `workflows` permission, and the factory's agent (Claude Code) is refused every edit under `.claude/` (hooks, settings, agent files) as a sensitive file — #166 failed three runs that way. Give it `"local": "workflows"` (or `"claude"` for `.claude/`): the command writes 「workflow 파일 — 로컬 작업자 몫」 (「`.claude/` 파일 — 로컬 작업자 몫」) and the marker `<!-- factory-touches-workflows -->` (`<!-- factory-touches-claude -->`) into its body, labels it `ready-for-human` and `local`, and still makes it a sub-issue with its blockers. Give a ticket that only reads or mentions workflows no `local`, and never write the marker yourself in a ticket the factory implements. Say which tickets are local in the report.
 - Do not close, edit or relabel the spec issue.
 - Avoid specific file paths and code snippets in ticket bodies; they go stale. The exception is 「계약」: the exact public names and signatures your tests call.
 
-Ticket body:
+Ticket body (the command adds `## Parent` before it and `## Blocked by` after it):
 
 ```
-## Parent
-
-#<spec>
-
 ## What to build
 
 The end-to-end behaviour this ticket makes work, from the user's perspective.
@@ -73,13 +91,9 @@ Criteria only a person can check (a real Docker scenario on a workstation, a rea
 a look no assertion can state), each as a step a person follows and what they should see. Screen
 behaviour a browser can drive is an e2e test (`web/e2e/*.spec.ts`), not here. "None" when every
 criterion is tested.
-
-## Blocked by
-
-#<n>, #<n>  (or "None (can start immediately)")
 ```
 
-Keep the "Blocked by" section even when native edges are set, so the edges are readable in the body too. In decomposed mode, add 「계약」 and 「손 확인」 to each listed ticket's body (`gh issue edit <n> --body-file …`), keeping everything else as it is.
+The 「계약」 section names test files you have not written yet: decide the file names while drafting (section 4's naming), then write the tests after the tickets exist, since their markers need the issue numbers. In decomposed mode, add 「계약」 and 「손 확인」 to each listed ticket's body (`gh issue edit <n> --body-file …`), keeping everything else as it is.
 
 ## 4. Write the acceptance tests (both modes)
 
