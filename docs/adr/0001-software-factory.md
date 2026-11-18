@@ -60,6 +60,12 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 - **알림 다리**(`bridge.sh`): 공장은 메일을 보내지 않는다. 공장 밖 크론(2분)이 `gh` 로 표식 댓글(질문·상한 멈춤·사람 넘김·큐 바닥남·idle)을 찾아 Agent Mail 로 보낸다. 기본값은 `FACTORY_REPO=sandcorporation/infralab`, 질문은 `BRIDGE_TO_BOSS`(기본 `sandcorp/boss`), 나머지는 `BRIDGE_TO_COORD`(기본 `<저장소 이름>/coordinator` = `infralab/coordinator`). 메일의 `--task`·idempotency 접두어는 `<저장소 이름>-factory`. 스크립트에 주소·토큰·호스트는 없고 메일 서버는 agent-mail 프로필이 안다. 첫 설치는 `--seed`.
 - **사람 넘김**(`ready-for-human`)은 「공장 밖에서 관리 세션이 처리」라는 뜻이다. 관리 세션이 원인을 고치거나 직접 구현하고, 대표에게는 제품 결정만 묻는다.
 
+- **후보에서 빼는 것**(#56): `dispatch-next.sh` 는 `spec` 라벨이 있거나 하위 이슈(sub-issue)가 있는 이슈를 티켓으로 집지 않는다(부모는 티켓이 아니다).
+- **장부는 스스로 만든다**(#56): `ledger.sh record` 는 열린 `factory-ledger` 이슈가 없으면 「공장 비용 장부」를 만들어 기록한다(비용을 버리지 않는다).
+- **spec 귀속**(#56): 티켓의 부모는 GitHub sub-issue 의 parent(`GET /issues/{n}/parent`)를 먼저 보고, 없으면 본문 `## Parent` 절을 본다. 손으로 만든 티켓도 sub-issue 로 묶으면 spec 에 비용이 쌓인다.
+- **`ready-for-agent` 는 부모가 있어야 한다**(#56, 장치): 이슈 템플릿 `.github/ISSUE_TEMPLATE/ticket.md` 가 `## Parent` 절을 깔고, `parent-check.sh`(`approved` job 과 claim 단계)가 부모 없는 티켓의 라벨을 떼고 「부모 spec 이 없다」 댓글(`<!-- factory-no-parent -->`)을 단다. 쓰기 권한이 없는 사람이 붙인 라벨은 보지 않는다.
+- **workflow 파일은 사람 몫**(#56): `GITHUB_TOKEN` 은 `.github/workflows/*` 를 push 할 수 없다(#53 이 세 번 돌아 약 $8.2 를 버렸다). implementer.md 는 workflow 를 고치지 말고 티켓 댓글로 남기고 멈추라 하고, 커밋 뒤 diff 에 `.github/workflows/` 가 있거나 push 가 그 거절을 내면 `workflow-guard.sh` 가 실패 횟수를 늘리지 않고 곧바로 `ready-for-human` + `<!-- factory-human -->`(사유: workflow 파일)로 넘긴다. 다시 dispatch 하지 않는다.
+
 ### 공개 저장소 규칙 (2026-11-18 공개 전환)
 
 - **외부인은 공장을 움직이지 못한다.** 트리거는 라벨(`issues: labeled/unlabeled`, 라벨은 triage 이상 권한자만 붙인다), 이슈 닫힘(`frontier` 는 secret 없이 `ready-for-agent` 티켓만 dispatch), `workflow_dispatch`(쓰기 권한자), 예약 실행뿐이다. `pull_request_target`·`issue_comment` 트리거는 쓰지 않는다. 외부 PR 의 `ci.yml`(`pull_request`)은 secret 을 받지 않는다.

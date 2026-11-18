@@ -5,6 +5,7 @@
 #   issue-<n>.json      the issue as the REST API returns it ({number, state, body, labels: [{name}]})
 #   comments-<n>.json   its comments ([{id, created_at, body, user: {login}}]); posting appends one by FAKE_GH_LOGIN (default github-actions[bot])
 #   fail-comments       if present, posting a comment fails
+#   parent-<n>.json     the GitHub sub-issue parent of issue <n> ({number}); without it …/issues/<n>/parent fails
 #   sub-issues-<n>.json the sub-issues of issue <n> ([{number, state}]), default []
 #   pulls.json          pull requests ([{number, state, title, body, head: {ref}, base: {ref}}]); opening a
 #                       PR appends to it and writes issue-<pr>.json (with pull_request) for its labels
@@ -298,6 +299,12 @@ case "$path" in
     l=$(field 'labels[]') || fail "no label"
     jqf --arg l "$l" 'if any(.labels[]; .name == $l) then . else .labels += [{name: $l}] end' "$f" > "$f.new" && mv "$f.new" "$f"
     echo '[]'
+    ;;
+  # ledger.sh sub_issue_parent: …/issues/<n>/parent, parent-<n>.json (the parent issue), else 404.
+  repos/*/*/issues/*/parent)
+    n=${path%/parent}; n=${n##*/}
+    [ -f "$d/parent-$n.json" ] || fail "404 Not Found: no parent of #$n"
+    cat "$d/parent-$n.json"
     ;;
   repos/*/*/issues/*/sub_issues)
     n=${path%/sub_issues}; n=${n##*/}

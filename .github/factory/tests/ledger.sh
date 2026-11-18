@@ -118,7 +118,7 @@ issue 5 "" "x"
 bash "$ledger" record decompose 5 > /dev/null
 eq "no execution file" 0 $?
 execution_file
-bash "$ledger" record decompose 5 > "$tmp/log"
+bash "$ledger" record decompose 5 > "$tmp/log" 2>&1
 eq "no ledger issue" 0 $?
 grep -q '::warning::' "$tmp/log" && ok || bad "no warning without a ledger issue"
 with_ledger
@@ -126,6 +126,33 @@ touch "$FAKE_GH/fail-comments"
 execution_file
 bash "$ledger" record decompose 5 > /dev/null 2>&1
 eq "commenting fails" 0 $?
+
+setup "record: no ledger issue is created and the cost recorded on it"
+issue 5 "" "x"
+execution_file
+bash "$ledger" record decompose 5 > /dev/null
+n=$(grep -l factory-ledger "$FAKE_GH"/issue-*.json | sed 's/.*issue-\([0-9]*\).json/\1/')
+eq "one ledger issue made" 1 "$(printf '%s\n' "$n" | grep -c .)"
+eq "its title" "공장 비용 장부" "$(jq -r .title "$FAKE_GH/issue-$n.json")"
+eq "the cost is on it" 1 "$(comment_count "$n" '<!-- ledger -->')"
+execution_file
+bash "$ledger" record decompose 5 > /dev/null
+eq "the second record reuses it" 2 "$(comment_count "$n" '<!-- ledger -->')"
+eq "still one ledger issue" 1 "$(grep -l factory-ledger "$FAKE_GH"/issue-*.json | grep -c .)"
+
+setup "spec-of: the GitHub sub-issue parent first, then the Parent section"
+issue 7 "" "no section"
+echo '{"number": 40}' > "$FAKE_GH/parent-7.json"
+eq "sub-issue parent" 40 "$(bash "$ledger" spec-of 7)"
+issue 8 "" "## Parent
+
+#41"
+eq "Parent section" 41 "$(bash "$ledger" spec-of 8)"
+echo '{"number": 42}' > "$FAKE_GH/parent-8.json"
+eq "the sub-issue parent wins" 42 "$(bash "$ledger" spec-of 8)"
+issue 9 "" "x"
+eq "none: the issue itself" 9 "$(bash "$ledger" spec-of 9)"
+eq "parent-of none: empty" "" "$(bash "$ledger" parent-of 9)"
 
 # --- totals --------------------------------------------------------------------------------
 

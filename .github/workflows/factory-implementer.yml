@@ -100,7 +100,16 @@ jobs:
       REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
+      # `ready-for-agent` needs a parent spec (sub-issue parent or `## Parent` section): without one
+      # the label comes off with a comment and nothing starts. Only a writer's label counts.
+      - name: Require a parent spec
+        id: parent
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          SENDER: ${{ github.event.sender.login }}
+        run: bash .github/factory/parent-check.sh "$ISSUE" "$SENDER"
       - name: Fill the empty tracks
+        if: steps.parent.outputs.ok == 'true'
         run: bash .github/factory/dispatch-next.sh --tickets-only --candidates "${{ github.event.issue.number }}"
 
   # Daily after KST midnight: fill the empty tracks (dispatch-next.sh skips busy ones).
@@ -207,6 +216,11 @@ jobs:
               echo "::error::#$N: mode=conflict, but its last send-back is no conflict or its PR is closed"
               go=false
             fi
+          fi
+          # A ticket without a parent spec does not start (parent-check.sh takes the label off).
+          if $go; then
+            ok=$(env -u GITHUB_OUTPUT bash .github/factory/parent-check.sh "$N" | sed -n 's/^ok=//p' | tail -n 1)
+            if [ "$ok" != true ]; then echo "::notice::#$N has no parent spec; not started"; go=false; fi
           fi
           if $go; then
             gh issue edit "$N" --repo "$REPO" --remove-label ready-for-agent --add-label in-progress
@@ -427,12 +441,19 @@ jobs:
           fi
           scripts/ci.sh all
 
+      # A ticket whose commits touch `.github/workflows/` cannot be pushed (GITHUB_TOKEN has no `workflows`
+      # permission): hand it to a person now, no failure counted, nothing dispatched again.
+      - name: Workflow file guard
+        id: wfguard
+        if: steps.guard.outputs.go == 'true'
+        run: bash .github/factory/workflow-guard.sh check "$N" origin/main || true
+
       # The PR body carries `Closes #N` and the commit `scripts/ci.sh all` passed on
       # (`<!-- factory-checked <sha> -->`): Verify skips its own `scripts/ci.sh all` when the PR head is
       # still that commit and sits on today's main.
       - name: Push and open PR
         id: pr
-        if: steps.guard.outputs.go == 'true'
+        if: steps.guard.outputs.go == 'true' && steps.wfguard.outputs.blocked != 'true'
         env:
           MODE: ${{ steps.guard.outputs.mode }}
           CONFLICT_PR: ${{ steps.guard.outputs.pr }}
@@ -442,10 +463,16 @@ jobs:
             # Conflict mode merges main on top of the PR branch, so history is not rewritten: a plain
             # push. If someone pushed to the branch meanwhile it is refused instead of dropping their
             # commits.
-            git push origin "$BRANCH"
+            pushargs=(origin "$BRANCH")
           else
             # A fresh implementation starts from main and replaces an earlier attempt's branch.
-            git push --force origin "$BRANCH"
+            pushargs=(--force origin "$BRANCH")
+          fi
+          if ! git push "${pushargs[@]}" 2> .factory/push.log; then
+            cat .factory/push.log
+            # A refused workflow file is for a person, not a failure to count or retry.
+            if bash .github/factory/workflow-guard.sh push-failed "$N" .factory/push.log; then exit 0; fi
+            exit 1
           fi
           body=.factory/pr-body.md
           run="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -477,7 +504,7 @@ jobs:
       # right after this run and before any next ticket.
       - name: Hand over to Verify
         id: handover
-        if: steps.guard.outputs.go == 'true'
+        if: steps.guard.outputs.go == 'true' && steps.wfguard.outputs.blocked != 'true' && steps.pr.outputs.blocked != 'true'
         run: |
           gh workflow run factory-verify.yml --repo "$REPO" -f issue="$N" -f pr="${{ steps.pr.outputs.number }}"
           bash .github/factory/ledger.sh event impl-end "$N" "track=$TRACK"
