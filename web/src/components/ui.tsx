@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { NavLink } from "react-router-dom";
 import { IconClose } from "../shell/icons";
 
@@ -30,10 +30,52 @@ export function PageHead({
 
 export type TabItem = { to: string; label: string; count?: number; end?: boolean };
 
+/**
+ * 가로로 밀리는 줄(탭·요약 타일)이 오른쪽에 더 있으면 data-fade-end 를 단다 — CSS 가 오른쪽 끝을 흐리게 한다.
+ * 끝까지 밀면 흐림이 사라진다.
+ */
+export function useScrollFade<T extends HTMLElement>(): RefObject<T> {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      if (el.scrollLeft + el.clientWidth < el.scrollWidth - 1) el.dataset.fadeEnd = "";
+      else delete el.dataset.fadeEnd;
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro?.disconnect();
+    };
+  });
+  return ref;
+}
+
+/** 요약 타일 줄(sc-stat). 폰에선 한 줄로 가로로 밀린다. */
+export function StatRow({ items }: { items: { label: ReactNode; value: ReactNode; note?: ReactNode }[] }) {
+  const ref = useScrollFade<HTMLDListElement>();
+  return (
+    <dl className="sc-stat" ref={ref}>
+      {items.map((it, i) => (
+        <div className="sc-stat-item" key={i}>
+          <dt className="sc-stat-label">{it.label}</dt>
+          <dd className="sc-stat-value">{it.value}</dd>
+          {it.note !== undefined && <dd className="sc-stat-note">{it.note}</dd>}
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** 링크 탭(하위 경로). 탭 상태가 URL 에 남는다. */
 export function LinkTabs({ label, items }: { label: string; items: TabItem[] }) {
+  const ref = useScrollFade<HTMLElement>();
   return (
-    <nav className="sc-tabs" aria-label={label}>
+    <nav className="sc-tabs" aria-label={label} ref={ref}>
       {items.map((t) => (
         <NavLink key={t.to} to={t.to} end={t.end}>
           {t.label}
