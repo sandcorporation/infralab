@@ -25,7 +25,7 @@ production push → Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)
 
 - 두 아키텍처 이미지는 아키텍처마다 `<sha>-amd64`·`<sha>-arm64` 를 올리고 `<sha>` 로 묶는다. 빌드 캐시는 `:buildcache[-<arch>]`.
 - 학생 `compose.yml` 의 이미지 주소: Jenkins 가 `INFRALAB_AGENT_IMAGE`·`INFRALAB_WORKSTATION_IMAGE` 에 배포 sha 의 주소를 넣고, `compose.prod.yml` 이 backend 의 `AGENT_IMAGE`·`WORKSTATION_IMAGE` 로 넘긴다. 비면 backend 기본값(로컬 이름 `infralab/agent:dev` 등).
-- 외부 기반 이미지(`compose.prod.yml` 의 db, 각 Dockerfile 의 `FROM`)는 `이름:정확한버전@sha256:…` 로 고정한다. 떠다니는 태그는 상류가 새 이미지를 내면 배포 때 db 를 다시 만든다. 올릴 때는 Dependabot PR(`.github/dependabot.yml`)로 바꾸고, CI(`scripts/check_image_pins.sh`)가 digest 없는 이미지를 막는다. db digest 가 바뀌는 배포는 db 컨테이너를 한 번 다시 만든다(볼륨은 그대로).
+- 외부 기반 이미지(`compose.prod.yml` 의 db, 각 Dockerfile 의 `FROM`)는 `이름:정확한버전@sha256:…` 로 고정한다. 떠다니는 태그는 상류가 새 이미지를 내면 배포 때 db 를 다시 만든다. 올릴 때는 Dependabot PR(`.github/dependabot.yml`)로 바꾸고, CI(`scripts/check_image_pins.sh`)가 digest 없는 이미지를 막는다. db digest 가 바뀌는 배포는 db 컨테이너를 한 번 다시 만든다(볼륨은 그대로). postgres **메이저 판**이 바뀌면 볼륨을 그대로 쓸 수 없다 — 아래 「postgres 메이저 판 올리기」.
 - 되돌리기: main 에 revert PR(같은 흐름). 급하면 Jenkins 파라미터 `ROLLBACK_SHA`(production 은 그대로).
 
 ## 운영 환경변수(서버의 `.env`)
@@ -64,7 +64,7 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 - [ ] Jenkins 잡: multibranch 또는 파이프라인, 저장소 `sandcorporation/infralab`, 브랜치 지정자 `*/production`, `Jenkinsfile`, GitHub push 웹훅.
 - [ ] 운영 서버의 Jenkins 작업 디렉터리에 `.env`(위 필수 네 개 + 필요한 선택 값). 저장소에 넣지 않는다. **함정**: Jenkins 첫 클론이 작업 디렉터리를 비우므로 `.env` 는 첫 빌드(클론) 뒤에 넣고 다시 빌드한다(먼저 넣으면 지워진다).
 - [ ] 리버스 프록시 호스트 `infralab.sandcorp.co.kr` → web 컨테이너(`HTTP_BIND:HTTP_PORT`). TLS 는 프록시에서 끝내고 `X-Forwarded-Proto` 를 넘긴다.
-- [ ] DB 볼륨(`infralab_db`) 백업 — 정기 `pg_dump` 또는 볼륨 스냅숏.
+- [ ] DB 볼륨(`infralab_db18`, postgres 18) 백업 — 정기 `pg_dump` 또는 볼륨 스냅숏.
 - [ ] sandcorp-auth 에 기밀 클라이언트 등록(auth 조율자): redirect_uri `https://infralab.sandcorp.co.kr/api/auth/callback`, 리소스 `https://infralab.sandcorp.co.kr/api` 와 그 스코프 `infralab`(일반 사용자 허용), 클라이언트의 「일반 사용자 허용」, 웹훅 URL `https://infralab.sandcorp.co.kr/api/auth/webhook`. 나온 client id·secret·웹훅 비밀을 `.env` 에.
 - [ ] GitHub ruleset: `production` 브랜치 강제 push·삭제 금지(승격은 fast-forward 만).
 - [ ] ghcr 패키지 다섯(`infralab-backend`·`-web`·`-proxy`·`-agent`·`-workstation`)의 공개 범위 — 응시자 PC 가 로그인 없이 pull 하려면 agent·workstation 은 공개.
@@ -90,6 +90,46 @@ docker compose -p infralab-prodcheck -f compose.prod.yml down -v
 ```
 
 이미지 주소를 주지 않으면 로컬에서 빌드한다(amd64 머신이면 amd64).
+
+## postgres 메이저 판 올리기
+
+메이저 판(17 → 18 등)의 데이터 폴더는 새 판이 읽지 못한다. 새 볼륨에 빈 DB 로 올리고 덤프를 복원한다. 옛 볼륨은 그대로 두어 되돌리기에 쓴다.
+
+18 공식 이미지는 `PGDATA=/var/lib/postgresql/18/docker` 이고 볼륨을 `/var/lib/postgresql` 에 붙인다. 옛 자리 `/var/lib/postgresql/data` 에 무엇이든(17 데이터든 빈 볼륨이든) 붙어 있으면 「Error: in 18+, these Docker images are configured to store database data in a format which is compatible with "pg_ctlcluster" …」로 기동을 거부한다.
+
+| | 17(옛) | 18(새) |
+| --- | --- | --- |
+| 볼륨 | `infralab_db` | `infralab_db18` |
+| 마운트 | `/var/lib/postgresql/data` | `/var/lib/postgresql` |
+
+서비스·컨테이너 이름은 그대로(`db`, `infralab-db-1`). 배포는 db 를 새 볼륨으로 올리고 빈 18 에 migrate 를 돌린 뒤 backend 까지 올린다 — 그 뒤 복원한다. 명령은 운영 서버에서 돈다(DB·사용자 이름은 컨테이너의 `POSTGRES_DB`·`POSTGRES_USER`).
+
+```
+# 1. 쓰기를 멈추고 17 에서 덤프(병합 전)
+docker stop infralab-web-1 infralab-proxy-1 infralab-backend-1
+docker exec infralab-db-1 sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > infralab-pg17.dump
+docker exec -i infralab-db-1 pg_restore -l < infralab-pg17.dump | head -12   # "Dumped from database version: 17.x"
+
+# 2. 올리기 PR 병합 → release.yml → production → Jenkins(새 볼륨에 빈 18, migrate, backend·proxy·web 기동)
+
+# 3. 18 에 복원
+docker stop infralab-web-1 infralab-proxy-1 infralab-backend-1
+docker exec infralab-db-1 sh -c 'dropdb -U "$POSTGRES_USER" --maintenance-db=postgres --if-exists "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" -O "$POSTGRES_USER" "$POSTGRES_DB"'
+docker exec -i infralab-db-1 sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --exit-on-error --single-transaction' < infralab-pg17.dump
+docker start infralab-backend-1
+docker exec infralab-backend-1 python manage.py migrate --noinput   # 덤프 뒤 배포에 새 이동이 있었으면 여기서 적용
+docker start infralab-proxy-1 infralab-web-1
+
+# 4. 확인
+docker exec infralab-db-1 sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version(); select count(*) from accounts_user"'
+curl -fsS http://127.0.0.1:18093/api/health
+```
+
+- 복원은 DB 를 지우고 다시 만든다(`pg_restore --clean` 대신) — migrate 가 빈 18 에 만든 표·행(`django_migrations`, 콘텐츠 타입 등)이 덤프와 섞이지 않고, 복원 뒤 DB 가 덤프와 같다. `--single-transaction` 이라 중간에 실패하면 빈 DB 로 남는다(다시 돌리면 된다).
+- 1 에서 멈춘 뒤 Jenkins 가 backend·web 을 다시 올리므로, 2 와 3 사이(빈 DB 로 떠 있는 구간)에 들어온 쓰기는 3 에서 지워진다. 3 은 배포가 끝나는 대로 곧바로 한다.
+- 되돌리기: 이미지를 `postgres:17.x-alpine@sha256:…`, 볼륨을 `db:/var/lib/postgresql/data` 로 되돌리는 revert PR(급하면 Jenkins `ROLLBACK_SHA` 로 직전 sha). 옛 볼륨 `infralab_db` 는 1 의 덤프 시점 그대로다 — 18 에서 쓴 것은 따라오지 않는다. compose 의 옛 `db` 볼륨 정의는 이 되돌리기용으로 남겨 둔다(서비스는 쓰지 않는다. `down -v` 도 쓰지 않는 볼륨은 지우지 않는다).
+- 백업(`pg_dumpall` 을 `docker exec` 로 컨테이너 안에서)은 서버와 같은 판의 클라이언트라 판에 묶이지 않는다. 다만 17.6·18.0 이후 판의 평문 덤프에는 `\restrict` 줄이 있어, 복원은 그 이후 판의 `psql` 로 한다(컨테이너 안 `psql` 이면 된다).
+- 로컬 연습(500 행, 프로젝트 `infralab-pgtest`): 덤프 0.2초(76 KB), 18 배포 흉내 16초, 복원 0.5초, 복원 구간(3) 8초. 덤프·복원 시간은 DB 크기에 비례한다.
 
 ## health 범위
 

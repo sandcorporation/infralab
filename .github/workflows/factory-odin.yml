@@ -77,7 +77,7 @@ jobs:
     timeout-minutes: 90
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_DB: infralab
           POSTGRES_USER: infralab
