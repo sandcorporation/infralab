@@ -1,0 +1,4 @@
+*
+!agent/go.mod
+!agent/go.sum
+!agent/*.go

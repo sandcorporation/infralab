@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // /api 는 개발 서버가 backend 로 넘긴다 — 브라우저는 한 오리진만 본다(CORS 없음).
@@ -9,6 +9,8 @@ const inCompose = Boolean(process.env.INFRALAB_API_PROXY);
 
 export default defineConfig({
   plugins: [react()],
+  // e2e/*.spec.ts 는 Playwright 몫이다(scripts/ci.sh e2e) — vitest 가 줍지 않게.
+  test: { exclude: [...configDefaults.exclude, "e2e/**"] },
   server: {
     watch: inCompose ? { usePolling: true, interval: 500 } : undefined,
     proxy: {

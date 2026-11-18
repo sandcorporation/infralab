@@ -21,7 +21,7 @@
 #            4 PR 이 열려 있지 않음·조회 실패 / 5 gh pr merge 실패
 set -uo pipefail
 
-REQUIRED=(backend web agent exam-proxy-route factory)
+REQUIRED=(backend web agent exam-proxy-route e2e factory)
 REQUIRED_WORKFLOW=ci
 
 pr="${1:-}"
