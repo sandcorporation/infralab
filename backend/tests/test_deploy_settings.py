@@ -137,6 +137,10 @@ def test_production_settings_trust_the_proxy_and_read_hosts_and_origins(monkeypa
     assert s["SESSION_COOKIE_SECURE"] is True
 
 
+#: 공개 주소 자리 — 헬스 점검이 이리로 가면 실패한다(내부 주소만 써야 한다).
+DEAD_PUBLIC = "http://127.0.0.1:1"
+
+
 @contextlib.contextmanager
 def _fake_proxy(status: int):
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -159,27 +163,44 @@ def _fake_proxy(status: int):
 
 @pytest.mark.django_db
 def test_health_skips_the_proxy_check_without_a_proxy_secret(client):
-    with override_settings(EXAM_PROXY_SECRET="", EXAM_PROXY_URL="http://127.0.0.1:1"):
+    with override_settings(EXAM_PROXY_SECRET="", EXAM_PROXY_INTERNAL_URL="http://127.0.0.1:1"):
         assert client.get("/api/health").status_code == 200
 
 
 @pytest.mark.django_db
 def test_health_checks_the_proxy_when_the_secret_is_set(client):
-    with _fake_proxy(200) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL=url):
+    with _fake_proxy(200) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL=url, EXAM_PROXY_URL=DEAD_PUBLIC):
         assert client.get("/api/health").json() == {"status": "ok"}
-    with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL="http://127.0.0.1:1"):
+    with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL="http://127.0.0.1:1"):
         res = client.get("/api/health")
     assert res.status_code == 503
     assert res.json() == {"status": "error", "failed": ["proxy"]}
-    with _fake_proxy(500) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL=url):
+    with _fake_proxy(500) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL=url, EXAM_PROXY_URL=DEAD_PUBLIC):
         assert client.get("/api/health").json() == {"status": "error", "failed": ["proxy"]}
 
 
 @pytest.mark.django_db
 def test_health_scope_ready_ignores_a_dead_proxy_but_not_a_dead_db(client):
-    with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL="http://127.0.0.1:1"):
+    with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL="http://127.0.0.1:1"):
         assert client.get("/api/health?scope=ready").json() == {"status": "ok"}
         with _db_at(host="127.0.0.1", port=1):
             res = client.get("/api/health?scope=ready")
     assert res.status_code == 503
     assert res.json() == {"status": "error", "failed": ["db"]}
+
+
+def test_compose_pins_the_internal_proxy_url_for_backend():
+    """backend → proxy 직접 호출은 .env 의 공개 주소와 상관없이 compose 안 주소로 간다."""
+    doc = yaml.safe_load((Path(SETTINGS_FILE).parents[2] / "compose.prod.yml").read_text(encoding="utf-8"))
+    env = doc["services"]["backend"]["environment"]
+    assert env["INFRALAB_EXAM_PROXY_INTERNAL_URL"] == "http://proxy:58090"
+
+
+def test_internal_proxy_url_has_its_own_setting(monkeypatch):
+    s = _fresh_settings(
+        monkeypatch,
+        INFRALAB_EXAM_PROXY_URL="https://infralab.example/exam-proxy/",
+        INFRALAB_EXAM_PROXY_INTERNAL_URL="http://proxy:58090/",
+    )
+    assert s["EXAM_PROXY_URL"] == "https://infralab.example/exam-proxy"
+    assert s["EXAM_PROXY_INTERNAL_URL"] == "http://proxy:58090"

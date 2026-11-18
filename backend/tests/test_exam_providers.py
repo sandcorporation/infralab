@@ -19,6 +19,8 @@ from django.test import override_settings
 from tests.test_spec_exam_ai_token import EXAM_SETTINGS, _ai_config, _candidate, _exam, _invite
 
 SECRET = "proxy-secret-for-tests"
+#: 지원자에게 내주는 공개 주소. 이리로 부르면 닿지 않는다 — backend 는 내부 주소로 묻는다.
+PUBLIC_URL = "https://proxy.infralab.test"
 ANTHROPIC_ONLY = {"anthropic": True, "openai": False}
 
 pytestmark = pytest.mark.django_db
@@ -54,7 +56,11 @@ def fake_proxy() -> Iterator[FakeProxy]:
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
-    with override_settings(EXAM_PROXY_URL=f"http://127.0.0.1:{server.server_port}", EXAM_PROXY_SECRET=SECRET):
+    with override_settings(
+        EXAM_PROXY_INTERNAL_URL=f"http://127.0.0.1:{server.server_port}",
+        EXAM_PROXY_URL=PUBLIC_URL,
+        EXAM_PROXY_SECRET=SECRET,
+    ):
         yield state
     server.shutdown()
     server.server_close()
@@ -118,7 +124,7 @@ def test_proxy_answer_is_cached_briefly(api, fake_proxy):
     "overrides",
     [
         {"EXAM_PROXY_SECRET": ""},  # 개발 — 프록시를 쓰지 않는다
-        {"EXAM_PROXY_URL": f"http://127.0.0.1:{_closed_port()}", "EXAM_PROXY_SECRET": SECRET},  # 프록시가 죽음
+        {"EXAM_PROXY_INTERNAL_URL": f"http://127.0.0.1:{_closed_port()}", "EXAM_PROXY_SECRET": SECRET},  # 프록시가 죽음
     ],
 )
 def test_unknown_providers_block_nothing(api, overrides):
@@ -143,3 +149,7 @@ def test_ai_config_drops_a_saved_tool_whose_provider_key_went_missing(api, fake_
     config = _ai_config(api, cand, invite["token"])
 
     assert [t["tool"] for t in config["tools"]] == ["claude_code"]
+    # 지원자에게는 공개 주소, 공급사 확인은 내부 주소(가짜 프록시)로 갔다.
+    assert config["proxy_url"] == PUBLIC_URL
+    assert config["tools"][0]["env"]["ANTHROPIC_BASE_URL"] == f"{PUBLIC_URL}/anthropic"
+    assert fake_proxy.calls

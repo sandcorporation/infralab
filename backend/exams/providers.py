@@ -1,6 +1,6 @@
 """시험 공급사 설정 여부 — 어떤 공급사 키가 AI 프록시에 들어 있는지(키 값이 아니라 있다·없다만).
 
-공급사 키는 프록시만 갖는다. backend 는 프록시 내부 `GET /providers` 를 공유 비밀로 짧게 묻고 잠깐 기억한다.
+공급사 키는 프록시만 갖는다. backend 는 프록시 `GET /providers` 를 내부 주소(EXAM_PROXY_INTERNAL_URL)·공유 비밀로 짧게 묻고 잠깐 기억한다.
 프록시를 못 부르면(비밀이 없는 개발·시험 환경, 프록시가 죽음) 「모름」이고, 모르면 아무 도구도 막지 않는다.
 """
 
@@ -37,7 +37,7 @@ def _fetch() -> Providers | None:
     if not settings.EXAM_PROXY_SECRET:
         return None
     req = urllib.request.Request(
-        f"{settings.EXAM_PROXY_URL.rstrip('/')}/providers",
+        f"{settings.EXAM_PROXY_INTERNAL_URL.rstrip('/')}/providers",
         headers={"Authorization": f"Bearer {settings.EXAM_PROXY_SECRET}"},
     )
     try:
