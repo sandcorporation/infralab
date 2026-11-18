@@ -16,7 +16,7 @@ setup() {
   tmp=$(mktemp -d "$root/t.XXXXXX")
   export FAKE_GH="$tmp/gh" FAKE_MAIL="$tmp/mail" XDG_STATE_HOME="$tmp/state"
   export FACTORY_REPO=owner/repo BRIDGE_SINCE=2026-11-01T00:00:00Z
-  unset BRIDGE_TO BRIDGE_TO_BOSS BRIDGE_TO_COORD SWITCHBOARD_PROFILE
+  unset BRIDGE_TO BRIDGE_TO_BOSS BRIDGE_TO_COORD BRIDGE_CC SWITCHBOARD_PROFILE
   mkdir -p "$FAKE_GH" "$FAKE_MAIL"
   echo '[]' > "$FAKE_GH/repo-comments.json"
 }
@@ -345,6 +345,124 @@ run
 eq code 0 "$(code)"
 eq sends 0 "$(sent_count)"
 eq remembered "23 24" "$(remembered)"
+
+# --- BRIDGE_CC (#188) ----------------------------------------------------------------------
+
+setup "without BRIDGE_CC only the coordinator gets its kinds (as before)"
+markers
+run
+eq sends 4 "$(sent_count)"
+eq "no cc key" 0 "$(grep -c -- '-cc-' "$FAKE_MAIL/calls.log")"
+
+setup "the coordinator's kinds are also sent to every BRIDGE_CC recipient, each with its own key"
+markers
+issue 900 open factory-ledger "장부"
+comment 21 900 "<!-- factory-queue-empty 245 -->"
+comment 22 900 "<!-- factory-idle 245 -->"
+comment 25 301 "<!-- factory-human-check 245 -->"
+export BRIDGE_CC="cc/one  cc/two"
+run
+eq code 0 "$(code)"
+# question 1 + human-check 1 (boss only) + 5 coordinator kinds x 3 recipients
+eq sends 17 "$(sent_count)"
+eq "question to" sandcorp/boss "$(arg 0 --to)"
+eq "budget-spec to" repo/coordinator "$(arg 1 --to)"
+eq "budget-spec key" repo-factory-12 "$(arg 1 --idempotency-key)"
+eq "budget-spec cc to" cc/one "$(arg 2 --to)"
+eq "budget-spec cc key" repo-factory-12-cc-cc-one "$(arg 2 --idempotency-key)"
+eq "budget-spec cc2 to" cc/two "$(arg 3 --to)"
+eq "budget-spec cc2 key" repo-factory-12-cc-cc-two "$(arg 3 --idempotency-key)"
+eq "cc subject" "$(arg 1 --subject)" "$(arg 2 --subject)"
+eq "cc body" "$(arg 1 --body)" "$(arg 2 --body)"
+eq "human cc" cc/one "$(jq -s -r '[.[] | select(.args | index("repo-factory-14-cc-cc-one"))] | .[0].args as $a | $a[($a | index("--to")) + 1]' "$FAKE_MAIL/sent.jsonl" | tr -d '\r')"
+eq "human-check not copied" 1 "$(grep -c -- 'repo-factory-25' "$FAKE_MAIL/calls.log")"
+eq remembered "11 12 13 14 21 22 25" "$(remembered)"
+run
+eq "second run sends nothing" 17 "$(sent_count)"
+
+setup "the coordinator listed in BRIDGE_CC, or a recipient listed twice, gets one mail"
+issue 301 open ready-for-human "티켓 하나"
+comment 14 301 "<!-- factory-human -->"
+export BRIDGE_CC="repo/coordinator cc/one cc/one"
+run
+eq sends 2 "$(sent_count)"
+eq to repo/coordinator "$(arg 0 --to)"
+eq "cc to" cc/one "$(arg 1 --to)"
+
+setup "markers sent before BRIDGE_CC was set are not sent to the new recipients"
+markers
+run
+eq sends 4 "$(sent_count)"
+export BRIDGE_CC=cc/one
+run
+eq "no old markers" 4 "$(sent_count)"
+comment 16 301 "<!-- factory-human -->
+다시"
+run
+eq "the new marker to both" 6 "$(sent_count)"
+eq to repo/coordinator "$(arg 4 --to)"
+eq key repo-factory-16 "$(arg 4 --idempotency-key)"
+eq "cc to" cc/one "$(arg 5 --to)"
+
+setup "a failed CC send is retried alone; the coordinator is not mailed twice"
+issue 301 open ready-for-human "티켓 하나"
+comment 14 301 "<!-- factory-human -->"
+export BRIDGE_CC="cc/one cc/two"
+echo cc/two > "$FAKE_MAIL/fail-to"
+run
+eq code 1 "$(code)"
+eq sends 2 "$(sent_count)"
+eq remembered "14 repo/coordinator 14 cc/one" "$(remembered)"
+has "log names the failed recipient" "to cc/two (comment 14); will retry" "$(cat "$tmp/log")"
+rm "$FAKE_MAIL/fail-to"
+run
+eq code 0 "$(code)"
+eq sends 3 "$(sent_count)"
+eq "retry to" cc/two "$(arg 2 --to)"
+eq "retry key" repo-factory-14-cc-cc-two "$(arg 2 --idempotency-key)"
+run
+eq "nothing more" 3 "$(sent_count)"
+
+setup "--seed with BRIDGE_CC sends nothing to anyone"
+markers
+export BRIDGE_CC=cc/one
+run --seed
+eq sends 0 "$(sent_count)"
+run
+eq sends 0 "$(sent_count)"
+
+# --- every way the factory hands work to a person leaves a marker the bridge reads (#188) ----
+
+setup "a local ticket (local-ticket.sh) is sent to the coordinator and CC"
+issue 302 open ready-for-human,local "워크플로 티켓"
+comment 31 302 "<!-- factory-local -->
+workflow·\`.claude/\` 파일 — 로컬 작업자 몫."
+export BRIDGE_CC=cc/one
+run
+eq sends 2 "$(sent_count)"
+eq to repo/coordinator "$(arg 0 --to)"
+has subject "로컬 작업자 몫: #302" "$(arg 0 --subject)"
+eq "cc to" cc/one "$(arg 1 --to)"
+
+setup "every handover in the factory scripts and workflows carries a marker the bridge reads"
+# Each place that adds ready-for-human / needs-decision / factory-paused, or stops for a person,
+# must write one of these markers in the same step (grep of the sources, not a run).
+src="$here/../.."
+impl="$src/workflows/factory-implementer.yml"
+has "implementer fail limit" '<!-- factory-human -->
+          Implementer failed' "$(sed -n '/Record failure/,/ready-for-agent/p' "$impl")"
+has "verify limit" "HUMAN='<!-- factory-human -->'" "$(cat "$src/factory/verify.sh")"
+has "odin human marker" "HUMAN='<!-- factory-human -->'" "$(cat "$src/factory/odin.sh")"
+has "odin human uses it" 'comment "$s" "$HUMAN' "$(sed -n '/^human()/,/^}/p' "$src/factory/odin.sh")"
+has "workflow guard" "factory-human" "$(cat "$src/factory/workflow-guard.sh")"
+has "local ticket" "<!-- factory-local -->" "$(cat "$src/factory/local-ticket.sh")"
+has "spec budget" "factory-budget-spec" "$(cat "$src/factory/ledger.sh")"
+has "daily budget" "factory-budget-daily" "$(cat "$src/factory/ledger.sh")"
+has "human check" "factory-human-check" "$(cat "$src/factory/human-check.sh")"
+for m in factory-human factory-local factory-question factory-budget-spec factory-budget-daily \
+  factory-queue-empty factory-idle factory-human-check; do
+  has "bridge reads $m" "<!-- $m" "$(sed -n '/^matches=/,/@tsv/p' "$script")"
+done
 
 echo "bridge.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]
