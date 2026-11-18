@@ -1,4 +1,4 @@
-// 시험 응시 흐름 한 바퀴 — 강사(회차·설정·링크) → 응시자(링크·점검·시작) → 감독 신호(탭 바꾸기·붙여넣기)
+// 시험 응시 흐름 한 바퀴 — 강사(회차·설정·링크) → 응시자(링크·점검·시작) → 감독 신호(새로 고침의 탭 이탈·붙여넣기)
 // → 제출하고 끝내기 → 강사 화면 「끝남」·보고서 감독 탭. PR #93·#96·#101·#104 의 사람 확인 항목을 옮겼다.
 import { expect, test } from "@playwright/test";
 import { createExamCohort, headBadge, inviteRow, issueInvite, openScenario, startAttempt } from "./flows";
@@ -16,18 +16,19 @@ test("응시 흐름: 시작 → 응시 중 → 탭 이탈·붙여넣기 신호 �
   const clock = page.locator(".exam-clock");
   const first = await clock.textContent();
   await expect(clock).not.toHaveText(first ?? "", { timeout: 3_000 });
+  // 탭 이탈: 새로 고침으로 문서가 내려가며 숨겨진다(visibilitychange hidden) — 그 신호가 서버에 남아야 한다(#223).
+  // headless Chromium 은 다른 탭을 앞으로 가져와도(bringToFront) 이 문서를 숨기지 않는다 — 그 길로는 신호가 나지 않는다.
   await page.reload();
   await expect(headBadge(page)).toHaveText("응시 중");
 
+  // 강사 표: 「응시 중」, 감독 신호 1건(탭 이탈) — 신호가 서버에 닿을 때까지 표를 다시 읽는다.
   const p = cohort.instructor;
-  await p.reload();
-  await expect(inviteRow(p, label).getByText("응시 중")).toBeVisible();
-
-  // 탭 바꾸기: 다른 탭을 앞으로 가져왔다가 돌아온다.
-  const other = await candidate.ctx.newPage();
-  await other.bringToFront();
-  await page.bringToFront();
-  await other.close();
+  const live = inviteRow(p, label);
+  await expect(async () => {
+    await p.reload();
+    await expect(live.getByText("응시 중")).toBeVisible({ timeout: 1_000 });
+    await expect(live.getByRole("button", { name: "1건" })).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
 
   await openScenario(candidate);
   await pasteIntoTerminal(page, "echo flow-paste");

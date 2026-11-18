@@ -150,9 +150,10 @@ export const postFinalResults = (token: string, body: { agent_version: string; s
 
 export type ProctorKind = "tab_hidden" | "focus_lost" | "paste";
 
-/** POST /api/exam/<토큰>/events — 감독 신호 한 건(204). */
+/** POST /api/exam/<토큰>/events — 감독 신호 한 건(204). 탭을 닫거나 새로 고치면 문서가 내려가며 탭 이탈 신호가
+ * 나는데, 보통 fetch 는 문서와 함께 끊겨 서버에 닿지 않을 때가 있다(#223) — keepalive 로 문서보다 오래 살린다. */
 export const postExamEvent = (token: string, kind: ProctorKind, detail = "") =>
-  api<void>(`${examPath(token)}/events`, { method: "POST", body: JSON.stringify({ kind, detail }) });
+  api<void>(`${examPath(token)}/events`, { method: "POST", body: JSON.stringify({ kind, detail }), keepalive: true });
 
 type Listenable = Pick<EventTarget, "addEventListener" | "removeEventListener">;
 

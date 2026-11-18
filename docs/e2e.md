@@ -17,6 +17,7 @@ bash scripts/check_workstation_image.sh --build   # workstation 이미지 실행
 - 연습 피드백은 공급사 키 없는 스택의 가짜 채점기(결정적)가 매긴다. AI 대화는 학생이 AI 도구로 남긴 세션 기록을 workstation 홈(`/root/.claude/projects/…jsonl`)에 심어(`plantClaudeSession`) 「AI 대화 함께 제출」로 올린다 — 진짜 AI 없이. 에이전트는 준비 표시보다 나중에 바뀐 파일만 읽으므로(초 단위) 환경 준비 뒤에 심는다.
 - AI 프록시: e2e 스택은 `proxy`(`proxy/`)를 가짜 공급사 모드(`INFRALAB_PROXY_FAKE_PROVIDER=1`)로 올린다 — 진짜 키·외부 네트워크 없이 결정적 대답 `infralab fake provider reply.` 를 준다. backend 는 e2e 전용 공유 비밀로 이 프록시를 부르고(공급사 키가 「있음」으로 알려져 회차 설정에서 Claude Code·Codex 를 고른다), 지원자에게 주는 공개 주소도 compose 안 주소 `http://proxy:58090` 이다(workstation 이 같은 compose 망). 개발·운영 compose 에는 가짜 공급사 모드가 없다.
 - 숨은 검사: backend 는 `INFRALAB_PROBLEMS_DIR=/e2e-problems`(`web/e2e/fixtures/problems`, 견본 문제은행)를 읽고 e2e 시나리오에 검사 하나가 붙는다. `problems-sample/` 에 두지 않은 까닭: 그 폴더의 모든 `<id>` 는 저장소 `scenarios/` 에 있어야 하는데(backend 시험이 그렇게 읽는다) e2e 시나리오는 저장소 시나리오가 아니다. 실제 문제은행 내용은 넣지 않는다.
+- headless Chromium 은 다른 탭을 앞으로 가져와도(`bringToFront`) 문서를 숨기지 않는다 — 탭 이탈은 새로 고침(문서가 내려가며 숨겨짐)으로 낸다(#223).
 - 재시도 없음, workers 1. 실패하면 `web/test-results/` 에 trace 가 남는다(CI 는 아티팩트 `e2e-traces`).
 
 ## 어디서 도는가
@@ -34,7 +35,7 @@ release 뒤 스모크로 두지 않은 까닭: 목적이 병합 전에 잡는 �
 | 시험 | 파일 | 막는 것 |
 |---|---|---|
 | 터미널 Ctrl+V 는 bash 에 붙여넣은 글자만 보내고(^V 없음) 감독 신호 「붙여넣기」 1건 | `terminal-paste.spec.ts` | #126 — 고침을 되돌리면 화면에 `^M` 만 남고 실패한다 |
-| 응시 흐름: 시작 → 응시 중 → 탭 이탈·붙여넣기 신호 → 제출하고 끝내기 → 끝남·보고서 | `exam-flow.spec.ts` | 회차 설정·링크 발급, 에이전트 꺼짐이면 시작 막힘, 남은 시간 흐름·새로 고침, 감독 신호 시각순 |
+| 응시 흐름: 시작 → 응시 중 → 새로 고침의 탭 이탈(강사 표 1건)·붙여넣기 신호 → 제출하고 끝내기 → 끝남·보고서 | `exam-flow.spec.ts` | 회차 설정·링크 발급, 에이전트 꺼짐이면 시작 막힘, 남은 시간 흐름·새로 고침, 감독 신호 시각순, 문서가 내려갈 때 보낸 신호 유실(#223 — keepalive 를 빼면 가끔 0건) |
 | 회수한 응시 링크: 「회수됨」, 그 링크로 못 들어옴 | `exam-flow.spec.ts` | 회수 |
 | 환경 준비 → 「준비됨」 → 채점 1/1·제출됨, 새 /work(같은 홈)면 「준비됨」 없음 | `prepare-mark.spec.ts` | #124 — 표시를 홈에 쓰면 실패한다 |
 | 연습 화면 길: 묶음 없는 새 계정의 `/` → 연습 화면 → 「연습 시작」 → 시나리오 목록·상태·설치 안내, 새로 고침 뒤에도 같다 | `practice.spec.ts` | #142 — 연습 참여·진입 규칙 |
