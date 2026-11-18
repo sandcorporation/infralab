@@ -2,8 +2,8 @@
 //
 //   main push(또는 공장 병합 뒤 dispatch) → GitHub Actions release.yml: 검사(ci.yml)와 이미지(image.yml)를 나란히
 //                                          → 둘 다 초록이면 production fast-forward
-//   production push → 여기: 굽지도 검사하지도 않는다. 그 sha 의 ghcr 이미지 넷이 있는지 보고
-//                     운영 서버에서 pull → db → DB 확인 → migrate → backend 교체 → web → 헬스 확인(실패하면 자동 롤백)
+//   production push → 여기: 굽지도 검사하지도 않는다. 그 sha 의 ghcr 이미지 다섯이 있는지 보고
+//                     운영 서버에서 pull → 문제은행 받기(선택) → db → DB 확인 → migrate → backend 교체 → proxy·web → 헬스 확인(실패하면 자동 롤백)
 //
 // 파이프라인은 Jenkins 공용 라이브러리 sandcorp(sandcorporation/jenkins-shared)의 sandcorpDeploy 에 있다.
 // 여기에는 이 저장소가 넘기는 값만 둔다. 흐름·환경변수 이름·서버 쪽 할 일은 docs/ops/deploy.md. 파라미터:
@@ -11,6 +11,10 @@
 //
 // agent·workstation 은 운영 서버에서 돌지 않는다 — 학생 compose.yml 이 그 sha 주소를 쓰도록 backend 에 넘기려고(compose.prod.yml)
 // 함께 받는다. 그 sha 이미지가 ghcr 에 다 오른 뒤에만 학생에게 그 주소가 나간다.
+//
+// 문제은행(비공개): problems.ref 가 고정한 커밋을 워크스페이스 problems/ 에 받는다 — compose.prod.yml 의 backend 가
+// INFRALAB_PROBLEMS_HOST_DIR(기본 ./problems)를 /problems 로 붙인다. optional: 자격 infralab-problems-deploy-key 가 없거나
+// ref 가 0 들이거나 받기에 실패하면 경고만 남기고 배포를 계속한다(숨은 검사만 건너뛴다).
 @Library('sandcorp') _
 
 sandcorpDeploy(
@@ -19,6 +23,7 @@ sandcorpDeploy(
   images: [
     [repo: 'ghcr.io/sandcorporation/infralab-backend', envVar: 'INFRALAB_BACKEND_IMAGE'],
     [repo: 'ghcr.io/sandcorporation/infralab-web', envVar: 'INFRALAB_WEB_IMAGE'],
+    [repo: 'ghcr.io/sandcorporation/infralab-proxy', envVar: 'INFRALAB_PROXY_IMAGE'],
     [repo: 'ghcr.io/sandcorporation/infralab-agent', envVar: 'INFRALAB_AGENT_IMAGE'],
     [repo: 'ghcr.io/sandcorporation/infralab-workstation', envVar: 'INFRALAB_WORKSTATION_IMAGE'],
   ],
@@ -30,6 +35,10 @@ sandcorpDeploy(
   preServices: ['db'],
   dbCheck: 'python manage.py check --database default',
   migrate: ['python manage.py migrate --noinput'],
-  extraServices: ['web'],
+  extraServices: ['proxy', 'web'],
+  extraCheckouts: [
+    [url: 'git@github.com:sandcorporation/infralab-problems.git', refFile: 'problems.ref', dir: 'problems',
+     credentialsId: 'infralab-problems-deploy-key', optional: true],
+  ],
   healthCmd: '''python -c "import os, urllib.request as u; host = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost').split(',')[0].strip(); print(u.urlopen(u.Request('http://127.0.0.1:8000/api/health', headers={'Host': host}), timeout=5).read().decode())"''',
 )

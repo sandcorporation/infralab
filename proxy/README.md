@@ -24,6 +24,8 @@
 | `POST /openai/v1/chat/completions` | `codex` | OpenAI `/v1/chat/completions` | `Authorization: Bearer <토큰>` |
 | `GET /healthz` | — | — | — (`{"status":"ok"}`) |
 
+운영에서는 공개 포트 없이 web(nginx)의 `<도메인>/exam-proxy/` 가 접두어를 떼고 이 서비스로 넘긴다
+(`web/nginx.conf`, 경로 시험 `scripts/check_exam_proxy_route.sh`). 그래서 `<프록시>` 는 `https://<도메인>/exam-proxy` 다.
 Claude Code 는 `ANTHROPIC_BASE_URL=<프록시>/anthropic`, Codex 는 `base_url = "<프록시>/openai/v1"` 로 부른다
 (backend 가 주는 「AI 키 설정」이 이 주소를 넣는다). 쿼리 문자열(`?beta=true` 등)과 그 밖의 머리글
 (`anthropic-version`·`anthropic-beta` 등)은 그대로 넘긴다. 다른 경로는 404.
@@ -34,6 +36,9 @@ Claude Code 는 `ANTHROPIC_BASE_URL=<프록시>/anthropic`, Codex 는 `base_url 
 `usage` 조각)에서 가장 큰 값.
 
 ## 거절 → 응답
+
+임시 토큰마다 요청 수 한도(`INFRALAB_PROXY_TOKEN_PER_MINUTE`·`_BURST`)가 있다. 넘으면 backend 에 묻지도 않고
+429 `rate_limited`(`Retry-After: 1`)로 막는다.
 
 | backend `reason` | 상태 |
 |---|---|
@@ -63,6 +68,8 @@ OpenAI: `{"error":{"message":…,"type":…,"code":"<reason>","param":null}}`. b
 | `INFRALAB_PROXY_ADDR` | `:58090` | 듣는 주소. backend `INFRALAB_EXAM_PROXY_URL` 의 기본(`http://127.0.0.1:58090`)과 맞춘다. |
 | `INFRALAB_PROXY_FAKE_PROVIDER` | — | `1` 이면 가짜 공급사 모드(아래). |
 | `INFRALAB_PROXY_TRUST_FORWARDED` | — | `1` 이면 `client_id` 를 `X-Forwarded-For` 첫 주소로. |
+| `INFRALAB_PROXY_TOKEN_PER_MINUTE` | `120` | 임시 토큰마다 분당 요청 수(토큰 버킷). `0` 이면 제한 없음. |
+| `INFRALAB_PROXY_TOKEN_BURST` | `60` | 임시 토큰마다 한꺼번에 쓸 수 있는 요청 수. |
 | `INFRALAB_PROXY_ANTHROPIC_URL` | `https://api.anthropic.com` | Anthropic 주소(바꿀 일은 거의 없다). |
 | `INFRALAB_PROXY_OPENAI_URL` | `https://api.openai.com` | OpenAI 주소. |
 

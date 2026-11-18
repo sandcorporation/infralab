@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -22,6 +23,15 @@ func getenv(k, d string) string {
 }
 
 // configFromEnv 는 환경변수에서 설정을 읽는다. 비밀(공유 비밀·공급사 키)은 환경변수에서만 온다.
+// getenvInt 는 정수 환경변수. 비었거나 정수가 아니면 기본값.
+func getenvInt(k string, d int) int {
+	v, err := strconv.Atoi(os.Getenv(k))
+	if err != nil {
+		return d
+	}
+	return v
+}
+
 func configFromEnv() config {
 	return config{
 		BackendURL:       getenv("INFRALAB_PROXY_BACKEND_URL", "http://127.0.0.1:8000"),
@@ -32,6 +42,8 @@ func configFromEnv() config {
 		OpenAIURL:        getenv("INFRALAB_PROXY_OPENAI_URL", "https://api.openai.com"),
 		TrustForwarded:   os.Getenv("INFRALAB_PROXY_TRUST_FORWARDED") == "1",
 		FakeProviderMode: os.Getenv("INFRALAB_PROXY_FAKE_PROVIDER") == "1",
+		TokenPerMinute:   getenvInt("INFRALAB_PROXY_TOKEN_PER_MINUTE", 120),
+		TokenBurst:       getenvInt("INFRALAB_PROXY_TOKEN_BURST", 60),
 	}
 }
 

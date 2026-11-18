@@ -11,14 +11,15 @@ main push(사람 병합)            ─┐
                                      ├ image   image.yml(workflow_call) — ghcr <이미지>:<sha>
                                      └ promote 둘 다 초록이면 production fast-forward(scripts/promote.sh)
 production push → Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)
-                  이미지 넷 확인 → pull → db → manage.py check → migrate → backend 교체 → web → /api/health
+                  이미지 다섯 확인 → 문제은행 받기(선택) → pull → db → manage.py check → migrate → backend 교체 → proxy·web → /api/health
                   실패하면 직전 성공 sha 로 자동 롤백
 ```
 
 | 이미지 | 플랫폼 | 어디서 |
 | --- | --- | --- |
 | `ghcr.io/sandcorporation/infralab-backend:<sha>` | linux/arm64 | 운영 서버 — Django + gunicorn(`docker/backend.prod.Dockerfile`) |
-| `ghcr.io/sandcorporation/infralab-web:<sha>` | linux/arm64 | 운영 서버 — nginx: Vite 빌드 정적 파일, `/api` → backend(`docker/web.Dockerfile`, `web/nginx.conf`) |
+| `ghcr.io/sandcorporation/infralab-web:<sha>` | linux/arm64 | 운영 서버 — nginx: Vite 빌드 정적 파일, `/api` → backend, `/exam-proxy/` → proxy(`docker/web.Dockerfile`, `web/nginx.conf`) |
+| `ghcr.io/sandcorporation/infralab-proxy:<sha>` | linux/arm64 | 운영 서버 — 시험 AI 프록시(`proxy/Dockerfile`) |
 | `ghcr.io/sandcorporation/infralab-agent:<sha>` | linux/amd64, arm64 | 응시자 PC — 학생 `compose.yml` |
 | `ghcr.io/sandcorporation/infralab-workstation:<sha>` | linux/amd64, arm64 | 응시자 PC — 학생 `compose.yml` |
 
@@ -46,13 +47,14 @@ production push → Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)
 | `GUNICORN_WORKERS` | 아니오 | 기본 2 |
 | `INFRALAB_ANTHROPIC_EXAM_KEY`, `INFRALAB_OPENAI_EXAM_KEY` | 시험 | 시험용 공급사 키. **`proxy` 서비스만** 받는다(backend 는 받지 않는다) |
 | `INFRALAB_EXAM_PROXY_SECRET` | 시험 | proxy 와 backend 가 나누는 공유 비밀. 둘 다 같은 값을 받는다 |
-| `INFRALAB_EXAM_PROXY_URL` | 아니오 | backend 가 지원자에게 알려 줄 프록시 주소. 기본 `http://proxy:58090`(compose 안). 지원자 PC 가 닿는 호스트로 정한다 |
+| `INFRALAB_EXAM_PROXY_URL` | 시험 | backend 가 지원자에게 알려 줄 프록시 주소. 운영은 `https://infralab.sandcorp.co.kr/exam-proxy`(web 의 `/exam-proxy/` 가 proxy 로 넘긴다). backend 가 `/anthropic`·`/openai/v1` 을 붙인다. 기본 `http://proxy:58090` 은 지원자 PC 가 닿지 못한다 |
 | `INFRALAB_GRADER_ANTHROPIC_KEY` | 시험 | 루브릭 채점 키(backend 만). 비면 가짜 채점기 |
 | `INFRALAB_PROBLEMS_DIR` | 아니오 | backend 안의 문제은행 경로. 기본 `/problems` — 호스트 폴더(`INFRALAB_PROBLEMS_HOST_DIR`, 기본 `./problems`)를 읽기 전용으로 붙인다. 폴더가 없거나 비면 「숨은 검사」 건너뜀 경고만 남고 기동한다 |
-| `INFRALAB_PROXY_IMAGE` | 아니오 | proxy 이미지. 비면 `proxy/` 에서 빌드(Jenkins 가 넣을 값, #82) |
+| `INFRALAB_PROXY_TRUST_FORWARDED` | 아니오 | 기본 `1` — proxy 는 web(nginx)만 부르고, nginx 가 `X-Forwarded-For` 를 지원자 주소 하나로 덮어 넘긴다 |
+| `INFRALAB_PROXY_TOKEN_PER_MINUTE`, `INFRALAB_PROXY_TOKEN_BURST` | 아니오 | 임시 토큰별 요청 한도(분당 120, 한꺼번에 60). 넘으면 429. `0` 이면 끔 |
 | `HTTP_BIND`, `HTTP_PORT` | 아니오 | web 이 듣는 호스트 주소·포트. 기본 `127.0.0.1:18093` |
 
-Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `INFRALAB_WEB_IMAGE`, `INFRALAB_AGENT_IMAGE`, `INFRALAB_WORKSTATION_IMAGE`.
+Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `INFRALAB_WEB_IMAGE`, `INFRALAB_PROXY_IMAGE`, `INFRALAB_AGENT_IMAGE`, `INFRALAB_WORKSTATION_IMAGE`.
 
 빌드 때 값은 없다. 운영 화면은 「Sandcorp 계정으로 로그인」 버튼 하나이고, 개발용 로그인(`/api/auth/dev-login`)은 `DJANGO_DEBUG=false` 에서 404 다.
 
@@ -64,14 +66,16 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 - [ ] DB 볼륨(`infralab_db`) 백업 — 정기 `pg_dump` 또는 볼륨 스냅숏.
 - [ ] sandcorp-auth 에 기밀 클라이언트 등록(auth 조율자): redirect_uri `https://infralab.sandcorp.co.kr/api/auth/callback`, 리소스 `https://infralab.sandcorp.co.kr/api` 와 그 스코프 `infralab`(일반 사용자 허용), 클라이언트의 「일반 사용자 허용」, 웹훅 URL `https://infralab.sandcorp.co.kr/api/auth/webhook`. 나온 client id·secret·웹훅 비밀을 `.env` 에.
 - [ ] GitHub ruleset: `production` 브랜치 강제 push·삭제 금지(승격은 fast-forward 만).
-- [ ] ghcr 패키지 넷(`infralab-backend`·`-web`·`-agent`·`-workstation`)의 공개 범위 — 응시자 PC 가 로그인 없이 pull 하려면 agent·workstation 은 공개.
-- [ ] 시험 모드(#82, 이 저장소 밖 몫): Jenkinsfile 에 proxy 이미지(`images`·`extraServices`)와 문제은행 받기(`extraCheckouts`, 자격 `infralab-problems-deploy-key`, `problems.ref`) 배선이 아직 남았다. 서버 `.env` 에 위 시험 환경변수(공급사 키 둘·공유 비밀·채점 키) 추가, 프록시 호스트를 지원자 PC 가 닿게 열고 `INFRALAB_EXAM_PROXY_URL` 설정.
+- [ ] ghcr 패키지 다섯(`infralab-backend`·`-web`·`-proxy`·`-agent`·`-workstation`)의 공개 범위 — 응시자 PC 가 로그인 없이 pull 하려면 agent·workstation 은 공개.
+- [x] 시험 모드 Jenkins 배선(#82): proxy 이미지(`images`·`extraServices`), 문제은행 받기(`extraCheckouts` optional, 자격 `infralab-problems-deploy-key`, `problems.ref`), 공개 주소 `/exam-proxy/`(web nginx).
+- [ ] 시험 모드 서버 몫: `.env` 에 공급사 키 둘·채점 키, `INFRALAB_EXAM_PROXY_URL=https://infralab.sandcorp.co.kr/exam-proxy`. Jenkins 자격 `infralab-problems-deploy-key`(문제은행 저장소의 읽기 전용 deploy key) 등록과 `problems.ref` 에 고정 sha — 그 전에는 배포 로그에 「경고: 다른 저장소 받기 건너뜀(optional)」이 남고 숨은 검사만 건너뛴다.
 - [ ] 첫 강사 지정: `docker compose -f compose.prod.yml run --rm backend python manage.py set_instructor sandcorp:<sub>` — 「기본 조직」 owner 로 넣는다. Sandcorp 계정으로 한 번 로그인한 뒤에 한다(그 전에는 사용자가 없다). `sub` 는 `/api/accounts/me` 의 `username` 에서 본다.
 
 ## 시험 모드(AI 프록시·문제은행)
 
-- `compose.prod.yml` 에 `proxy` 서비스가 있다. Jenkins 가 부르기 전에는 뜨지 않으므로 지금 배포는 그대로다.
-- 문제은행은 비공개 저장소다. Jenkins 자격 이름은 `infralab-problems-deploy-key`(읽기 전용 deploy key), 받을 커밋은 저장소 루트 `problems.ref` 에 적는다. 받은 폴더가 호스트 `INFRALAB_PROBLEMS_HOST_DIR`(기본 `./problems`)이고 backend 에 `INFRALAB_PROBLEMS_DIR` 로 붙는다. 공개 이미지에는 굽지 않는다.
+- `compose.prod.yml` 의 `proxy` 서비스를 Jenkins 가 backend 다음에 web 과 함께 띄운다(`extraServices`). 공개 포트는 없고, 지원자 PC 는 `https://infralab.sandcorp.co.kr/exam-proxy` 로 부른다 — web(nginx)이 접두어를 떼고 proxy 로 넘긴다(스트리밍 버퍼링 끔, 600초). 한도: nginx 가 본문 32 MiB·IP(`X-Forwarded-For` 끝 주소)별 20r/s(burst 200), proxy 가 임시 토큰별 분당 120(burst 60). 토큰이 없거나 틀리면 401(공급사 꼴 오류). 경로 시험은 `bash scripts/check_exam_proxy_route.sh`(CI `exam-proxy-route`).
+- `INFRALAB_EXAM_PROXY_SECRET` 이 비면 proxy 가 기동하지 않는다(재시작 반복) — 다른 서비스와 배포는 그대로다.
+- 문제은행은 비공개 저장소다. Jenkins 자격 이름은 `infralab-problems-deploy-key`(읽기 전용 deploy key), 받을 커밋은 저장소 루트 `problems.ref` 에 적는다(0 들이면 받지 않는다). Jenkins 가 워크스페이스 `problems/` 에 받는다(선택 — 자격이 없거나 받기에 실패해도 경고만). 받은 폴더가 호스트 `INFRALAB_PROBLEMS_HOST_DIR`(기본 `./problems`)이고 backend 에 `INFRALAB_PROBLEMS_DIR` 로 붙는다. 공개 이미지에는 굽지 않는다.
 - 공급사 키·공유 비밀은 서버 `.env` 에만 둔다. 공급사 키는 proxy 만 받는다.
 
 ## 로컬에서 운영 compose 확인

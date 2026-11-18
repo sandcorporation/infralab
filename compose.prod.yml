@@ -86,7 +86,7 @@ services:
     restart: unless-stopped
 
   # AI 프록시(시험 지원자의 AI 도구 ↔ 공급사). 공급사 키는 이 서비스만 받는다.
-  # Jenkins 가 부르기 전에는 뜨지 않는다(다른 서비스가 depends_on 하지 않는다). 키가 비어도 config 는 통과한다.
+  # Jenkins 가 extraServices 로 띄운다(다른 서비스가 depends_on 하지 않는다). 공개 포트 없음 — web 의 /exam-proxy/ 로만 닿는다.
   proxy:
     build:
       context: proxy
@@ -97,7 +97,10 @@ services:
       INFRALAB_OPENAI_EXAM_KEY: ${INFRALAB_OPENAI_EXAM_KEY:-}
       INFRALAB_PROXY_BACKEND_URL: http://backend:8000
       INFRALAB_PROXY_ADDR: ":58090"
-      INFRALAB_PROXY_TRUST_FORWARDED: ${INFRALAB_PROXY_TRUST_FORWARDED:-}
+      # 공개 포트 없이 web(nginx /exam-proxy/)만 부르고, nginx 가 X-Forwarded-For 를 지원자 주소 하나로 덮어쓴다.
+      INFRALAB_PROXY_TRUST_FORWARDED: ${INFRALAB_PROXY_TRUST_FORWARDED:-1}
+      INFRALAB_PROXY_TOKEN_PER_MINUTE: ${INFRALAB_PROXY_TOKEN_PER_MINUTE:-120}
+      INFRALAB_PROXY_TOKEN_BURST: ${INFRALAB_PROXY_TOKEN_BURST:-60}
     cpus: 0.25
     mem_limit: 128m
     restart: unless-stopped

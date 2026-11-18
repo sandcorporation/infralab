@@ -4,6 +4,7 @@
 #
 #   ghcr.io/sandcorporation/infralab-backend:<sha>       linux/arm64        운영 서버(compose.prod.yml)
 #   ghcr.io/sandcorporation/infralab-web:<sha>           linux/arm64        운영 서버(compose.prod.yml)
+#   ghcr.io/sandcorporation/infralab-proxy:<sha>         linux/arm64        운영 서버(compose.prod.yml) — 시험 AI 프록시
 #   ghcr.io/sandcorporation/infralab-agent:<sha>         linux/amd64+arm64  응시자 PC(학생 compose.yml)
 #   ghcr.io/sandcorporation/infralab-workstation:<sha>   linux/amd64+arm64  응시자 PC(학생 compose.yml)
 #
@@ -53,6 +54,13 @@ jobs:
             runner: ubuntu-24.04-arm
             suffix: ""
             build_args: ""
+          - name: infralab-proxy
+            dockerfile: proxy/Dockerfile
+            context: proxy
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: ""
+            build_args: VERSION=${{ github.sha }}
           - name: infralab-agent
             dockerfile: agent/Dockerfile
             context: agent
