@@ -40,7 +40,7 @@ Write the PR body to `.factory/pr-body.md` (git-ignored; do not commit it), in K
 - What changed, from the user's perspective.
 - How each acceptance criterion is met (the acceptance test that checks it, or the code), or why it is not.
 - The judgement calls you made.
-- What a human should check by hand later, under a heading `사람 확인`, one list item per check. Verify checks that every hand-check criterion is listed there, and the merge copies each item to the spec's `human-check` issue, which holds the spec open until a person checks it. Also comment this list on the ticket's parent spec issue.
+- What a human should check by hand later, under a heading `사람 확인`, one list item (`- `) per check, or `- 없음` when there is none. Only list items under that heading are copied; plain lines are not. Verify checks that every hand-check criterion is listed there, and the merge copies each item to the spec's `human-check` issue, which holds the spec open until a person checks it. Also comment this list on the ticket's parent spec issue.
 
 A criterion a browser or the local stack can exercise (screen behaviour, proctoring signals, the exam flow, terminal input) gets an end-to-end test in `web/e2e/*.spec.ts` (run by `scripts/ci.sh e2e`), not a `사람 확인` item: Verify fails a PR that leaves such a criterion to a person. `사람 확인` is only for what only a person can check (a real Docker scenario on a workstation, a real AI agent session).
 

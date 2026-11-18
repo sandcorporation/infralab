@@ -5,6 +5,8 @@
 #   check   ci.yml(workflow_call) — PR 과 같은 backend·web·agent·factory·release 검사. 깨지면 승격이 없다.
 #   image   check 와 나란히(서로 기다리지 않음). image.yml(workflow_call) — ghcr <이미지>:<sha>(backend·web·proxy·agent·workstation).
 #           check 가 깨져도 그 sha 이미지는 ghcr 에 오를 수 있다 — 운영에 가는 길은 승격(둘 다 초록)뿐이다.
+#   ruleset main ruleset 27560028 의 필수 검사 == scripts/pr-merge.sh REQUIRED(scripts/check_ruleset.sh, #183). 승격을 막지 않는다.
+#           GITHUB_TOKEN 에는 우회자 목록이 안 보여 우회자 0 은 관리자 토큰으로 로컬에서 같은 스크립트로 본다.
 #   promote needs check·image(image.yml 의 빌드 전부 — proxy 포함). production 을 이 sha 로 fast-forward 만(scripts/promote.sh ff).
 #           production 이 이미 더 새 판이면(옛 실행이 늦게 끝남) 실패가 아니라 건너뜀.
 # production 은 앞으로만 간다. 되돌리기는 main 에 revert PR — 이 흐름을 그대로 탄다. 급하면 Jenkins ROLLBACK_SHA.
@@ -35,6 +37,17 @@ jobs:
     permissions:
       contents: read
       packages: write
+
+  ruleset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/check_ruleset.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   promote:
     needs: [check, image]
