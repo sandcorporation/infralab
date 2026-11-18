@@ -47,9 +47,6 @@ class Membership(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="memberships", on_delete=models.CASCADE)
     cohort = models.ForeignKey(Cohort, related_name="memberships", on_delete=models.CASCADE)
     joined_at = models.DateTimeField(auto_now_add=True)
-    #: 옛 참여별 에이전트 토큰 — 더 이상 읽지 않는다(#153, 사용자 토큰으로 옮김). 이전(accounts 0003)이 사용자 토큰의 씨앗으로
-    #: 썼고, migrate 뒤 backend 를 바꾸기 전·롤백 때 옛 코드가 이 열을 읽어서 남겨 둔다. 열 지우기는 다음 배포 몫.
-    agent_token = models.CharField(max_length=64, unique=True, default=new_token)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "cohort"], name="unique_membership")]
