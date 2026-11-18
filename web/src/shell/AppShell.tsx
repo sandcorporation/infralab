@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, matchPath, useLocation } from "react-router-dom";
+import { Link, Outlet, matchPath, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
 import type { Me } from "../api";
 import { isExamUser, rememberedExamToken } from "../exam";
@@ -75,7 +75,8 @@ function SideNav({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathnam
         <div className="app-nav-group" key={g.heading}>
           <div className="sc-sidenav-heading">{g.heading}</div>
           {g.items.map((item) => (
-            <NavLink
+            // NavLink 는 앞부분 일치로 스스로 aria-current 를 달아(/instructor ⊂ /instructor/org) 둘을 칠한다 — Link 로 한 곳만.
+            <Link
               key={item.to}
               to={item.to}
               className="sc-sidenav-item"
@@ -85,7 +86,7 @@ function SideNav({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathnam
             >
               <item.icon />
               <span className="sc-sidenav-label">{item.label}</span>
-            </NavLink>
+            </Link>
           ))}
         </div>
       ))}

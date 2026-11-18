@@ -11,7 +11,7 @@ import {
 } from "../api";
 import { ExamInvites, ExamSettingsForm, STATUS_LABEL, examSettingsSaved } from "../components/ExamPanel";
 import { ScenarioPicker } from "../components/ScenarioPicker";
-import { ConfirmDialog, LinkTabs, PageHead, type TabItem } from "../components/ui";
+import { ConfirmDialog, LinkTabs, PageHead, StatRow, type TabItem } from "../components/ui";
 import { useCrumbs } from "../shell/crumbs";
 
 /** 기수 상세의 탭들이 나눠 쓰는 상태. 레이아웃이 한 번 받아 둔다. */
@@ -133,37 +133,19 @@ export function CohortOverview() {
 
   return (
     <>
-      <dl className="sc-stat">
-        <div className="sc-stat-item">
-          <dt className="sc-stat-label">학생</dt>
-          <dd className="sc-stat-value">{c.member_count}</dd>
-        </div>
-        <div className="sc-stat-item">
-          <dt className="sc-stat-label">열린 시나리오</dt>
-          <dd className="sc-stat-value">{c.open_scenario_ids.length}</dd>
-        </div>
-        {c.kind === "exam" ? (
-          <>
-            <div className="sc-stat-item">
-              <dt className="sc-stat-label">응시 링크</dt>
-              <dd className="sc-stat-value">{invites?.length ?? "—"}</dd>
-            </div>
-            <div className="sc-stat-item">
-              <dt className="sc-stat-label">{STATUS_LABEL.in_progress}</dt>
-              <dd className="sc-stat-value">{invites ? count("in_progress") : "—"}</dd>
-            </div>
-            <div className="sc-stat-item">
-              <dt className="sc-stat-label">{STATUS_LABEL.finished}</dt>
-              <dd className="sc-stat-value">{invites ? count("finished") : "—"}</dd>
-            </div>
-          </>
-        ) : (
-          <div className="sc-stat-item">
-            <dt className="sc-stat-label">가입</dt>
-            <dd className="sc-stat-value">{effectivelyOpen ? "열림" : "닫힘"}</dd>
-          </div>
-        )}
-      </dl>
+      <StatRow
+        items={[
+          { label: "학생", value: c.member_count },
+          { label: "열린 시나리오", value: c.open_scenario_ids.length },
+          ...(c.kind === "exam"
+            ? [
+                { label: "응시 링크", value: invites?.length ?? "—" },
+                { label: STATUS_LABEL.in_progress, value: invites ? count("in_progress") : "—" },
+                { label: STATUS_LABEL.finished, value: invites ? count("finished") : "—" },
+              ]
+            : [{ label: "가입", value: effectivelyOpen ? "열림" : "닫힘" }]),
+        ]}
+      />
 
       <div className="panel-grid">
         {c.kind === "exam" ? (
