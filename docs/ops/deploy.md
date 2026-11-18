@@ -24,6 +24,7 @@ production push → Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)
 
 - 두 아키텍처 이미지는 아키텍처마다 `<sha>-amd64`·`<sha>-arm64` 를 올리고 `<sha>` 로 묶는다. 빌드 캐시는 `:buildcache[-<arch>]`.
 - 학생 `compose.yml` 의 이미지 주소: Jenkins 가 `INFRALAB_AGENT_IMAGE`·`INFRALAB_WORKSTATION_IMAGE` 에 배포 sha 의 주소를 넣고, `compose.prod.yml` 이 backend 의 `AGENT_IMAGE`·`WORKSTATION_IMAGE` 로 넘긴다. 비면 backend 기본값(로컬 이름 `infralab/agent:dev` 등).
+- 외부 기반 이미지(`compose.prod.yml` 의 db, 각 Dockerfile 의 `FROM`)는 `이름:정확한버전@sha256:…` 로 고정한다. 떠다니는 태그는 상류가 새 이미지를 내면 배포 때 db 를 다시 만든다. 올릴 때는 Dependabot PR(`.github/dependabot.yml`)로 바꾸고, CI(`scripts/check_image_pins.sh`)가 digest 없는 이미지를 막는다. db digest 가 바뀌는 배포는 db 컨테이너를 한 번 다시 만든다(볼륨은 그대로).
 - 되돌리기: main 에 revert PR(같은 흐름). 급하면 Jenkins 파라미터 `ROLLBACK_SHA`(production 은 그대로).
 
 ## 운영 환경변수(서버의 `.env`)

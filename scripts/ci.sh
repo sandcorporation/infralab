@@ -37,6 +37,7 @@ factory() {
 
 release() {
   bash scripts/promote_test.sh
+  bash scripts/check_image_pins_test.sh
 }
 
 case "${1:-}" in
