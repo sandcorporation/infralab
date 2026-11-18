@@ -4,7 +4,10 @@
 (이미 뜬 django.conf.settings 는 건드리지 않는다).
 """
 
+import contextlib
+import http.server
 import runpy
+import threading
 import time
 from pathlib import Path
 from unittest import mock
@@ -132,3 +135,51 @@ def test_production_settings_trust_the_proxy_and_read_hosts_and_origins(monkeypa
     assert s["SECURE_PROXY_SSL_HEADER"] == ("HTTP_X_FORWARDED_PROTO", "https")
     assert s["DEV_LOGIN_ENABLED"] is False
     assert s["SESSION_COOKIE_SECURE"] is True
+
+
+@contextlib.contextmanager
+def _fake_proxy(status: int):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(status)
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.django_db
+def test_health_skips_the_proxy_check_without_a_proxy_secret(client):
+    with override_settings(EXAM_PROXY_SECRET="", EXAM_PROXY_URL="http://127.0.0.1:1"):
+        assert client.get("/api/health").status_code == 200
+
+
+@pytest.mark.django_db
+def test_health_checks_the_proxy_when_the_secret_is_set(client):
+    with _fake_proxy(200) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL=url):
+        assert client.get("/api/health").json() == {"status": "ok"}
+    with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL="http://127.0.0.1:1"):
+        res = client.get("/api/health")
+    assert res.status_code == 503
+    assert res.json() == {"status": "error", "failed": ["proxy"]}
+    with _fake_proxy(500) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL=url):
+        assert client.get("/api/health").json() == {"status": "error", "failed": ["proxy"]}
+
+
+@pytest.mark.django_db
+def test_health_scope_ready_ignores_a_dead_proxy_but_not_a_dead_db(client):
+    with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_URL="http://127.0.0.1:1"):
+        assert client.get("/api/health?scope=ready").json() == {"status": "ok"}
+        with _db_at(host="127.0.0.1", port=1):
+            res = client.get("/api/health?scope=ready")
+    assert res.status_code == 503
+    assert res.json() == {"status": "error", "failed": ["db"]}

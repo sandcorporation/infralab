@@ -84,7 +84,13 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 DJANGO_SECRET_KEY=local-check POSTGRES_PASSWORD=local-check \
   docker compose -p infralab-prodcheck -f compose.prod.yml up -d --build --wait
 curl -s http://127.0.0.1:18093/api/health      # {"status":"ok"} — DB 를 못 쓰면 503 {"status":"error","failed":["db"]}
+curl -s 'http://127.0.0.1:18093/api/health?scope=ready'   # db 만 본다
 docker compose -p infralab-prodcheck -f compose.prod.yml down -v
 ```
 
 이미지 주소를 주지 않으면 로컬에서 빌드한다(amd64 머신이면 amd64).
+
+## health 범위
+
+- `/api/health` — db + (`INFRALAB_EXAM_PROXY_SECRET` 이 설정된 때만) AI 프록시 `GET /healthz`(1초 제한, `INFRALAB_EXAM_PROXY_URL` 기본 `http://proxy:58090`). 실패하면 503 `{"status":"error","failed":["proxy"]}`(이름만). Gatus 외부 감시가 쓴다.
+- `/api/health?scope=ready` — db 만. compose backend healthcheck 와 Jenkins healthCmd 가 쓴다. 프록시가 죽어도 backend 가 unhealthy·롤백으로 빠지지 않는다.

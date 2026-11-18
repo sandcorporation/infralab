@@ -71,13 +71,13 @@ services:
         read_only: true
         bind:
           create_host_path: true
-    # /api/health 는 DB 에 한 번 다녀온다. Host 는 허용 호스트의 첫 값.
+    # /api/health?scope=ready 는 DB 에만 다녀온다(프록시가 죽어도 backend 를 unhealthy 로 만들지 않는다). Host 는 허용 호스트의 첫 값.
     healthcheck:
       test:
         - CMD
         - python
         - -c
-        - "import os,urllib.request as u;h=os.environ.get('DJANGO_ALLOWED_HOSTS','localhost').split(',')[0].strip();u.urlopen(u.Request('http://127.0.0.1:8000/api/health',headers={'Host':h}),timeout=5)"
+        - "import os,urllib.request as u;h=os.environ.get('DJANGO_ALLOWED_HOSTS','localhost').split(',')[0].strip();u.urlopen(u.Request('http://127.0.0.1:8000/api/health?scope=ready',headers={'Host':h}),timeout=5)"
       interval: 60s
       timeout: 6s
       retries: 3

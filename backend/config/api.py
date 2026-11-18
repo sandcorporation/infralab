@@ -1,4 +1,7 @@
+import urllib.request
+
 import psycopg
+from django.conf import settings
 from django.db import connection
 from django.http import HttpRequest
 from ninja import NinjaAPI, Status
@@ -36,13 +39,18 @@ api.add_router("/instructor", exams_instructor_router)
 
 
 @api.get("/health", auth=None, response={200: dict[str, str], 503: dict[str, object]})
-def health(request: HttpRequest) -> Status[dict[str, object]]:
+def health(request: HttpRequest, scope: str = "") -> Status[dict[str, object]]:
     """운영 health(Gatus 외부 감시·Jenkins healthCmd·compose healthcheck 가 함께 쓴다).
 
     이 서비스가 기대는 것은 DB 하나다(redis·백그라운드 워커 없음 — 워커가 생기면 여기에 더하고
     준비 점검을 따로 나눈다). 점검마다 1초 제한, 실패하면 503 과 실패한 이름만 낸다(호스트·오류 원문 없음).
+
+    기본은 db + (INFRALAB_EXAM_PROXY_SECRET 이 설정된 운영에서만) AI 프록시 `/healthz`.
+    `?scope=ready` 는 db 만 — compose healthcheck·Jenkins healthCmd 가 쓴다(프록시가 죽어도 backend 가
+    unhealthy·롤백으로 빠지지 않게. 프록시 장애는 Gatus 가 기본 health 로 알린다).
     """
-    failed = [name for name, check in HEALTH_CHECKS if not check()]
+    checks = READY_CHECKS if scope == "ready" else HEALTH_CHECKS
+    failed = [name for name, check in checks if not check()]
     if failed:
         return Status(503, {"status": "error", "failed": failed})
     return Status(200, {"status": "ok"})
@@ -60,4 +68,16 @@ def _db_answers() -> bool:
         return False
 
 
-HEALTH_CHECKS = [("db", _db_answers)]
+def _proxy_answers() -> bool:
+    """AI 프록시 `/healthz` — 비밀이 설정된 운영(프록시를 쓰는 배포)에서만 본다. 1초 제한."""
+    if not settings.EXAM_PROXY_SECRET:
+        return True
+    try:
+        with urllib.request.urlopen(f"{settings.EXAM_PROXY_URL}/healthz", timeout=1) as res:
+            return res.status == 200
+    except Exception:  # noqa: BLE001 — 어떤 실패든 「proxy 실패」 하나로 보고한다
+        return False
+
+
+READY_CHECKS = [("db", _db_answers)]
+HEALTH_CHECKS = [*READY_CHECKS, ("proxy", _proxy_answers)]

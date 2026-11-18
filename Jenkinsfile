@@ -40,5 +40,5 @@ sandcorpDeploy(
     [url: 'git@github.com:sandcorporation/infralab-problems.git', refFile: 'problems.ref', dir: 'problems',
      credentialsId: 'infralab-problems-deploy-key', optional: true],
   ],
-  healthCmd: '''python -c "import os, urllib.request as u; host = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost').split(',')[0].strip(); print(u.urlopen(u.Request('http://127.0.0.1:8000/api/health', headers={'Host': host}), timeout=5).read().decode())"''',
+  healthCmd: '''python -c "import os, urllib.request as u; host = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost').split(',')[0].strip(); print(u.urlopen(u.Request('http://127.0.0.1:8000/api/health?scope=ready', headers={'Host': host}), timeout=5).read().decode())"''',
 )
