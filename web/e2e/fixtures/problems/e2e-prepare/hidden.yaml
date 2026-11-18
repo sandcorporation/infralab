@@ -1,0 +1,8 @@
+# e2e 견본 문제은행 — e2e 시나리오(e2e-prepare)에 붙는 숨은 검사. 네트워크·floci 없이 workstation 안에서만 돈다.
+# 실제 문제은행의 숨은 검사 내용은 이 저장소에 넣지 않는다.
+checks:
+  - id: hidden-ready-content
+    name: ready.txt 내용이 ready 이다
+    hint: 환경 준비를 다시 한다
+    command: grep -qx ready /work/app/ready.txt
+    expect: exit_zero
