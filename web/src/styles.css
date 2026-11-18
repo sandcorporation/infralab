@@ -849,3 +849,48 @@ blockquote.evidence {
 .sc-drawer.app-drawer-wide {
   width: min(760px, 100%);
 }
+
+/* ---------- 목록 화면 (표 + 거름 막대) ---------- */
+.sc-toolbar {
+  padding-right: 0;
+  padding-left: 0;
+}
+.sc-toolbar-search > svg {
+  flex-shrink: 0;
+}
+.sc-toolbar-search input[type="search"],
+.sc-toolbar-search input[type="search"]:hover {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.sc-toolbar-search input[type="search"]:focus-visible {
+  outline: none;
+}
+select.sc-select {
+  min-width: 0;
+}
+.sc-table td.sc-num,
+.sc-table th.sc-num {
+  white-space: nowrap;
+}
+.sc-dialog-body [role="radiogroup"] {
+  margin-top: var(--space-3);
+}
+.org-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .org-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.nowrap {
+  white-space: nowrap;
+}

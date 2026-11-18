@@ -61,8 +61,15 @@ describe("사이드바 내비", () => {
 
   it("현재 위치 하나만 aria-current 로 칠한다", () => {
     auth.me = INSTRUCTOR;
-    const links = navLinks(render("/instructor/cohorts/3/settings"));
-    expect(links).toEqual({ 기수: true, 시험: false, 조직: false, "내 기수": false, 연습: false });
+    expect(navLinks(render("/instructor/cohorts/3/settings"))).toEqual({
+      기수: true,
+      시험: false,
+      조직: false,
+      "내 기수": false,
+      연습: false,
+    });
+    expect(navLinks(render("/instructor/org"))).toEqual({ 기수: false, 시험: false, 조직: true, "내 기수": false, 연습: false });
+    expect(navLinks(render("/practice"))).toEqual({ 기수: false, 시험: false, 조직: false, "내 기수": false, 연습: true });
   });
 
   it("로그인 사용자는 sc-app 골격(사이드바 + 상단 바 + 휴대폰 메뉴 단추 + 계정 메뉴)", () => {

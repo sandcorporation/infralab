@@ -66,3 +66,16 @@ export const IconClose = () => (
     <path d="m3.5 3.5 9 9M12.5 3.5l-9 9" />
   </Icon>
 );
+
+export const IconSearch = () => (
+  <Icon>
+    <circle cx="7" cy="7" r="4.25" />
+    <path d="m10.25 10.25 3.5 3.5" />
+  </Icon>
+);
+
+export const IconPlus = () => (
+  <Icon>
+    <path d="M8 3v10M3 8h10" />
+  </Icon>
+);
