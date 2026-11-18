@@ -922,3 +922,8 @@ select.sc-select {
     font-size: 1.375rem;
   }
 }
+
+/* 마우스로 누른 항목엔 포커스 테두리를 그리지 않는다 — 키보드(:focus-visible)일 때만. 브라우저 기본 :focus 고리를 끈다. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
