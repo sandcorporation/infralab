@@ -41,13 +41,15 @@ x-backend-env: &backend-env
 
 services:
   db:
-    image: postgres:17.11-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    image: postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-infralab}
       POSTGRES_USER: ${POSTGRES_USER:-infralab}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요하다(.env)}
+    # 18 부터 PGDATA 는 /var/lib/postgresql/18/docker — 볼륨은 그 위 /var/lib/postgresql 에 붙인다.
+    # 옛 자리(/var/lib/postgresql/data)에 무엇이든 붙어 있으면 18 이 기동을 거부한다. 메이저 판 올리기는 docs/ops/deploy.md.
     volumes:
-      - db:/var/lib/postgresql/data
+      - db18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -123,4 +125,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  db18:
+  # postgres 17 데이터(infralab_db). 서비스는 쓰지 않는다 — 18 올리기를 되돌릴 때(옛 compose 로 다시 띄우기) 쓰려고 정의를 남긴다.
   db:

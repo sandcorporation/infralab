@@ -15,7 +15,7 @@ x-postgres-env: &postgres-env
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     # 버릴 수 있는 dev DB — 커밋마다 fsync 를 기다리지 않는다.
     command: ["postgres", "-c", "synchronous_commit=off"]
     environment:
@@ -23,7 +23,8 @@ services:
     ports:
       - "${INFRALAB_DB_PORT:-55440}:5432"
     volumes:
-      - infralab-dev-db:/var/lib/postgresql/data
+      # 18 은 /var/lib/postgresql/18/docker 에 쓴다. 17 때 볼륨(infralab-dev-db)은 18 이 읽지 못해 새 이름을 쓴다.
+      - infralab-dev-db18:/var/lib/postgresql
     healthcheck:
       # -h 를 준다 — 없으면 초기화 중 임시 서버가 유닉스 소켓에 응답해 TCP 가 열리기 전에 healthy 가 된다.
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U infralab -d infralab"]
@@ -85,5 +86,5 @@ services:
     command: sh -c "npm install --no-audit --no-fund && npm run dev"
 
 volumes:
-  infralab-dev-db:
+  infralab-dev-db18:
   infralab-dev-web-modules:
