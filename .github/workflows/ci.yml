@@ -1,13 +1,14 @@
+# PR 검사. main push 에서는 release.yml 이 workflow_call 로 같은 검사를 부른다 — 통과해야 production 승격으로 간다.
 name: ci
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # PR 은 번호마다 새 push 가 옛 실행을 끊는다. main(workflow_call)은 커밋마다 따로 — 끊기면 그 sha 의 승격이 취소로 끝난다.
+  group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 permissions:
@@ -71,5 +72,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: scripts/ci.sh factory
+      - run: scripts/ci.sh release
       - name: actionlint
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color

@@ -5,10 +5,12 @@ FROM hashicorp/terraform:latest AS tf
 # alpine 3.21 패키지는 openjdk 21 까지다 — 25 는 Temurin 의 musl 빌드를 복사한다.
 FROM eclipse-temurin:25-jdk-alpine AS jdk
 
+# linux/amd64·arm64 로 게시한다(image.yml, 아키텍처마다 네이티브 실행기).
 FROM alpine:3.21
+ARG TARGETARCH
 RUN apk add --no-cache bash aws-cli curl jq ca-certificates vim git nodejs npm python3 py3-pip
 COPY --from=tf /bin/terraform /usr/local/bin/terraform
-RUN curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+RUN curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/${TARGETARCH:-amd64}/kubectl" \
  && chmod +x /usr/local/bin/kubectl
 # /root 는 compose 가 홈 볼륨으로 덮는다 — CLI 는 /usr/local 에 전역 설치한다.
 RUN npm install -g @anthropic-ai/claude-code @openai/codex \

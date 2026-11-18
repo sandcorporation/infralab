@@ -1,7 +1,7 @@
 """infralab backend 설정.
 
-값은 전부 환경변수에서 온다 — 개발 compose(docker/compose.dev.yaml)가 넘긴다. 기본값은
-로컬 프로토타입용이고, 배포는 이번 범위가 아니다(스펙 Out of Scope).
+값은 전부 환경변수에서 온다 — 개발은 docker/compose.dev.yaml, 운영은 compose.prod.yml(+ 서버의 .env)이
+넘긴다. 기본값은 로컬 개발용이다. 운영 환경변수 이름 목록은 docs/ops/deploy.md.
 """
 
 from __future__ import annotations
@@ -27,7 +27,17 @@ def _env_bool(name: str, default: bool) -> bool:
 
 DEBUG = _env_bool("DJANGO_DEBUG", True)
 SECRET_KEY = _env("DJANGO_SECRET_KEY", "dev-only-insecure-key-do-not-use-in-deploy")
-ALLOWED_HOSTS = [h for h in _env("DJANGO_ALLOWED_HOSTS", "*").split(",") if h]
+ALLOWED_HOSTS = [h.strip() for h in _env("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
+# 운영은 web(nginx) 뒤의 리버스 프록시가 TLS 를 끝낸다 — 전체 오리진(https://…)을 콤마로.
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _env("DJANGO_CSRF_TRUSTED_ORIGINS").split(",") if o.strip()]
+
+if not DEBUG:
+    from django.core.exceptions import ImproperlyConfigured
+
+    if SECRET_KEY == "dev-only-insecure-key-do-not-use-in-deploy":
+        raise ImproperlyConfigured("DJANGO_DEBUG=false 인데 DJANGO_SECRET_KEY 가 개발 기본값이다.")
+    # 프록시가 넘기는 X-Forwarded-Proto 를 믿는다(nginx 가 바깥 프록시의 값을 그대로 넘긴다).
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -40,7 +50,7 @@ INSTALLED_APPS = [
 ]
 
 # ---------- 학생 compose.yml ----------
-# 이미지 태그는 지금은 로컬 빌드 이름이다 — 배포 때 레지스트리 태그로 바꾼다(스펙 Out of Scope).
+# 기본값은 로컬 빌드 이름이다. 운영은 compose.prod.yml 이 Actions 가 게시한 ghcr 주소(배포 sha)를 넘긴다.
 AGENT_IMAGE = _env("AGENT_IMAGE", "infralab/agent:dev")
 WORKSTATION_IMAGE = _env("WORKSTATION_IMAGE", "infralab/workstation:dev")
 FLOCI_IMAGE = _env("FLOCI_IMAGE", "floci/floci:2.3.0")
@@ -54,6 +64,9 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
+
+# 정적 파일: backend 는 /api 만 낸다(django.contrib.staticfiles·admin 없음). 화면의 정적 파일은 web 이미지(nginx)가
+# Vite 빌드 산출물을 직접 낸다 — docker/web.Dockerfile.
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"

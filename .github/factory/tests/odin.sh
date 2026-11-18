@@ -160,7 +160,7 @@ eq "merged" true "$(merged)"
 has "squash" "pulls/70/merge -f merge_method=squash" "$(calls)"
 has "branch deleted" "git/refs/heads/factory/spec-50" "$(calls)"
 eq "bot pull_request run deleted (#270)" "" "$(runs_left)"
-has "main built" "actions/workflows/ci.yml/dispatches" "$(calls)"
+has "main released" "actions/workflows/release.yml/dispatches" "$(calls)"
 eq "open tickets approved" "61 62 63" "$(approved)"
 # #61 is blocked (an open blocker); #62 is the lowest-numbered unblocked ticket.
 eq "first dispatch" 62 "$(dispatched)"

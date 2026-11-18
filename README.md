@@ -79,9 +79,9 @@ flowchart LR
 | `agent/` | 학생 PC 에서 도는 Go 단일 바이너리(`infra-agent`). 검사 실행, 환경 준비, Floci·kind 제어, 브라우저 터미널 중계. 자세한 API 는 [`agent/README.md`](agent/README.md) |
 | `backend/` | Django 5.2 + django-ninja API. 앱: `accounts`(소셜 로그인·JWT), `cohorts`, `scenarios`, `submissions` |
 | `web/` | React 18 + Vite + TypeScript, Mantine 8, xterm.js. [`web/README.md`](web/README.md) |
-| `docker/` | 개발용 compose(`compose.dev.yaml`), backend 이미지, 학생용 `workstation` 이미지 |
+| `docker/` | 개발용 compose(`compose.dev.yaml`), backend 이미지(개발·운영), web 운영 이미지, 학생용 `workstation` 이미지 |
 | `scenarios/` | 시나리오 YAML 과 setup·검사 스크립트. `_shared/` 는 시나리오 공용 스크립트 |
-| `docs/` | 실측·조사 기록 |
+| `docs/` | 실측·조사 기록, 운영 배포(`docs/ops/deploy.md`) |
 
 ## 🚀 로컬에서 실행
 
@@ -156,6 +156,7 @@ PR 검사(GitHub Actions `ci`)와 같은 검사: `scripts/ci.sh <backend|web|age
 
 ## 📚 더 읽을 문서
 
+- [`docs/ops/deploy.md`](docs/ops/deploy.md) — 운영 배포 흐름·환경변수 이름·서버 쪽 할 일
 - [`agent/README.md`](agent/README.md) — 에이전트 API·구조·시험
 - [`web/README.md`](web/README.md) — 화면 구조·터미널 키
 - [`docs/floci-findings-2026-10-22.md`](docs/floci-findings-2026-10-22.md) — Floci 실측
