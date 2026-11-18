@@ -161,8 +161,19 @@ class Scenario:
         """검사가 쓰는 보조 스크립트 — 검사 명령에서 이름으로 불리는 것과, 그 스크립트가 다시 부르는 것.
         setup 전용 스크립트(고장 내기 본문)는 학생 상세에 싣지 않으려고 뺀다."""
 
+        return self._scripts_for(self.checks)
+
+    def hidden_check_definitions(self) -> list[dict[str, Any]]:
+        return [c.as_dict() for c in self.hidden_checks]
+
+    def hidden_check_scripts(self) -> dict[str, str]:
+        """숨은 검사가 쓰는 보조 스크립트 — `check_scripts` 와 같은 규칙."""
+
+        return self._scripts_for(self.hidden_checks)
+
+    def _scripts_for(self, checks: tuple[Check, ...]) -> dict[str, str]:
         used: dict[str, str] = {}
-        pending = [c.command for c in self.checks]
+        pending = [c.command for c in checks]
         while pending:
             text = pending.pop()
             for name, body in self.scripts.items():

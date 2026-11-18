@@ -24,6 +24,9 @@ class ExamInvite(models.Model):
     consented_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    #: 마감 뒤 지원자 화면이 올린 숨은 검사 결과 — {시나리오 id: [{check_id, pass, …}]}. 올라오기 전엔 null(#74).
+    final_results = models.JSONField(null=True, blank=True, default=None)
+    final_results_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at", "id"]

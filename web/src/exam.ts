@@ -103,3 +103,13 @@ export function preflightGate(
 ): { canStart: boolean; warnings: string[] } {
   throw new Error("#78");
 }
+
+/** GET /api/exam/<토큰>/final-checks — 마감 뒤에만. 열린 시나리오별 숨은 검사 정의(없으면 빈 목록). */
+export type FinalChecks = {
+  scenarios: { scenario_id: string; checks: { id: string; timeout_seconds: number }[]; scripts: Record<string, string> }[];
+};
+export const getFinalChecks = (token: string) => api<FinalChecks>(`${examPath(token)}/final-checks`);
+
+/** POST /api/exam/<토큰>/final-results — 숨은 검사 결과를 한 번 올린다(204). */
+export const postFinalResults = (token: string, body: { agent_version: string; scenarios: unknown[] }) =>
+  api<void>(`${examPath(token)}/final-results`, { method: "POST", body: JSON.stringify(body) });

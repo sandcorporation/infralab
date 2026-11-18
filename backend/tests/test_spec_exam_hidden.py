@@ -104,7 +104,6 @@ def _score(api, teacher, cohort_id, invite_id):
     return api.get(f"/api/instructor/cohorts/{cohort_id}/exam-invites/{invite_id}/score", teacher)
 
 
-@pytest.mark.skip(reason="#74")
 def test_final_checks_are_409_during_the_attempt_and_hidden_only_after_it(api, hidden_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -124,7 +123,6 @@ def test_final_checks_are_409_during_the_attempt_and_hidden_only_after_it(api, h
     assert not any(cid in res.content.decode() for cid in S3_CHECK_IDS)
 
 
-@pytest.mark.skip(reason="#74")
 def test_no_candidate_response_leaks_hidden_checks_during_the_attempt(api, hidden_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -151,7 +149,6 @@ def test_no_candidate_response_leaks_hidden_checks_during_the_attempt(api, hidde
         assert "index.html 본문" not in body
 
 
-@pytest.mark.skip(reason="#74")
 def test_final_results_are_taken_once_after_the_end(api, hidden_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -173,7 +170,6 @@ def test_final_results_are_taken_once_after_the_end(api, hidden_bank):
     assert _score(api, teacher, cohort["id"], invite["id"]).json()["hidden_passed"] == 1
 
 
-@pytest.mark.skip(reason="#74")
 def test_score_combines_public_and_hidden_checks(api, hidden_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -203,7 +199,6 @@ def test_score_combines_public_and_hidden_checks(api, hidden_bank):
     }
 
 
-@pytest.mark.skip(reason="#74")
 def test_score_without_a_submission_counts_zero_public_passes(api, hidden_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -218,7 +213,6 @@ def test_score_without_a_submission_counts_zero_public_passes(api, hidden_bank):
     assert score["final_percent"] == round(100 * 2 / 6)
 
 
-@pytest.mark.skip(reason="#74")
 def test_score_of_another_orgs_invite_is_404(api, hidden_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -230,7 +224,6 @@ def test_score_of_another_orgs_invite_is_404(api, hidden_bank):
     assert _score(api, teacher, other["id"], invite["id"]).status_code == 404
 
 
-@pytest.mark.skip(reason="#74")
 def test_hidden_checks_off_skips_them_and_scores_public_only(api, hidden_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher, {**EXAM_SETTINGS, "hidden_checks": False})
@@ -248,7 +241,6 @@ def test_hidden_checks_off_skips_them_and_scores_public_only(api, hidden_bank):
     assert score["final_percent"] == 75
 
 
-@pytest.mark.skip(reason="#74")
 def test_hidden_checks_are_skipped_when_the_problem_bank_has_none(api, no_bank):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
