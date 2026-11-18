@@ -1,0 +1,369 @@
+# Factory task: Odin (ADR-0001 "Odin", docs/adr/0001-software-factory.md)
+#
+# Decompose opens the spec PR (head factory/spec-<S>, label spec-pr: each ticket's acceptance tests,
+# switched off with a `#<ticket>` marker, .github/factory/spec-tests.sh) and dispatches this run. Odin
+# (Opus, .github/factory/odin.md) checks the tickets and tests against the code, the earlier specs'
+# merged spec tests, CLAUDE.md, the ADRs and the glossary, fixes what it can (test files, ticket bodies,
+# the `#<ticket>` stubs that make the tests import and compile) and asks (needs-decision) when the fix
+# would change scope or a user-visible choice. The workflow then runs `scripts/ci.sh all` (the switched
+# off tests only import and compile: this is the build check). A failure goes back to the agent once in
+# the same run; a second failure hands the spec to a human. On a pass the workflow pushes the fixes,
+# squash-merges the spec PR, labels the spec's open tickets ready-for-agent and dispatches the first
+# one (.github/factory/odin.sh).
+# Conflicts with main: main is merged into the spec branch, not rebased onto, and pushed with a
+# plain push. A conflict is resolved by an agent in this run ("Resolve conflicts"), then the same
+# checks run. When the squash merge fails (main moved again), a new run is dispatched with
+# mode=conflict: it merges main again, resolves without a new review, checks, pushes and merges. The
+# rounds are counted on the spec PR (`odin.sh conflict`, ODIN_CONFLICT_LIMIT, default 2); past the
+# limit the spec goes to a human with the conflicting files.
+# Trigger: Decompose and the resume job dispatch it with the spec number, or a manual run.
+name: factory-odin
+run-name: 'odin #${{ inputs.spec }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: Spec issue number whose spec PR to review
+        required: true
+        type: number
+      mode:
+        description: 'review: review the spec PR (default); conflict: only merge main in and resolve'
+        required: false
+        default: review
+        type: choice
+        options: [review, conflict]
+
+concurrency:
+  group: factory-odin-${{ inputs.spec }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  id-token: write
+
+env:
+  # dispatch-next.sh (starting the chain with the approved tickets as --candidates) and ledger.sh read
+  # these.
+  FACTORY_SPEC_QUEUE: ${{ vars.FACTORY_SPEC_QUEUE }}
+  FACTORY_SPEC_BUDGET_USD: ${{ vars.FACTORY_SPEC_BUDGET_USD }}
+  FACTORY_DAILY_BUDGET_USD: ${{ vars.FACTORY_DAILY_BUDGET_USD }}
+  FACTORY_TRACKS: ${{ vars.FACTORY_TRACKS }}
+
+jobs:
+  # Stop at once, before any runner minute goes to setup, while the secret is not registered.
+  token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require CLAUDE_CODE_OAUTH_TOKEN
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
+            exit 1
+          fi
+
+  odin:
+    needs: token
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: infralab
+          POSTGRES_USER: infralab
+          POSTGRES_PASSWORD: infralab
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U infralab -d infralab"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      SPEC: ${{ inputs.spec }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      BASE: ${{ github.event.repository.default_branch }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # scripts/ci.sh backend: the service above, as in ci.yml (test-only values).
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      DJANGO_SECRET_KEY: ci-only-insecure-key
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # "비용 장부와 상한" (ADR-0001): stop on needs-decision / factory-paused and on the budgets.
+      - name: Budget guard
+        id: budget
+        run: bash .github/factory/ledger.sh guard "$SPEC"
+
+      # none (no open spec PR: warn and stop) / empty (no test: close it and start the tickets) /
+      # review (.github/factory/odin.sh state).
+      - name: Find the spec PR
+        id: state
+        if: steps.budget.outputs.go == 'true'
+        run: bash .github/factory/odin.sh state "$SPEC"
+
+      - name: Start the tickets without acceptance tests
+        if: steps.state.outputs.mode == 'empty'
+        run: bash .github/factory/odin.sh empty "$SPEC" "${{ steps.state.outputs.pr }}"
+
+      # Review the spec PR on today's main: the merge must land what the checks checked. Main is merged
+      # in, not rebased onto (as Verify does since ): a resolved conflict leaves a merge
+      # commit, which a rebase would replay into the same conflict again, and the push stays a plain
+      # push (the PR is squashed anyway). A conflict either goes to the agent ("Resolve conflicts"),
+      # or, past the rounds limit (odin.sh conflict), to a human with the conflicting files.
+      # In mode=conflict the spec PR passed its review in an earlier run, whose merge then failed:
+      # the verdict is pass and that run already counted this round.
+      - name: Check out the spec PR
+        id: pr
+        if: steps.state.outputs.mode == 'review'
+        env:
+          BRANCH: ${{ steps.state.outputs.branch }}
+          PR: ${{ steps.state.outputs.pr }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$BASE" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          git switch -C "$BRANCH" "origin/$BRANCH"
+          mkdir -p .factory
+          echo ".factory/" >> .git/info/exclude
+          echo "*.log" >> .git/info/exclude
+          if [ "$MODE" = conflict ]; then
+            echo pass > .factory/odin-verdict
+            echo "- 앞 run의 병합이 실패해 $BASE를 다시 merge했다(검토는 앞 run이 마쳤다)" > .factory/odin-report.md
+          fi
+          if git merge --no-edit "origin/$BASE"; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only --diff-filter=U > .factory/conflict-files
+          echo "::warning::conflicts with $BASE: $(tr '\n' ' ' < .factory/conflict-files)"
+          if [ "$MODE" = conflict ] \
+            || bash .github/factory/odin.sh conflict "$SPEC" "$PR" .factory/conflict-files .factory/human.md; then
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            cat .factory/human.md
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up the checks' tools
+        if: steps.pr.outputs.go == 'true'
+        uses: ./.github/actions/factory-toolchain
+
+      # Spec PRs hold switched-off acceptance tests and `#<ticket>` stubs, so a conflict is mostly both
+      # sides adding to the same module, route list or test helper: keep both.
+      - name: Resolve conflicts
+        if: steps.pr.outputs.go == 'true' && steps.pr.outputs.conflict == 'true'
+        timeout-minutes: 40
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_bots: github-actions
+          prompt: |
+            You are the Odin run for spec #${{ env.SPEC }} in ${{ github.repository }}, spec PR #${{ steps.state.outputs.pr }}
+            (branch ${{ steps.state.outputs.branch }}, checked out). Other work merged into ${{ env.BASE }} meanwhile, and
+            merging origin/${{ env.BASE }} into the branch left conflicts (see `git status`; the files are listed in
+            .factory/conflict-files). The spec PR holds the tickets' switched-off acceptance tests (`#<ticket>`
+            markers, .github/factory/spec-tests.sh) and the `#<ticket>` stubs that make them import and compile.
+            Resolve every conflict so that both sides survive: keep everything ${{ env.BASE }} added and add the spec
+            PR's part next to it (both routes in the same urls list, both fields on the same model, both exports
+            in the same module; a migration conflict gets a merge migration). Never drop ${{ env.BASE }}'s changes, never weaken what a test asserts, and do not touch what
+            does not conflict unless the merged code would not compile otherwise.
+            Check with `scripts/ci.sh all` (the workflow runs it again after you), finish with `git commit --no-edit`, and add one line to .factory/odin-report.md
+            naming the files you resolved and how. Do not push.
+          claude_args: >-
+            --model claude-opus-5-5
+            --max-turns 60
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Record cost (odin-conflict)
+        if: always() && steps.pr.outputs.go == 'true' && steps.pr.outputs.conflict == 'true'
+        run: bash .github/factory/ledger.sh record odin-conflict "$SPEC"
+
+      # The agent must leave no conflict and a finished merge. Edits it left uncommitted with every
+      # conflict resolved are committed here (the checks below still judge them).
+      - name: Require a resolved merge
+        id: resolved
+        if: steps.pr.outputs.conflict == 'true'
+        run: |
+          if [ -n "$(git diff --name-only --diff-filter=U)" ] || { [ -s .factory/conflict-files ] && xargs -d '\n' -a .factory/conflict-files git grep -qE '^(<<<<<<<|>>>>>>>) ' --; }; then
+            echo "::error::conflicts left: $(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse -q --verify MERGE_HEAD > /dev/null || [ -n "$(git status --porcelain)" ]; then
+            echo "::warning::the agent did not finish the merge commit; committing it"
+            git add -A
+            git commit -q --no-edit || git commit -q -m "main을 merge하고 충돌을 푼다 (#$SPEC)"
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Review
+        id: review
+        if: >-
+          steps.pr.outputs.go == 'true' && inputs.mode != 'conflict' &&
+          (steps.pr.outputs.conflict != 'true' || steps.resolved.outputs.ok == 'true')
+        timeout-minutes: 60
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Decompose and the resume job dispatch this run with GITHUB_TOKEN: the actor is the bot.
+          allowed_bots: github-actions
+          prompt: |
+            You are the Odin run of this repo's software factory.
+            Spec issue: #${{ env.SPEC }} in ${{ github.repository }}.
+            Spec PR: #${{ steps.state.outputs.pr }}, branch ${{ steps.state.outputs.branch }} (checked out, ${{ env.BASE }} merged in).
+            Read .github/factory/odin.md and follow it exactly.
+          claude_args: >-
+            --model claude-opus-5-5
+            --max-turns 150
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Record cost (odin)
+        if: always() && steps.pr.outputs.go == 'true' && steps.review.outcome != 'skipped'
+        run: bash .github/factory/ledger.sh record odin "$SPEC"
+
+      # question (needs-decision, or the verdict file says so) / go (pass, fixed) / missing.
+      - name: Read the verdict
+        id: verdict
+        if: >-
+          steps.pr.outputs.go == 'true' &&
+          (steps.pr.outputs.conflict != 'true' || steps.resolved.outputs.ok == 'true')
+        run: bash .github/factory/odin.sh verdict "$SPEC" .factory/odin-verdict
+
+      # The build check: the acceptance tests are switched off, so `scripts/ci.sh all` only imports and
+      # compiles them (and runs every other test, which also covers a resolved conflict).
+      - name: Checks (first)
+        id: check_first
+        if: steps.verdict.outputs.verdict == 'go'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "scripts/ci.sh all" > .factory/check-command
+          scripts/ci.sh all 2>&1 | tee .factory/check.log
+
+      - name: Fix the failed checks
+        if: steps.verdict.outputs.verdict == 'go' && steps.check_first.outcome == 'failure'
+        timeout-minutes: 40
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_bots: github-actions
+          prompt: |
+            You are the Odin run for spec #${{ env.SPEC }} in ${{ github.repository }}, spec PR #${{ steps.state.outputs.pr }}
+            (branch ${{ steps.state.outputs.branch }}, checked out). You reviewed and fixed it (and, if
+            .factory/conflict-files exists, merged ${{ env.BASE }} in and resolved its conflicts). The workflow then ran
+            the checks in .factory/check-command, and they failed.
+            Their output is in .factory/check.log (search it for "FAILED", "Error", "error" and "ci.sh:"
+            instead of reading it whole). Follow .github/factory/odin.md, section "Make it build".
+            Fix the cause (format Go with `gofmt -w`; fix the test files, the `#<ticket>` stubs or a conflict you
+            resolved wrongly; never weaken what a test asserts and never drop ${{ env.BASE }}'s changes), check with the
+            failing command, and add what you fixed to .factory/odin-report.md.
+            Do not commit or push.
+          claude_args: >-
+            --model claude-opus-5-5
+            --max-turns 60
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Record cost (odin-fix)
+        if: always() && steps.verdict.outputs.verdict == 'go' && steps.check_first.outcome == 'failure'
+        run: bash .github/factory/ledger.sh record odin-fix "$SPEC"
+
+      - name: Checks
+        id: check
+        if: steps.verdict.outputs.verdict == 'go' && steps.check_first.outcome == 'failure'
+        run: |
+          set -o pipefail
+          scripts/ci.sh all 2>&1 | tee .factory/check.log
+
+      # Odin's fixes and the merge of main land on the factory branch with a plain push: main
+      # was merged in above, so the push fast-forwards. A branch that moved meanwhile refuses it.
+      - name: Push Odin's fixes
+        id: push
+        if: >-
+          steps.verdict.outputs.verdict == 'go' &&
+          (steps.check_first.outcome == 'success' || steps.check.outcome == 'success')
+        env:
+          BRANCH: ${{ steps.state.outputs.branch }}
+        run: |
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -q -m "스펙: Odin 검토 고침 (#$SPEC)"
+          fi
+          git push origin "HEAD:refs/heads/$BRANCH"
+
+      - name: Merge, or ask, or hand to a human
+        if: always() && steps.pr.outputs.go != ''
+        env:
+          CANCELLED: ${{ job.status == 'cancelled' }}
+          PR: ${{ steps.state.outputs.pr }}
+          GO: ${{ steps.pr.outputs.go }}
+          CONFLICT: ${{ steps.pr.outputs.conflict }}
+          RESOLVED: ${{ steps.resolved.outputs.ok }}
+          VERDICT: ${{ steps.verdict.outputs.verdict }}
+          FIRST: ${{ steps.check_first.outcome }}
+          SECOND: ${{ steps.check.outcome }}
+          PUSH: ${{ steps.push.outcome }}
+        run: |
+          if [ "$CANCELLED" = true ]; then
+            echo "::warning::cancelled; spec PR #$PR stays open"
+            exit 0
+          fi
+          reason=.factory/human.md
+          report=.factory/odin-report.md
+          files() { sed '/^[[:space:]]*$/d; s/^/- /' .factory/conflict-files 2>/dev/null; }
+          if [ "$GO" != true ]; then
+            : # odin.sh conflict wrote .factory/human.md (the conflict rounds are used up)
+          elif [ "$CONFLICT" = true ] && [ "$RESOLVED" != true ]; then
+            { echo "### $BASE와의 충돌을 에이전트가 다 풀지 못했다"; echo; echo "충돌 파일:"; echo; files; } > "$reason"
+          elif [ "$VERDICT" = question ]; then
+            bash .github/factory/odin.sh question "$SPEC" "$PR" "$report"
+            exit 0
+          elif [ "$VERDICT" != go ]; then
+            { echo "### Odin이 판정(.factory/odin-verdict)을 남기지 않았다"; echo; cat "$report" 2>/dev/null; } > "$reason"
+          elif [ "$FIRST" != success ] && [ "$SECOND" != success ]; then
+            {
+              echo "### 고칠 기회를 한 번 준 뒤에도 검사 실패: \`$(cat .factory/check-command 2>/dev/null)\`"
+              echo
+              echo '```'
+              grep -E 'FAILED|Error|error|ci.sh:' .factory/check.log 2>/dev/null | head -n 60
+              echo '```'
+              echo
+              if [ "$CONFLICT" = true ]; then echo "$BASE와 충돌을 푼 파일:"; echo; files; echo; fi
+              cat "$report" 2>/dev/null
+            } > "$reason"
+          elif [ "$PUSH" != success ]; then
+            echo "### Odin의 고침을 push하지 못했다(그 사이 브랜치가 바뀌었을 수 있다)" > "$reason"
+          elif bash .github/factory/odin.sh pass "$SPEC" "$PR" "$report"; then
+            exit 0
+          else
+            # The checks passed but GitHub refused the merge: main most likely moved again.
+            # Find what conflicts now and let a new run (mode=conflict) resolve it, within the limit.
+            git fetch -q origin "$BASE"
+            if git merge --no-commit --no-ff "origin/$BASE" > /dev/null 2>&1; then
+              : > .factory/conflict-files
+            else
+              git diff --name-only --diff-filter=U > .factory/conflict-files
+            fi
+            git merge --abort 2> /dev/null || true
+            if bash .github/factory/odin.sh conflict "$SPEC" "$PR" .factory/conflict-files "$reason" --dispatch; then
+              exit 0
+            fi
+            { echo; echo "(검사는 통과했지만 스펙 PR을 병합하지 못했다)"; echo; cat "$report" 2>/dev/null; } >> "$reason"
+          fi
+          cat "$reason"
+          bash .github/factory/odin.sh human "$SPEC" "$PR" "$reason"

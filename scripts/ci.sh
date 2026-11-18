@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # PR 검사와 같은 검사를 저장소 루트에서 한 명령으로 돈다.
-#   scripts/ci.sh <backend|web|agent|all>
+#   scripts/ci.sh <backend|web|agent|factory|all>
 # 필요: backend=uv + 접근 가능한 Postgres(POSTGRES_HOST·PORT 등, 기본 127.0.0.1:55440),
-#       web=node+npm, agent=go.
+#       web=node+npm, agent=go, factory=bash·jq·git (가짜 gh 로 공장 스크립트 시험).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -29,10 +29,16 @@ agent() {
   )
 }
 
+factory() {
+  need jq "공장 스크립트 시험"
+  bash .github/factory/test.sh
+}
+
 case "${1:-}" in
   backend) backend ;;
   web) web ;;
   agent) agent ;;
-  all) backend; web; agent ;;
-  *) echo "사용법: scripts/ci.sh <backend|web|agent|all>" >&2; exit 2 ;;
+  factory) factory ;;
+  all) backend; web; agent; factory ;;
+  *) echo "사용법: scripts/ci.sh <backend|web|agent|factory|all>" >&2; exit 2 ;;
 esac
