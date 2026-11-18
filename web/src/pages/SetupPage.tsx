@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, fetchComposeFile, parseId, regenerateAgentToken } from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
+import { SmartScreenNotice } from "../components/SmartScreenNotice";
 import { useMyCohort } from "../hooks";
 
 export default function SetupPage() {
@@ -83,6 +84,9 @@ export default function SetupPage() {
           </li>
           <li>
             <strong>Chrome</strong>. Safari 는 지원하지 않는다.
+          </li>
+          <li>
+            Windows 설치 파일(<code>infralab-setup-*.exe</code>)을 실행할 때: <SmartScreenNotice />
           </li>
           <li>
             메모리: kind(Kubernetes) 시나리오까지 하려면 Docker 에 <strong>6GB 이상</strong>을 준다.

@@ -18,6 +18,7 @@ import {
 import type { AiConfig } from "../exam";
 import { useExamClock } from "../examAttempt";
 import { PreflightPanel, usePreflight } from "../components/PreflightPanel";
+import { SmartScreenNotice } from "../components/SmartScreenNotice";
 import { useMyCohort } from "../hooks";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -86,6 +87,9 @@ export default function ExamPage() {
             </li>
             {status.proctoring && <li>이 시험은 감독합니다 — 응시 중 화면 이탈 같은 신호가 기록됩니다.</li>}
             <li>시간이 끝나거나 「제출하고 끝내기」를 누르면 더 제출할 수 없습니다.</li>
+            <li>
+              Windows 설치 파일: <SmartScreenNotice />
+            </li>
           </ul>
           <label className="row">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
