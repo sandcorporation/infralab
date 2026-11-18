@@ -9,11 +9,16 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const project = process.env.E2E_PROJECT ?? "infralab-e2e";
 export const workstation = process.env.E2E_WORKSTATION ?? "infralab-e2e-workstation";
 
-function compose(args: string[], env: Record<string, string> = {}): string {
+/**
+ * 떠 있는 compose 서비스 안에서 명령을 돈다(`docker compose exec -T`). 시험은 컨테이너를 만들거나 지우지 않는다 —
+ * 그래서 `up`·`rm` 은 이 손잡이로 부를 수 없다. 시험 중 컨테이너를 만들면 호스트에 veth 가 생기고 Chromium 이 그때
+ * 진행 중인 요청을 net::ERR_NETWORK_CHANGED 로 끊는다(#227·#232). 컨테이너는 scripts/ci.sh e2e 가 스택과 함께 한 번 만든다.
+ */
+function composeExec(args: string[]): string {
   return execFileSync(
     "docker",
-    ["compose", "-p", project, "-f", "docker/compose.dev.yaml", "-f", "docker/compose.e2e.yaml", "--profile", "agent", ...args],
-    { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 },
+    ["compose", "-p", project, "-f", "docker/compose.dev.yaml", "-f", "docker/compose.e2e.yaml", "--profile", "agent", "exec", "-T", ...args],
+    { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 },
   );
 }
 
@@ -23,7 +28,7 @@ function compose(args: string[], env: Record<string, string> = {}): string {
  * Chromium 이 진행 중인 요청을 net::ERR_NETWORK_CHANGED 로 끊는다(#227).
  */
 export async function startAgent(request: APIRequestContext, token: string): Promise<void> {
-  compose(["exec", "-T", "-e", `AGENT_TOKEN=${token}`, "agent", "agentctl", "start"]);
+  composeExec(["-e", `AGENT_TOKEN=${token}`, "agent", "agentctl", "start"]);
   await expect
     .poll(
       async () => {
@@ -44,14 +49,16 @@ export async function startAgent(request: APIRequestContext, token: string): Pro
 
 /** 에이전트를 내린다 — 학생이 실습 환경을 켜지 않은 꼴. 컨테이너는 남긴다(위 까닭). */
 export function stopAgent(): void {
-  compose(["exec", "-T", "agent", "agentctl", "stop"]);
+  composeExec(["agent", "agentctl", "stop"]);
 }
 
-/** workstation 을 새 /work 로 다시 만든다 — 홈 볼륨(/root)은 그대로. 학생이 다른 기수 폴더에서 compose 를 올린 꼴. */
+/**
+ * workstation 의 /work 를 비운다 — 홈 볼륨(/root)은 그대로. 학생이 다른 기수 폴더에서 compose 를 올린 꼴.
+ * 컨테이너는 다시 만들지 않는다(#232, 위 composeExec 의 까닭). 다시 만들 때처럼 그 안에서 돌던 것(터미널 셸·검사)은
+ * 끝낸다 — `kill -9 -1` 은 컨테이너 PID 이름공간 안에서 PID 1(sleep)과 이 셸만 빼고 모두에게 간다.
+ */
 export function freshWorkDir(): void {
-  compose(["rm", "-sf", "workstation"]);
-  execFileSync("docker", ["volume", "rm", "-f", `${project}_e2e-work`], { stdio: "ignore" });
-  compose(["up", "-d", "workstation"]);
+  composeExec(["workstation", "sh", "-c", "kill -9 -1 2>/dev/null; find /work -mindepth 1 -delete"]);
 }
 
 /** workstation 안에서 명령을 돌려 출력을 준다. */
@@ -84,29 +91,27 @@ export function writeInWorkstation(path: string, content: string): void {
 
 /** 기본 조직의 owner 로 — 강사 화면이 열린다. 사용자는 먼저 로그인으로 만들어져 있어야 한다. */
 export function makeInstructor(uid: string): void {
-  compose(["exec", "-T", "backend", "python", "manage.py", "set_instructor", `sandcorp:${uid}`]);
+  composeExec(["backend", "python", "manage.py", "set_instructor", `sandcorp:${uid}`]);
 }
 
 /** 조직을 만들고 첫 담당자(owner)를 넣는다(`create_org`). 사용자는 먼저 로그인으로 만들어져 있어야 한다. */
 export function createOrg(name: string, ownerUid: string): void {
-  compose(["exec", "-T", "backend", "python", "manage.py", "create_org", name, "--owner", `sandcorp:${ownerUid}`]);
+  composeExec(["backend", "python", "manage.py", "create_org", name, "--owner", `sandcorp:${ownerUid}`]);
 }
 
 /** 조직에 담당자를 넣는다(`add_org_member`, 기본 owner). 사용자는 먼저 로그인으로 만들어져 있어야 한다. */
 export function addOrgMember(org: string, uid: string, role: "owner" | "staff" = "owner"): void {
-  compose(["exec", "-T", "backend", "python", "manage.py", "add_org_member", org, `sandcorp:${uid}`, "--role", role]);
+  composeExec(["backend", "python", "manage.py", "add_org_member", org, `sandcorp:${uid}`, "--role", role]);
 }
 
 /** 시계를 당긴다(e2e 전용 관리 명령, #194) — 그 회차의 응시 중인 응시가 마감이 지난 꼴이 된다. 1분을 기다리지 않는다. */
 export function expireExam(cohortId: number): void {
-  compose(["exec", "-T", "backend", "python", "manage.py", "e2e_expire_exam", String(cohortId)]);
+  composeExec(["backend", "python", "manage.py", "e2e_expire_exam", String(cohortId)]);
 }
 
 /** backend 가 AI 프록시에서 알아낸 공급사 키 유무(키 값이 아니라 있다·없다). 모르면(프록시를 못 부름) null. */
 export function examProvidersKnown(): { anthropic: boolean; openai: boolean } | null {
-  const out = compose([
-    "exec",
-    "-T",
+  const out = composeExec([
     "backend",
     "python",
     "manage.py",
