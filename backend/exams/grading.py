@@ -51,11 +51,27 @@ class Turn:
 
 
 def turns_from_exchanges(exchanges: list[AIExchange]) -> list[Turn]:
-    raise NotImplementedError("#131")
+    """프록시 기록 → 발화. 기록 순서대로 요청은 사용자, 응답은 AI 발화. 빈 글은 뺀다."""
+
+    turns = []
+    for ex in exchanges:
+        if ex.request:
+            turns.append(Turn("user", ex.request))
+        if ex.response:
+            turns.append(Turn("assistant", ex.response))
+    return turns
 
 
 def turns_from_transcript(ai_transcript: list[dict] | None) -> list[Turn]:
-    raise NotImplementedError("#131")
+    """제출의 AI 대화 기록(도구마다 `entries`) → 저장된 순서 그대로의 발화. 빈 글은 뺀다."""
+
+    turns = []
+    for tool in ai_transcript or []:
+        for entry in tool.get("entries") or []:
+            text = entry.get("text")
+            if text:
+                turns.append(Turn(entry.get("role", ""), text))
+    return turns
 
 
 class Grader(Protocol):
@@ -108,21 +124,21 @@ class FakeGrader:
     name = "fake"
 
     def grade(self, exchanges: list[AIExchange]) -> list[RubricItem]:
+        return self.grade_turns(turns_from_exchanges(exchanges))
+
+    def grade_turns(self, turns: list[Turn]) -> list[RubricItem]:
         items = []
         for key in RUBRIC_KEYS:
             requests_only, cue = _CUES[key]
             found: list[str] = []
-            for ex in exchanges:
-                texts = [ex.request] if requests_only else [ex.request, ex.response]
-                for text in texts:
-                    for s in _sentences(text):
-                        if cue.search(s) and s not in found:
-                            found.append(s)
+            for turn in turns:
+                if requests_only and turn.role != "user":
+                    continue
+                for s in _sentences(turn.text):
+                    if cue.search(s) and s not in found:
+                        found.append(s)
             items.append(RubricItem(key=key, score=min(MAX_SCORE, len(found)), evidence=found[:MAX_EVIDENCE]))
         return items
-
-    def grade_turns(self, turns: list[Turn]) -> list[RubricItem]:
-        raise NotImplementedError("#131")
 
 
 GRADER_MODEL = "claude-sonnet-5-5"
@@ -169,14 +185,17 @@ class AnthropicGrader:
         return "".join(part.get("text", "") for part in data.get("content", []) if part.get("type") == "text")
 
     def grade(self, exchanges: list[AIExchange]) -> list[RubricItem]:
+        return self.grade_turns(turns_from_exchanges(exchanges))
+
+    def grade_turns(self, turns: list[Turn]) -> list[RubricItem]:
         transcript = "\n\n".join(
-            f"[{n}] 요청:\n{ex.request}\n[{n}] 응답:\n{ex.response}" for n, ex in enumerate(exchanges, 1)
+            f"[{n}] {'요청' if t.role == 'user' else '응답'}:\n{t.text}" for n, t in enumerate(turns, 1)
         )
         text = self._ask(_PROMPT + transcript)
         match = re.search(r"\{.*\}", text, re.S)
         parsed = json.loads(match.group(0)) if match else {}
         by_key = {i.get("key"): i for i in parsed.get("items", []) if isinstance(i, dict)}
-        sources = [t for ex in exchanges for t in (ex.request, ex.response) if t]
+        sources = [t.text for t in turns if t.text]
         items = []
         for key in RUBRIC_KEYS:
             raw = by_key.get(key, {})
@@ -184,9 +203,6 @@ class AnthropicGrader:
             quotes = [q for q in quotes if q and any(q in s for s in sources)][:MAX_EVIDENCE]
             items.append(RubricItem(key=key, score=_clamp(raw.get("score")), evidence=quotes))
         return items
-
-    def grade_turns(self, turns: list[Turn]) -> list[RubricItem]:
-        raise NotImplementedError("#131")
 
 
 def get_grader() -> Grader:

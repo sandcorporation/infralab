@@ -55,7 +55,6 @@ TRANSCRIPT = [
 ]
 
 
-@pytest.mark.skip(reason="#131")
 def test_proxy_records_become_user_and_assistant_turns_in_order():
     assert turns_from_exchanges(EXCHANGES) == [
         Turn("user", EXCHANGES[0].request),
@@ -64,7 +63,6 @@ def test_proxy_records_become_user_and_assistant_turns_in_order():
     ]
 
 
-@pytest.mark.skip(reason="#131")
 def test_a_submission_transcript_becomes_turns_in_stored_order():
     assert turns_from_transcript(TRANSCRIPT) == [
         Turn("user", "먼저 index.html 을 올리고 그다음 웹사이트 설정을 켜 줘."),
@@ -75,7 +73,6 @@ def test_a_submission_transcript_becomes_turns_in_stored_order():
     assert turns_from_transcript([]) == []
 
 
-@pytest.mark.skip(reason="#131")
 def test_fake_grader_gives_the_same_result_for_records_and_their_turns():
     old = FakeGrader().grade(EXCHANGES)
     new = FakeGrader().grade_turns(turns_from_exchanges(EXCHANGES))
@@ -84,7 +81,6 @@ def test_fake_grader_gives_the_same_result_for_records_and_their_turns():
     assert [i.key for i in new] == list(RUBRIC_KEYS)
 
 
-@pytest.mark.skip(reason="#131")
 def test_fake_grader_grades_turns_with_quotes_from_their_text():
     turns = turns_from_transcript(TRANSCRIPT)
 
@@ -104,14 +100,12 @@ def test_fake_grader_grades_turns_with_quotes_from_their_text():
     assert by_key["risky_command_guard"].score > 0 and by_key["risky_command_guard"].evidence
 
 
-@pytest.mark.skip(reason="#131")
 def test_fake_grader_gives_zero_without_turns():
     items = FakeGrader().grade_turns([])
 
     assert [(i.key, i.score, i.evidence) for i in items] == [(k, 0, []) for k in RUBRIC_KEYS]
 
 
-@pytest.mark.skip(reason="#131")
 def test_anthropic_grader_drops_quotes_outside_the_turns_and_clamps(monkeypatch):
     grader = AnthropicGrader("sk-test")
     answer = {
