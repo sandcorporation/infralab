@@ -62,3 +62,22 @@ class ExamInviteOut(Schema):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class ExamStatusOut(Schema):
+    """지원자가 보는 응시 상태. 남은 시간은 `server_time` 과 `deadline` 으로 화면이 센다."""
+
+    cohort_id: int
+    cohort_name: str
+    status: Literal["invited", "in_progress", "finished"]
+    time_limit_minutes: int
+    tools: list[str]
+    proctoring: bool
+    started_at: datetime | None
+    deadline: datetime | None
+    remaining_seconds: int | None
+    server_time: datetime
+
+
+class ExamStartIn(Schema):
+    consent: bool

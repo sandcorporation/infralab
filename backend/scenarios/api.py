@@ -12,6 +12,7 @@ from ninja.errors import HttpError
 
 from accounts.auth import instructor_auth, jwt_auth
 from cohorts.services import managed_cohort, my_membership, open_scenario, open_scenarios
+from exams.services import check_attempt
 from submissions.services import latest_submissions_by_scenario, passed_against  # noqa: F401 - scenarios → submissions 읽기 의존
 
 from . import registry
@@ -56,6 +57,7 @@ def set_open_scenarios(request: HttpRequest, cohort_id: int, payload: OpenScenar
 @student_router.get("/cohorts/{cohort_id}/scenarios", response=list[StudentScenarioSummaryOut])
 def my_cohort_scenarios(request: HttpRequest, cohort_id: int):
     m = my_membership(request, cohort_id)
+    check_attempt(m)
     latest = latest_submissions_by_scenario(m)
     out = []
     for s in open_scenarios(m.cohort):
@@ -68,6 +70,7 @@ def my_cohort_scenarios(request: HttpRequest, cohort_id: int):
 @student_router.get("/cohorts/{cohort_id}/scenarios/{scenario_id}", response=ScenarioDetailOut)
 def my_cohort_scenario(request: HttpRequest, cohort_id: int, scenario_id: str):
     m = my_membership(request, cohort_id)
+    check_attempt(m)
     return detail(open_scenario(m, scenario_id))
 
 
@@ -76,4 +79,5 @@ def my_cohort_scenario_prepare(request: HttpRequest, cohort_id: int, scenario_id
     """「환경 준비」·「시작」 버튼이 쓰는 응답 — 상세에는 없는 setup·되돌릴 것·AI 규칙 전문."""
 
     m = my_membership(request, cohort_id)
+    check_attempt(m)
     return prepare(open_scenario(m, scenario_id))
