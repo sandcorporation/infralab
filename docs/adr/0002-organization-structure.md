@@ -47,3 +47,4 @@ infralab 은 인프라 수업 하나를 위한 서비스였다. 강사는 전역
 - 강사 표면의 모든 기수 조회가 조직으로 걸러지므로, 앞으로 강사 엔드포인트를 더할 때는 `Cohort.objects` 를 직접
   쓰지 말고 `managed_cohorts`·`managed_cohort` 를 거친다.
 - 번호: 티켓은 `0001-organization-structure.md` 를 말했지만 0001 은 이미 소프트웨어 공장 ADR 이라 0002 로 둔다.
+- 대표 전용 기능이 생기면 `sandcorp_auth.VerifiedToken.is_owner_strong`(대표 토큰이고 `amr` 에 `fed` 가 없음)으로만 연다. 소셜(`fed`)로 들어온 대표 토큰은 받되 조직 역할 밖의 권한은 주지 않는다. 지금은 대표 전용 기능이 없다.

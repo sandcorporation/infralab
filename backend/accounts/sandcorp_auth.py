@@ -4,7 +4,8 @@
 11절 W). 여기서는 그 요약대로 짠다:
 
 - 액세스 토큰: EdDSA 서명(JWKS `kid`), `iss`=AUTH_URL, `aud`={공개 원점}/api(문자열 완전 일치), `exp`+30초,
-  `scope` 에 `infralab`. `acct` 가 없으면 대표 토큰, `"member"` 면 `sub` 가 `m_`+ULID, 그 밖(기계 토큰 등)은 거부.
+  `scope` 에 `infralab`. `acct` 가 없으면 대표 토큰(`sub` 는 INFRALAB_AUTH_OWNER_SUB, `amr` 는 문자열 배열 — A1·A4),
+  `"member"` 면 `sub` 가 `m_`+ULID, 그 밖(기계 토큰 등)은 거부.
 - ID 토큰: 같은 JWKS, `iss`, `aud`=client_id. `sub` 가 액세스 토큰과 같을 때만 `name` 을 표시 이름으로 쓴다.
 - 웹훅: `X-Sandcorp-Signature: t=…,v1=…`, 받은 본문 바이트로 HMAC-SHA256, 300초 창.
 
@@ -273,8 +274,16 @@ def _decode(token: str, *, audience: str) -> dict[str, JSON]:
     return claims
 
 
-def verify_access_token(token: str) -> str:
-    """액세스 토큰을 검증하고 `sub` 를 돌려준다."""
+@dataclass(frozen=True)
+class VerifiedToken:
+    sub: str
+    #: 대표 전용 기능은 이것으로만 연다(A4) — 대표 토큰이고 소셜(`amr` 에 `fed`)로 들어온 것이 아닐 때만 참.
+    #: infralab 에는 지금 대표 전용 기능이 없다(권한은 전부 조직 역할). 생기면 `amr:["fed"]` 로는 열지 않는다.
+    is_owner_strong: bool
+
+
+def verify_token(token: str) -> VerifiedToken:
+    """액세스 토큰을 검증하고 `sub`·대표 강도 판별을 돌려준다."""
 
     claims = _decode(token, audience=resource())
     for name in ("client_id", "scope", "jti"):
@@ -286,16 +295,31 @@ def verify_access_token(token: str) -> str:
         raise AuthFlowError("scope lacks infralab")
     sub = claims["sub"]
     assert isinstance(sub, str)
+    strong = False
     if "acct" in claims:
         # A2: member 밖(기계 토큰 `machine`, 빈 값, 배열, null …)은 모두 거부.
         if claims["acct"] != "member":
             raise AuthFlowError("acct is not member")
         if not MEMBER_SUB.match(sub):
             raise AuthFlowError("member sub has the wrong shape")
-    # acct 가 없으면 대표 토큰(A1). auth 가 대표 계정에만 그런 토큰을 서명한다.
+    else:
+        # A1: acct 가 없으면 대표 토큰 — sub 가 설정한 대표와 같아야 한다(기계 토큰·위조 막기).
+        if sub != settings.INFRALAB_AUTH_OWNER_SUB:
+            raise AuthFlowError("owner token sub is not the owner")
+        # A4: amr 은 문자열 배열이어야 한다. `fed`(소셜 로그인)가 있으면 받되 강한 대표로 치지 않는다.
+        amr = claims.get("amr", [])
+        if not isinstance(amr, list) or not all(isinstance(a, str) for a in amr):
+            raise AuthFlowError("amr is not a string array")
+        strong = "fed" not in amr
     if len(sub) > MAX_SUB:
         raise AuthFlowError("sub too long")
-    return sub
+    return VerifiedToken(sub=sub, is_owner_strong=strong)
+
+
+def verify_access_token(token: str) -> str:
+    """`verify_token` 의 `sub` 만."""
+
+    return verify_token(token).sub
 
 
 def display_name_from_id_token(id_token: str | None, sub: str) -> str:

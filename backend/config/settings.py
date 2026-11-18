@@ -100,6 +100,8 @@ INFRALAB_AUTH_URL = _env("INFRALAB_AUTH_URL", "https://auth.sandcorp.co.kr")
 INFRALAB_AUTH_CLIENT_ID = _env("INFRALAB_AUTH_CLIENT_ID")
 INFRALAB_AUTH_CLIENT_SECRET = _env("INFRALAB_AUTH_CLIENT_SECRET")
 INFRALAB_AUTH_WEBHOOK_SECRET = _env("INFRALAB_AUTH_WEBHOOK_SECRET")
+#: 대표 토큰(`acct` 없음)의 `sub`. 다른 sub 의 대표 토큰은 거부한다(A1).
+INFRALAB_AUTH_OWNER_SUB = _env("INFRALAB_AUTH_OWNER_SUB", "farrar142")
 # openid·profile 이 일반 사용자에게 막힌 클라이언트면 "infralab" 만 줘도 된다 — ID 토큰 없이 sub 로만 로그인한다.
 INFRALAB_AUTH_SCOPE = _env("INFRALAB_AUTH_SCOPE", "openid profile infralab")
 # 개발용 로그인(POST /api/auth/dev-login) — auth 없이 아무 uid 로나 들어온다. DEBUG 에서만 열린다.
