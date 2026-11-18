@@ -36,7 +36,7 @@ case "${1:-}" in
     [ $# -eq 3 ] || { echo 'usage: workflow-guard.sh check <issue> <base>' >&2; exit 2; }
     files=$(git diff --name-only "$3"...HEAD -- .github/workflows/ | head -n 5 | tr '\n' ' ')
     if [ -n "$files" ]; then
-      handover "$2" "사유: workflow 파일. 이 티켓은 \`.github/workflows/\` 를 바꾼다(${files% }). 공장의 GITHUB_TOKEN 은 workflow 파일을 push 할 수 없어 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
+      handover "$2" "사유: workflow 파일. 이 티켓은 \`.github/workflows/\` 를 바꾼다(${files% }). 공장의 push 토큰(App)에는 workflows 권한이 없어 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
       exit 0
     fi
     output blocked=false
@@ -44,7 +44,7 @@ case "${1:-}" in
   push-failed)
     [ $# -eq 3 ] || { echo 'usage: workflow-guard.sh push-failed <issue> <log>' >&2; exit 2; }
     if [ -f "$3" ] && grep -Eq 'refusing to allow a GitHub App to create or update workflow|without .?workflows.? permission' "$3"; then
-      handover "$2" "사유: workflow 파일. push 가 workflow 파일 때문에 거절됐다(공장의 GITHUB_TOKEN 에 \`workflows\` 권한이 없다). 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
+      handover "$2" "사유: workflow 파일. push 가 workflow 파일 때문에 거절됐다(공장의 push 토큰(App)에 \`workflows\` 권한이 없다). 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
       exit 0
     fi
     output blocked=false

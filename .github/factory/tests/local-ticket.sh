@@ -51,6 +51,15 @@ eq "local" false "$(res)"
 eq "labels" "ready-for-agent" "$(labels 81)"
 eq "no comment" 0 "$(ncomments 81)"
 
+setup "a ticket that changes .claude/ is local too (#172)"
+issue 88 ready-for-agent "훅 고침" "<!-- factory-touches-claude -->"
+bash "$script" 88 > /dev/null 2>&1; eq "exit" 0 $?
+eq "marker" true "$(res)"
+eq "labels" "local,ready-for-human" "$(labels 88)"
+issue 89 ready-for-agent "x" "- [x] .claude/ 를 바꾼다 (체크하면 공장 밖)"
+bash "$script" 89 > /dev/null 2>&1
+eq "template line" true "$(res)"
+
 setup "a body that only says it leaves .github/workflows alone is not local"
 issue 84 ready-for-agent "로그인" "workflow 디렉터리(.github/workflows/)는 건드리지 않는다"
 bash "$script" 84 > /dev/null 2>&1

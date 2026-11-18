@@ -19,7 +19,7 @@ name: release
 on:
   push:
     branches: [main]
-  # 공장(Verify·Odin)은 GITHUB_TOKEN 으로 병합해 push 이벤트가 없다 — 병합 뒤 main 에 이 워크플로를 dispatch 한다.
+  # 공장(Verify·Odin)도 App 토큰으로 병합해 push 로 돈다(#172). dispatch 는 쓰기 권한자가 손으로 다시 돌릴 때.
   workflow_dispatch:
 
 permissions: {}

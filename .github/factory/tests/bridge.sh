@@ -227,6 +227,14 @@ run
 eq sends 4 "$(sent_count)"
 eq "no permission lookups" 0 "$(perm_calls)"
 
+setup "a marker by the factory App is sent without asking (#172)"
+issue 301 open ready-for-human "티켓 하나"
+comment 11 301 "<!-- factory-human -->
+넘김" "sandcorp-factory[bot]"
+run
+eq sends 1 "$(sent_count)"
+eq "no permission lookups" 0 "$(perm_calls)"
+
 setup "markers by write, maintain and admin collaborators are sent"
 issue 249 open spec,needs-decision "공장 개선"
 issue 301 open ready-for-human "티켓 하나"

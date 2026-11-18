@@ -104,13 +104,13 @@ matches=$(printf '%s' "$comments" | j -s -r '
      else empty end) as $k
   | [(.id | tostring), $k, (.issue_url | sub(".*/"; "")), (.user.login // "")] | @tsv')
 
-# trusted <login>: github-actions[bot] or a collaborator with write access. Each answer is kept in
+# trusted <login>: github-actions[bot], the factory App sandcorp-factory[bot] (#172) or a collaborator with write access. Each answer is kept in
 # $trust ("<login> yes|no" lines, plain bash 3) so an author is asked once per run.
 # Returns 0 trusted, 1 not trusted, 2 the permission could not be read (tried again next run).
 trust=
 trusted() {
   local login=$1 p v
-  [ "$login" = "github-actions[bot]" ] && return 0
+  case "$login" in "github-actions[bot]" | "sandcorp-factory[bot]") return 0 ;; esac
   [ -n "$login" ] || return 1
   v=$(printf '%s\n' "$trust" | sed -n "s/^$login //p" | head -n 1)
   if [ -z "$v" ]; then

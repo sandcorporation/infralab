@@ -277,7 +277,7 @@ cd "$root" || exit 1
 setup() {
   current=$1
   tmp=$(mktemp -d "$root/g.XXXXXX")
-  export FAKE_GH="$tmp/gh" FACTORY_MERGE_WAIT=0 RUN_URL=https://example.invalid/run/1
+  export FAKE_GH="$tmp/gh" FACTORY_MERGE_WAIT=0 RUN_URL=https://example.invalid/run/1 FACTORY_PR_MERGE="$here/fake/pr-merge"
   mkdir -p "$FAKE_GH"
   : > "$FAKE_GH/calls.log"
   printf '#!/usr/bin/env bash
@@ -428,7 +428,8 @@ has "branch deleted" "git/refs/heads/agent/issue-7" "$(calls)"
 eq "bot pull_request run deleted (#270)" "" "$(runs_left)"
 eq "ticket closed" closed "$(state_of issue-7)"
 eq "labels" "" "$(labels_of 7)"
-has "release dispatched" "actions/workflows/release.yml/dispatches -f ref=main" "$(calls)"
+has "merged through pr-merge.sh (#172)" "pr-merge 40" "$(calls)"
+lacks "release.yml runs on the App's push, not dispatched (#172)" "release.yml" "$(calls)"
 lacks "no separate ci build" "ci.yml/dispatches" "$(calls)"
 eq "next ticket" yes "$(next_dispatched)"
 has "report on the PR" "AC-1: 충족" "$(jq -r '.[0].body' "$FAKE_GH/comments-40.json")"
@@ -440,6 +441,16 @@ eq "exit" 1 "$?"
 eq "ticket open" open "$(state_of issue-7)"
 eq "next ticket" no "$(next_dispatched)"
 lacks "no release" "release.yml" "$(calls)"
+
+# ci.yml red on the PR: not merged, no retry; the workflow sends the ticket back (#172).
+setup checks-red
+touch "$FAKE_GH/checks-red"
+bash "$verify" pass 7 40 > /dev/null 2>&1
+eq "exit" 1 "$?"
+eq "not merged" false "$(jq -r .merged "$FAKE_GH/pull-40.json" | tr -d '\r')"
+eq "one attempt" 1 "$(grep -c '^pr-merge 40' "$FAKE_GH/calls.log")"
+eq "ticket open" open "$(state_of issue-7)"
+eq "next ticket" no "$(next_dispatched)"
 
 # --- next-verify (#286) ------------------------------------------------------------------------
 
