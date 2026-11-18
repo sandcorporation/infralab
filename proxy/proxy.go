@@ -27,6 +27,9 @@ type config struct {
 	TrustForwarded bool
 	// FakeProviderMode 는 INFRALAB_PROXY_FAKE_PROVIDER=1.
 	FakeProviderMode bool
+	// 임시 토큰마다 분당 요청 수와 한 번에 몰아 쓸 수 있는 수(rate.go). TokenPerMinute 이 0 이면 제한 없음.
+	TokenPerMinute int
+	TokenBurst     int
 }
 
 const (
@@ -72,12 +75,14 @@ type proxy struct {
 	backend *backendClient
 	client  *http.Client
 	log     *log.Logger
+	limiter *tokenLimiter
 }
 
 func newProxy(cfg config, logger *log.Logger) http.Handler {
 	return &proxy{
 		cfg:     cfg,
 		backend: newBackendClient(cfg.BackendURL, cfg.ProxySecret),
+		limiter: newTokenLimiter(cfg.TokenPerMinute, cfg.TokenBurst, nil),
 		// 공급사 응답은 길게 흐를 수 있어 전체 시간 제한을 두지 않는다(요청 context 가 끊으면 끝난다).
 		client: &http.Client{Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
@@ -111,6 +116,13 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token := requestToken(r, rt.provider)
 	if token == "" {
 		p.deny(w, r, rt, clientID, "unknown")
+		return
+	}
+	// backend 에 묻기 전에 막는다 — 틀린 토큰을 몰아 보내도 backend 를 그만큼 부르지 않는다.
+	if !p.limiter.allow(token) {
+		p.log.Printf("%s %s tool=%s client=%s denied reason=rate_limited status=429", r.Method, r.URL.Path, rt.tool, clientID)
+		w.Header().Set("Retry-After", "1")
+		writeError(w, rt.provider, http.StatusTooManyRequests, "rate_limited", "infralab: too many requests for this exam token")
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBody))

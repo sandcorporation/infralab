@@ -66,6 +66,14 @@ jobs:
           cache-dependency-path: agent/go.sum
       - run: scripts/ci.sh agent
 
+  # 공개 주소 /exam-proxy → web(nginx) → proxy 경로·한도 시험(도커). web/nginx.conf·proxy/ 를 바꾸면 여기서 깨진다.
+  exam-proxy-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check_exam_proxy_route.sh
+
   factory:
     runs-on: ubuntu-latest
     timeout-minutes: 10
