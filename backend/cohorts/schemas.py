@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from ninja import Field, Schema
 from pydantic import field_validator
@@ -17,6 +18,7 @@ class CohortCreateIn(Schema):
     name: str = Field(max_length=100)
     #: 기수를 둘 조직. 담당 조직이 하나뿐이면 생략할 수 있다.
     org_id: int | None = None
+    kind: Literal["class", "exam"] = "class"
 
     @field_validator("name")
     @classmethod
@@ -41,6 +43,8 @@ class CohortOut(Schema):
     id: int
     org_id: int
     name: str
+    kind: str
+    exam_settings: dict
     join_token: str
     join_open: bool
     archived: bool

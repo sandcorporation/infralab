@@ -18,8 +18,16 @@ def new_token() -> str:
 
 
 class Cohort(models.Model):
+    class Kind(models.TextChoices):
+        CLASS = "class", "수업"
+        EXAM = "exam", "시험"
+
     org = models.ForeignKey("orgs.Organization", related_name="cohorts", on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
+    #: 묶음의 종류. 수업이면 「기수」, 시험이면 「시험 회차」로 보인다.
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.CLASS)
+    #: 시험 설정(시간 제한·감독·AI 키 지급·숨은 검사 …). 키는 2단계에서 정한다.
+    exam_settings = models.JSONField(default=dict, blank=True)
     join_token = models.CharField(max_length=64, unique=True, default=new_token)
     join_open = models.BooleanField(default=True)
     archived = models.BooleanField(default=False)

@@ -123,3 +123,31 @@ def test_org_commands_fail_clearly(api):
         call_command("create_org", "A 학교", "--owner", "kakao:boss")
     with pytest.raises(CommandError, match="조직이 없습니다"):
         call_command("add_org_member", "없는 조직", "kakao:boss")
+
+
+@pytest.mark.django_db
+def test_cohort_kind_defaults_to_class_and_round_trips(api):
+    teacher = api.login_instructor("teacher-k")
+    default = api.create_cohort(teacher, "수업 1기")
+    assert (default["kind"], default["exam_settings"]) == ("class", {})
+
+    res = api.post("/api/instructor/cohorts", {"name": "1회차", "kind": "exam"}, teacher)
+    assert res.status_code == 201, res.content
+    exam = res.json()
+    assert (exam["kind"], exam["exam_settings"]) == ("exam", {})
+
+    listed = {c["id"]: c["kind"] for c in api.get("/api/instructor/cohorts", teacher).json()}
+    assert listed == {default["id"]: "class", exam["id"]: "exam"}
+    assert api.get(f"/api/instructor/cohorts/{exam['id']}", teacher).json()["kind"] == "exam"
+
+    bad = api.post("/api/instructor/cohorts", {"name": "x", "kind": "quiz"}, teacher)
+    assert bad.status_code == 422
+
+
+@pytest.mark.django_db
+def test_exam_cohort_of_other_org_is_hidden(api):
+    a = api.login_instructor("teacher-a2", org="A 학교")
+    b = api.login_instructor("teacher-b2", org="B 회사")
+    res = api.post("/api/instructor/cohorts", {"name": "B 시험", "kind": "exam"}, b)
+    assert api.get("/api/instructor/cohorts", a).json() == []
+    assert api.get(f"/api/instructor/cohorts/{res.json()['id']}", a).status_code == 404
