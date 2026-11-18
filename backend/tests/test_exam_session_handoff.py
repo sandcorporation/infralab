@@ -102,7 +102,7 @@ def test_exam_compose_url_needs_only_the_exam_token(api):
     assert Client().get("/api/exam/notatoken/compose.yml").status_code == 404
 
 
-def test_exam_compose_url_is_gone_after_finish_and_404_when_revoked(api):
+def test_exam_compose_url_is_gone_after_finish_and_409_on_revoke_of_finished(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
     _enter(api, cand, invite["token"])
