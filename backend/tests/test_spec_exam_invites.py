@@ -202,3 +202,28 @@ def test_null_sender_sends_nothing_and_there_is_no_smtp_setting(api):
 
     source = SETTINGS_FILE.read_text(encoding="utf-8")
     assert "SMTP" not in source and "EMAIL_" not in source
+
+
+def test_finished_attempt_cannot_be_revoked_but_an_unfinished_one_can(api):
+    """#154: 끝난(제출 완료) 응시는 회수 409·상태 「끝남」 유지. 끝나기 전(진행 중) 회수는 그대로 204."""
+
+    from django.utils import timezone
+
+    from exams.models import ExamInvite
+
+    teacher = api.login_instructor()
+    cohort = _exam_cohort(api, teacher)
+    _put_settings(api, teacher, cohort["id"], EXAM_SETTINGS)
+    done = api.post(_invites_path(cohort["id"]), {"label": "끝낸 지원자"}, teacher).json()
+    going = api.post(_invites_path(cohort["id"]), {"label": "푸는 지원자"}, teacher).json()
+    now = timezone.now()
+    ExamInvite.objects.filter(pk=done["id"]).update(started_at=now, finished_at=now)
+    ExamInvite.objects.filter(pk=going["id"]).update(started_at=now)
+
+    res = api.delete(f"{_invites_path(cohort['id'])}/{done['id']}", teacher)
+    assert res.status_code == 409, res.content
+    assert ExamInvite.objects.get(pk=done["id"]).revoked_at is None
+
+    assert api.delete(f"{_invites_path(cohort['id'])}/{going['id']}", teacher).status_code == 204
+    statuses = {i["id"]: i["status"] for i in api.get(_invites_path(cohort["id"]), teacher).json()}
+    assert statuses == {done["id"]: "finished", going["id"]: "revoked"}

@@ -142,6 +142,9 @@ def list_exam_invites(request: HttpRequest, cohort_id: int):
 def revoke_exam_invite(request: HttpRequest, cohort_id: int, invite_id: int):
     cohort = _exam_cohort(request, cohort_id)
     invite = get_object_or_404(cohort.exam_invites, pk=invite_id)
+    if invite.revoked_at is None and services.attempt_status(invite) == "finished":
+        # 끝난 응시를 회수하면 상태가 「회수됨」으로 덮이고 보고서 길이 끊긴다(#154).
+        raise HttpError(409, "끝난 응시는 회수할 수 없습니다.")
     if invite.revoked_at is None:
         invite.revoked_at = timezone.now()
         invite.save(update_fields=["revoked_at"])

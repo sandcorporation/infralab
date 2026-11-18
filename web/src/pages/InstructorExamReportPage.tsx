@@ -122,7 +122,7 @@ export default function InstructorExamReportPage() {
       {error && <p className="error">{error}</p>}
       <StatRow
         items={[
-          { label: "최종", value: score.final_percent === null ? "—" : `${score.final_percent}%` },
+          { label: <FinalLabel score={score} />, value: score.final_percent === null ? "—" : `${score.final_percent}%` },
           { label: "공개 검사", value: `${score.public_passed}/${score.public_total}` },
           { label: "숨은 검사", value: hidden, note: score.hidden_status === "done" ? undefined : HIDDEN_LABEL[score.hidden_status] },
           {
@@ -176,7 +176,9 @@ export default function InstructorExamReportPage() {
                 </tr>
                 <tr>
                   <td>
-                    <strong>최종</strong>
+                    <strong>
+                      <FinalLabel score={score} />
+                    </strong>
                   </td>
                   <td className="sc-num">
                     <strong>{score.final_percent === null ? "—" : `${score.final_percent}%`}</strong>
@@ -317,4 +319,14 @@ export default function InstructorExamReportPage() {
       </Modal>
     </>
   );
+}
+
+/** 최종 점수 라벨 — 검사(공개+숨은)만으로 셈한다. 루브릭은 따로 타일. 계산식은 툴팁(#154). */
+export function FinalLabel({ score }: { score: ExamScore }) {
+  const hp = score.hidden_status === "done" ? score.hidden_passed : 0;
+  const ht = score.hidden_status === "skipped" ? 0 : score.hidden_total;
+  const formula =
+    `(공개 ${score.public_passed} + 숨은 ${hp}) ÷ (공개 ${score.public_total} + 숨은 ${ht}) — 공개·숨은 검사 통과 비율, 루브릭 제외` +
+    (score.hidden_status === "pending" ? " · 숨은 검사 결과를 기다리는 중" : "");
+  return <span title={formula}>최종(검사)</span>;
 }
