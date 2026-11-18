@@ -70,6 +70,11 @@ export function makeInstructor(uid: string): void {
   compose(["exec", "-T", "backend", "python", "manage.py", "set_instructor", `sandcorp:${uid}`]);
 }
 
+/** 시계를 당긴다(e2e 전용 관리 명령, #194) — 그 회차의 응시 중인 응시가 마감이 지난 꼴이 된다. 1분을 기다리지 않는다. */
+export function expireExam(cohortId: number): void {
+  compose(["exec", "-T", "backend", "python", "manage.py", "e2e_expire_exam", String(cohortId)]);
+}
+
 /** 개발용 로그인(DEBUG 전용 POST /api/auth/dev-login) — 브라우저 맥락의 쿠키로 세션을 연다. */
 export async function devLogin(page: Page, uid: string, nickname: string): Promise<void> {
   const res = await page.request.post("/api/auth/dev-login", {

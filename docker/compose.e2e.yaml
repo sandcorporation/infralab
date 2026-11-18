@@ -14,6 +14,8 @@ services:
   backend:
     ports: !reset []
     environment:
+      # e2e 전용 시계 당기기 명령(e2e_expire_exam, #194)을 켠다 — 운영 설정(DEBUG 꺼짐)에서는 줘도 꺼져 있다.
+      INFRALAB_E2E_HOOKS: "1"
       SCENARIOS_DIR: /e2e-scenarios
       # 숨은 검사 견본 문제은행(#193) — e2e 시나리오에 붙는 검사는 여기에만 둔다.
       INFRALAB_PROBLEMS_DIR: /e2e-problems
