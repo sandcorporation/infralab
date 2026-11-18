@@ -91,3 +91,11 @@ def test_deploy_doc_names_every_new_setting_and_the_problem_bank():
 
     for name in (*PROVIDER_KEYS, *BACKEND_NAMES, "infralab-problems-deploy-key", "problems.ref"):
         assert name in doc, f"deploy.md 에 {name} 가 없다"
+
+
+def test_backend_always_allows_the_host_the_proxy_calls():
+    """proxy 는 http://backend:8000 으로 내부 API 를 부른다 — .env 의 도메인 목록과 따로 늘 허용한다(#82)."""
+
+    services = _compose()["services"]
+    assert _env(services["proxy"])["INFRALAB_PROXY_BACKEND_URL"] == "http://backend:8000"
+    assert _env(services["backend"])["DJANGO_INTERNAL_HOSTS"] == "backend"

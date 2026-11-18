@@ -10,6 +10,8 @@ x-backend-env: &backend-env
   DJANGO_DEBUG: "false"
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY 가 필요하다(.env)}
   DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+  # proxy 가 http://backend:8000 으로 부른다(.env 의 DJANGO_ALLOWED_HOSTS 와 따로 늘 허용).
+  DJANGO_INTERNAL_HOSTS: backend
   DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
   POSTGRES_HOST: db
   POSTGRES_PORT: "5432"

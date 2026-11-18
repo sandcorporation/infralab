@@ -21,7 +21,7 @@ STUDENT_IMAGE_VARS = ("AGENT_IMAGE", "WORKSTATION_IMAGE", "FLOCI_IMAGE")
 
 def _fresh_settings(monkeypatch: pytest.MonkeyPatch, **env: str) -> dict[str, object]:
     cleared = (*STUDENT_IMAGE_VARS, "DJANGO_DEBUG", "DJANGO_SECRET_KEY")
-    for name in (*cleared, "DJANGO_ALLOWED_HOSTS", "DJANGO_CSRF_TRUSTED_ORIGINS"):
+    for name in (*cleared, "DJANGO_ALLOWED_HOSTS", "DJANGO_INTERNAL_HOSTS", "DJANGO_CSRF_TRUSTED_ORIGINS"):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
@@ -99,6 +99,18 @@ def test_student_compose_keeps_the_local_images_when_not_given(api, monkeypatch)
     assert doc["services"]["agent"]["image"] == "infralab/agent:dev"
     assert doc["services"]["workstation"]["image"] == "infralab/workstation:dev"
     assert doc["services"]["floci"]["image"] == "floci/floci:2.3.0"
+
+
+def test_internal_hosts_are_allowed_even_when_the_env_lists_only_the_domain(monkeypatch):
+    """운영 .env 가 도메인만 적어도 proxy 가 http://backend:8000 으로 부르는 내부 API 는 막히지 않는다(#82)."""
+    s = _fresh_settings(
+        monkeypatch,
+        DJANGO_DEBUG="false",
+        DJANGO_SECRET_KEY="test-only-secret",
+        DJANGO_ALLOWED_HOSTS="infralab.sandcorp.co.kr",
+        DJANGO_INTERNAL_HOSTS="backend, infralab.sandcorp.co.kr",
+    )
+    assert s["ALLOWED_HOSTS"] == ["infralab.sandcorp.co.kr", "backend"]
 
 
 def test_production_refuses_the_development_secret_key(monkeypatch):

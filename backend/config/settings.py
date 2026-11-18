@@ -27,6 +27,11 @@ def _env_bool(name: str, default: bool) -> bool:
 DEBUG = _env_bool("DJANGO_DEBUG", True)
 SECRET_KEY = _env("DJANGO_SECRET_KEY", "dev-only-insecure-key-do-not-use-in-deploy")
 ALLOWED_HOSTS = [h.strip() for h in _env("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
+# compose 안에서 서비스 이름으로 부르는 Host(AI 프록시 → http://backend:8000). .env 의 공개 도메인 목록과 따로 둔다 —
+# 운영 .env 가 도메인만 적어도 proxy 의 내부 API 호출이 DisallowedHost(400)로 막히지 않게.
+ALLOWED_HOSTS += [
+    h for h in (x.strip() for x in _env("DJANGO_INTERNAL_HOSTS").split(",")) if h and h not in ALLOWED_HOSTS
+]
 # 운영은 web(nginx) 뒤의 리버스 프록시가 TLS 를 끝낸다 — 전체 오리진(https://…)을 콤마로.
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _env("DJANGO_CSRF_TRUSTED_ORIGINS").split(",") if o.strip()]
 
