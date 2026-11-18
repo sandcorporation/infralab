@@ -102,10 +102,15 @@ export async function apiText(path: string, init: RequestInit = {}): Promise<str
 
 // ---------- 타입 ----------
 
-export type Me = { id: number; username: string; display_name: string; is_instructor: boolean };
+export type OrgRole = { id: number; name: string; role: "owner" | "staff" };
+export type Me = { id: number; username: string; display_name: string; is_instructor: boolean; orgs: OrgRole[] };
+export type CohortKind = "class" | "exam";
 export type Cohort = {
   id: number;
+  org_id: number;
   name: string;
+  kind: CohortKind;
+  exam_settings: Record<string, unknown>;
   join_token: string;
   join_open: boolean;
   archived: boolean;
@@ -238,8 +243,8 @@ export const join = (token: string) =>
 export const instructor = {
   cohorts: () => api<Cohort[]>("/api/instructor/cohorts"),
   cohort: (id: number) => api<Cohort>(`/api/instructor/cohorts/${id}`),
-  createCohort: (name: string) =>
-    api<Cohort>("/api/instructor/cohorts", { method: "POST", body: JSON.stringify({ name }) }),
+  createCohort: (name: string, orgId: number, kind: CohortKind = "class") =>
+    api<Cohort>("/api/instructor/cohorts", { method: "POST", body: JSON.stringify({ name, org_id: orgId, kind }) }),
   updateCohort: (id: number, patch: Partial<Pick<Cohort, "name" | "join_open" | "archived">>) =>
     api<Cohort>(`/api/instructor/cohorts/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   regenerateJoinToken: (id: number) =>

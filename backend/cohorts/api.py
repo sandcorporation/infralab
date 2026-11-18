@@ -52,6 +52,8 @@ def _cohort_out(c: Cohort) -> CohortOut:
         id=c.id,
         org_id=c.org_id,
         name=c.name,
+        kind=c.kind,
+        exam_settings=c.exam_settings,
         join_token=c.join_token,
         join_open=c.join_open,
         archived=c.archived,
@@ -75,7 +77,7 @@ def create_cohort(request: HttpRequest, payload: CohortCreateIn):
         if payload.org_id not in {m.org_id for m in orgs}:
             raise HttpError(403, "그 조직의 담당자가 아닙니다.")
         org_id = payload.org_id
-    cohort = Cohort.objects.create(org_id=org_id, name=payload.name)
+    cohort = Cohort.objects.create(org_id=org_id, name=payload.name, kind=payload.kind)
     return Status(201, _cohort_out(cohort))
 
 

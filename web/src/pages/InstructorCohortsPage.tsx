@@ -1,8 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, formatTime, instructor, type Cohort } from "../api";
+import { useAuth } from "../auth";
+import { ApiError, formatTime, instructor, type Cohort, type CohortKind } from "../api";
+import { KIND_LABEL, loadSelectedOrg, pickOrg, saveSelectedOrg } from "../orgSelection";
 
 export default function InstructorCohortsPage() {
+  const { me } = useAuth();
+  const orgs = me?.orgs ?? [];
+  const [orgId, setOrgId] = useState<number | null>(() => pickOrg(orgs, loadSelectedOrg())?.id ?? null);
+  const [kind, setKind] = useState<CohortKind>("class");
   const [cohorts, setCohorts] = useState<Cohort[] | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +27,8 @@ export default function InstructorCohortsPage() {
     setBusy(true);
     setError(null);
     try {
-      await instructor.createCohort(name.trim());
+      if (orgId === null) return;
+      await instructor.createCohort(name.trim(), orgId, kind);
       setName("");
       reload();
     } catch (err) {
@@ -31,15 +38,54 @@ export default function InstructorCohortsPage() {
     }
   }
 
-  const active = cohorts?.filter((c) => !c.archived) ?? [];
-  const archived = cohorts?.filter((c) => c.archived) ?? [];
+  function chooseOrg(id: number) {
+    setOrgId(id);
+    saveSelectedOrg(id);
+  }
+
+  const inOrg = cohorts?.filter((c) => c.org_id === orgId) ?? [];
+  const active = inOrg.filter((c) => !c.archived);
+  const archived = inOrg.filter((c) => c.archived);
+  const org = orgs.find((o) => o.id === orgId);
 
   return (
     <section>
-      <h1>기수</h1>
+      {org &&
+        (orgs.length > 1 ? (
+          <select aria-label="조직" value={org.id} onChange={(e) => chooseOrg(Number(e.target.value))}>
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="muted">{org.name}</p>
+        ))}
+      <h1>{KIND_LABEL.class}</h1>
       <form onSubmit={create} className="row card">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="새 기수 이름, 예: 인프라 3기" required />
-        <button type="submit" disabled={busy || !name.trim()}>
+        <div role="radiogroup" aria-label="종류" className="row">
+          {(["class", "exam"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="radio"
+              aria-checked={kind === k}
+              className={kind === k ? "" : "secondary"}
+              onClick={() => setKind(k)}
+            >
+              {k === "class" ? "수업" : "시험"}
+            </button>
+          ))}
+        </div>
+        {kind === "exam" && <span className="tag">2단계 준비 중</span>}
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={kind === "exam" ? "새 시험 회차 이름, 예: 신입 진단 1회차" : "새 기수 이름, 예: 인프라 3기"}
+          required
+        />
+        <button type="submit" disabled={busy || !name.trim() || orgId === null}>
           만들기
         </button>
       </form>
@@ -47,7 +93,7 @@ export default function InstructorCohortsPage() {
       <CohortList cohorts={active} />
       {archived.length > 0 && (
         <>
-          <h2 className="muted">보관된 기수</h2>
+          <h2 className="muted">보관된 묶음</h2>
           <CohortList cohorts={archived} />
         </>
       )}
@@ -56,7 +102,7 @@ export default function InstructorCohortsPage() {
 }
 
 function CohortList({ cohorts }: { cohorts: Cohort[] }) {
-  if (cohorts.length === 0) return <p className="muted">기수가 없습니다.</p>;
+  if (cohorts.length === 0) return <p className="muted">묶음이 없습니다.</p>;
   return (
     <ul className="list">
       {cohorts.map((c) => (
@@ -67,6 +113,7 @@ function CohortList({ cohorts }: { cohorts: Cohort[] }) {
             </Link>
             <span className="muted">학생 {c.member_count}명</span>
             {!c.join_open && <span className="tag">가입 닫힘</span>}
+            {c.kind === "exam" && <span className="tag">{KIND_LABEL.exam}</span>}
             {c.archived && <span className="tag">보관됨</span>}
           </div>
           <div className="muted">만든 날 {formatTime(c.created_at)}</div>
