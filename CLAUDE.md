@@ -24,4 +24,4 @@ Single-context: `GLOSSARY.md` at the repo root plus `docs/adr/`. See `docs/agent
 
 ### 병합
 
-PR 병합은 `scripts/pr-merge.sh <PR>` 로만 한다 — 필수 검사(ci.yml backend·web·agent·exam-proxy-route·e2e·factory) 등록·초록을 확인한 뒤 squash 병합한다. `gh pr merge`·`gh api …/merge` 직접 호출은 `.claude/hooks/block-direct-merge.py` 가 막는다.
+PR 병합은 `scripts/pr-merge.sh <PR>` 로 한다 — 필수 검사(ci.yml backend·web·agent·exam-proxy-route·e2e·factory) 등록·초록을 기다린 뒤 squash 병합한다. 초록 전 병합은 main ruleset(필수 검사, 예외 없음)이 GitHub 에서 거절한다(#172). 공장도 App 토큰으로 이 스크립트를 써서 병합한다.

@@ -41,7 +41,7 @@ Publish one issue per ticket, **blockers first**, so each ticket's edges can ref
   - `model:sonnet` (the default): the ticket follows a pattern the codebase already has, its acceptance criteria are mechanical to check, or it is mostly tooling, docs or wiring.
   - `model:opus`: only hard tickets — the ticket touches concurrency, permissions and authentication, data migrations, secrets or tokens (the AI proxy, agent tokens), the agent's control of Docker and processes, or sets a first public interface (API, model, agent endpoint) later tickets will copy while the spec leaves its design open.
   Most tickets are `model:sonnet`, including UI and app wiring on top of an existing pattern. When unsure, pick `model:sonnet`: a code failure retries on Opus anyway. Never Fable. Record each choice and its reason in the report.
-- **A ticket that must change anything under `.github/workflows/` is not for the factory.** The workflow token cannot push workflow files. Give it `ready-for-human` and `local` (no model label needed; create the labels when missing), put the line 「workflow 파일 — 로컬 작업자 몫」 and the marker `<!-- factory-touches-workflows -->` in its body (the check reads the marker and the label, not path text), and still make it a sub-issue with its blockers. Give a ticket that only reads or mentions workflows no such label and no marker; never write the marker in a ticket the factory implements. Say which tickets are local in the report.
+- **A ticket that must change anything under `.github/workflows/` or `.claude/` is not for the factory.** The factory's push token has no `workflows` permission, and the factory's agent (Claude Code) is refused every edit under `.claude/` (hooks, settings, agent files) as a sensitive file — #166 failed three runs that way. Give it `ready-for-human` and `local` (no model label needed; create the labels when missing), put the line 「workflow 파일 — 로컬 작업자 몫」 and the marker `<!-- factory-touches-workflows -->` in its body (for `.claude/`: 「`.claude/` 파일 — 로컬 작업자 몫」 and `<!-- factory-touches-claude -->`) (the check reads the marker and the label, not path text), and still make it a sub-issue with its blockers. Give a ticket that only reads or mentions workflows no such label and no marker; never write the marker in a ticket the factory implements. Say which tickets are local in the report.
 - Do not close, edit or relabel the spec issue.
 - Avoid specific file paths and code snippets in ticket bodies; they go stale. The exception is 「계약」: the exact public names and signatures your tests call.
 
@@ -69,8 +69,10 @@ methods), each with its full signature, and the test file(s) that hold this tick
 
 ## 손 확인
 
-Criteria CI cannot check (screen, rendering, real mouse or IME, measurements on a desktop),
-each as a step a person follows and what they should see. "None" when every criterion is tested.
+Criteria only a person can check (a real Docker scenario on a workstation, a real AI agent session,
+a look no assertion can state), each as a step a person follows and what they should see. Screen
+behaviour a browser can drive is an e2e test (`web/e2e/*.spec.ts`), not here. "None" when every
+criterion is tested.
 
 ## Blocked by
 
@@ -94,7 +96,7 @@ Turn every acceptance criterion into tests, one or more test functions per crite
 - Test through the highest seam the criterion talks about, as the area's existing tests do: the backend through the HTTP API with the test client and the helpers in `backend/tests/` (`api_helpers.py`, `conftest.py`), the agent through its HTTP handlers or exported functions with the fakes its tests already use (`fake_runner_test.go`), the web through the functions and components the screen uses. Never real Docker, real clusters, real AI services or the network: the factory runners do not run scenarios, only schema and logic tests.
 - A test may call names that do not exist yet: the interface the ticket will add (an endpoint, a model field, a function, a component prop). Write those names and signatures into the ticket's 「계약」 section. Keep that interface as small and as close to existing naming as the spec allows. Do not write those names yourself: Odin adds a minimal stub for each at its real place in the code (`raise NotImplementedError("#<ticket>")`, `throw new Error("#<ticket>")`, `panic("#<ticket>")`), checks that `scripts/ci.sh all` passes with the tests switched off, and the ticket replaces every stub with the real thing.
 - Test the criterion as written, strongly: assert the outcome the user sees (the response body and status, the stored state, the rendered text), not that "something happened". Do not test what the spec leaves out.
-- Criteria CI cannot see (a screen's look, a real browser, a real Docker scenario, a real AI agent session) get no test; put them under the ticket's 「손 확인」.
+- Criteria the factory's unit tests cannot see get no acceptance test here. One a browser or the local stack can exercise (screen behaviour, proctoring signals, the exam flow, terminal input) stays an acceptance criterion the Implementer covers with an end-to-end test in `web/e2e/*.spec.ts` (`scripts/ci.sh e2e`); say so in the criterion. Only what a person alone can check (a real Docker scenario on a workstation, a real AI agent session, a look no assertion can state) goes under the ticket's 「손 확인」: each item there holds the spec open until a person checks it.
 
 The tests must pass the repository checks once their ticket exists (`scripts/ci.sh all`: pytest, `tsc` and vitest, `gofmt`, `go vet` and `go test`). You cannot run them here, so:
 

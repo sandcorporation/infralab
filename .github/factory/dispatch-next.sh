@@ -29,7 +29,9 @@
 #    busy. Two calls at the same moment can still both pick a ticket; the implement job's per-ticket
 #    concurrency group (`factory-ticket-N`) then holds the second run until the first claimed the
 #    ticket, and its guard finds the ticket no longer `ready-for-agent` and stops.
-# 2. With an empty track left (and, with one track, without --tickets-only): closes finished specs,
+# 2. With an empty track left (and, with one track, without --tickets-only): closes finished specs
+#    (not while its check issue has unchecked `사람 확인` items, human-check.sh gate: such a spec is
+#    running, so with FACTORY_TRACKS=1 the next spec waits for it),
 #    resumes a spec whose decompose stopped (no sub-issues and no decompose run going), and when
 #    fewer specs are running than there are tracks, labels the next spec of FACTORY_SPEC_QUEUE and
 #    dispatches its decompose (in queue order), one spec per call. A spec is
@@ -238,6 +240,13 @@ for s in $specs; do
     continue
   fi
   if [ "$total" -eq "$done" ]; then
+    # Unchecked `사람 확인` items hold the spec open, and it counts as running, so the next spec waits
+    # (human-check.sh gate, #167).
+    if ! bash "$here/human-check.sh" gate "$s"; then
+      echo "::notice::spec #$s waits for its 사람 확인 items"
+      running=$((running + 1))
+      continue
+    fi
     gh issue close "$s" --repo "$REPO" --reason completed --comment "All $total tickets merged."
     continue
   fi

@@ -277,7 +277,7 @@ cd "$root" || exit 1
 setup() {
   current=$1
   tmp=$(mktemp -d "$root/g.XXXXXX")
-  export FAKE_GH="$tmp/gh" FACTORY_MERGE_WAIT=0 RUN_URL=https://example.invalid/run/1
+  export FAKE_GH="$tmp/gh" FACTORY_MERGE_WAIT=0 RUN_URL=https://example.invalid/run/1 FACTORY_PR_MERGE="$here/fake/pr-merge"
   mkdir -p "$FAKE_GH"
   : > "$FAKE_GH/calls.log"
   printf '#!/usr/bin/env bash
@@ -428,7 +428,8 @@ has "branch deleted" "git/refs/heads/agent/issue-7" "$(calls)"
 eq "bot pull_request run deleted (#270)" "" "$(runs_left)"
 eq "ticket closed" closed "$(state_of issue-7)"
 eq "labels" "" "$(labels_of 7)"
-has "release dispatched" "actions/workflows/release.yml/dispatches -f ref=main" "$(calls)"
+has "merged through pr-merge.sh (#172)" "pr-merge 40" "$(calls)"
+lacks "release.yml runs on the App's push, not dispatched (#172)" "release.yml" "$(calls)"
 lacks "no separate ci build" "ci.yml/dispatches" "$(calls)"
 eq "next ticket" yes "$(next_dispatched)"
 has "report on the PR" "AC-1: 충족" "$(jq -r '.[0].body' "$FAKE_GH/comments-40.json")"
@@ -440,6 +441,16 @@ eq "exit" 1 "$?"
 eq "ticket open" open "$(state_of issue-7)"
 eq "next ticket" no "$(next_dispatched)"
 lacks "no release" "release.yml" "$(calls)"
+
+# ci.yml red on the PR: not merged, no retry; the workflow sends the ticket back (#172).
+setup checks-red
+touch "$FAKE_GH/checks-red"
+bash "$verify" pass 7 40 > /dev/null 2>&1
+eq "exit" 1 "$?"
+eq "not merged" false "$(jq -r .merged "$FAKE_GH/pull-40.json" | tr -d '\r')"
+eq "one attempt" 1 "$(grep -c '^pr-merge 40' "$FAKE_GH/calls.log")"
+eq "ticket open" open "$(state_of issue-7)"
+eq "next ticket" no "$(next_dispatched)"
 
 # --- next-verify (#286) ------------------------------------------------------------------------
 
@@ -492,6 +503,106 @@ eq "dispatched" "7 -f pr=41" "$(verify_dispatched)"
 setup usage
 bash "$verify" sendback 7 > /dev/null 2>&1
 eq "usage exit" 2 "$?"
+
+# --- pass stacks the PR's 사람 확인 items on the spec's check issue (#167) ------------------------
+
+# hc_setup <name> <PR body>: ticket #7 of spec #62 (sub-issue parent), PR #40 with that body
+hc_setup() {
+  setup "$1"
+  issue 40 ""
+  issue 62 spec
+  jq -n '{number: 62}' > "$FAKE_GH/parent-7.json"
+  jq --arg b "$2" '.body = $b' "$FAKE_GH/pull-40.json" | tr -d '\r' > "$FAKE_GH/p.new" && mv "$FAKE_GH/p.new" "$FAKE_GH/pull-40.json"
+}
+# check_issue <n> <body>: an open human-check issue of spec #62
+check_issue() {
+  jq -n --argjson n "$1" --arg b "$2" '{number: $n, state: "open", title: "사람 확인: spec #62", body: $b,
+    labels: [{name: "human-check"}]}' | tr -d '\r' > "$FAKE_GH/issue-$1.json"
+}
+check_numbers() {
+  jq -s -r '[.[] | select(any(.labels[]; .name == "human-check")) | .number] | join(",")' "$FAKE_GH"/issue-*.json | tr -d '\r'
+}
+body_of() { jq -r .body "$FAKE_GH/issue-$1.json" | tr -d '\r'; }
+HC_BODY='## 변경
+
+화면 고침.
+
+## 사람 확인
+
+1. 응시 화면에서 붙여넣기 → 감독 화면에 신호가 뜬다.
+2. 환경 준비 중 표시가
+   준비가 끝나면 사라진다.
+- [ ] root 에서 claude 가 뜬다.
+
+## 판단
+
+없음'
+
+hc_setup human-check-new "$HC_BODY"
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+n=$(check_numbers)
+[ -n "$n" ] && ok || bad "no check issue was opened"
+body=$(body_of "$n")
+eq "title" "사람 확인: spec #62" "$(jq -r .title "$FAKE_GH/issue-$n.json" | tr -d '\r')"
+has "spec marker" "<!-- factory-human-check-of 62 -->" "$body"
+has "item 1" "- [ ] 응시 화면에서 붙여넣기 → 감독 화면에 신호가 뜬다. (PR #40)" "$body"
+has "continuation joined" "- [ ] 환경 준비 중 표시가 준비가 끝나면 사라진다. (PR #40)" "$body"
+has "an existing checkbox is dropped" "- [ ] root 에서 claude 가 뜬다. (PR #40)" "$body"
+eq "three items" 3 "$(printf '%s\n' "$body" | grep -c '^- \[ \]')"
+lacks "other sections are not items" "화면 고침" "$body"
+lacks "no Parent section (not a ticket)" "## Parent" "$body"
+lacks "not made a sub-issue of the spec" "sub_issues" "$(calls)"
+eq "ticket closed" closed "$(state_of issue-7)"
+
+hc_setup human-check-append "$HC_BODY"
+check_issue 850 "<!-- factory-human-check-of 62 -->
+spec: #62
+
+- [x] 앞 항목 (PR #39)"
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+eq "the same check issue" 850 "$(check_numbers)"
+body=$(body_of 850)
+has "earlier item kept" "- [x] 앞 항목 (PR #39)" "$body"
+has "new item appended" "- [ ] root 에서 claude 가 뜬다. (PR #40)" "$body"
+
+hc_setup human-check-not-twice "$HC_BODY"
+check_issue 850 "<!-- factory-human-check-of 62 -->
+
+- [ ] 응시 화면에서 붙여넣기 → 감독 화면에 신호가 뜬다. (PR #40)"
+before=$(body_of 850)
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+eq "a PR already stacked is not stacked again" "$before" "$(body_of 850)"
+eq "no second check issue" 850 "$(check_numbers)"
+
+hc_setup human-check-other-spec "$HC_BODY"
+jq -n '{number: 63, state: "open", title: "사람 확인: spec #63", body: "<!-- factory-human-check-of 63 -->", labels: [{name: "human-check"}]}' \
+  | tr -d '\r' > "$FAKE_GH/issue-851.json"
+bash "$verify" pass 7 40 > /dev/null
+eq "another spec's check issue is not used" "<!-- factory-human-check-of 63 -->" "$(body_of 851)"
+eq "a new one for spec #62" 2 "$(check_numbers | tr ',' '\n' | wc -l | tr -d ' ')"
+
+hc_setup human-check-none "## 사람 확인
+
+없음 — 모든 기준이 시험으로 덮인다."
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+eq "nothing to check, no check issue" "" "$(check_numbers)"
+
+hc_setup human-check-no-spec "$HC_BODY"
+rm "$FAKE_GH/parent-7.json"
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+eq "a ticket without a spec stacks nothing" "" "$(check_numbers)"
+
+hc_setup human-check-failure-only-warns "$HC_BODY"
+touch "$FAKE_GH/fail-issues-post"
+bash "$verify" pass 7 40 > /dev/null 2>&1
+eq "exit" 0 "$?"
+eq "ticket closed anyway" closed "$(state_of issue-7)"
+eq "next ticket anyway" yes "$(next_dispatched)"
 
 echo "verify.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]

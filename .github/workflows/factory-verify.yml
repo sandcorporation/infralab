@@ -34,6 +34,9 @@ permissions:
   issues: write
   actions: write
   id-token: write
+  # scripts/pr-merge.sh reads the PR's checks before the merge (#172)
+  checks: read
+  statuses: read
 
 env:
   # dispatch-next.sh (after a merge or a hand-over to a human) and ledger.sh read these.
@@ -61,7 +64,8 @@ jobs:
   verify:
     needs: token
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 45 + the wait for ci.yml before the merge (#172, PR_MERGE_TOTAL_WAIT below)
+    timeout-minutes: 75
     # One Verify at a time, so every verdict is checked against the main the one before merged
     # into. With one track (FACTORY_TRACKS=1) the same group as the Implementer: implementing and
     # verifying run in one line, as before . A group keeps one pending run and a newer one
@@ -112,8 +116,8 @@ jobs:
           branch=$(gh pr view "$PR" --repo "$REPO" --json headRefName --jq .headRefName)
           checked=$(gh pr view "$PR" --repo "$REPO" --json body --jq .body | tr -d '\r' \
             | sed -n 's/.*<!-- factory-checked \([0-9a-f]*\) -->.*/\1/p' | tail -n 1)
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "sandcorp-factory[bot]"
+          git config user.email "358343752+sandcorp-factory[bot]@users.noreply.github.com"
           git fetch origin main "+refs/heads/$branch:refs/remotes/origin/$branch"
           git switch -C "$branch" "origin/$branch"
           mkdir -p .factory
@@ -173,13 +177,29 @@ jobs:
           set -o pipefail
           scripts/ci.sh all 2>&1 | tee .factory/ci.log
 
-      # The merge must land exactly what was checked.
+      # The factory GitHub App's token (#172), only to push branches, open and merge PRs: those then
+      # wake ci.yml, which GITHUB_TOKEN's do not. Labels, comments and dispatches stay GITHUB_TOKEN:
+      # an App label would wake the issues-triggered factory runs again. No `workflows` permission, so
+      # the App cannot push workflow files either (workflow-guard.sh).
+      - name: Factory App token
+        id: app
+        if: steps.ci.outcome == 'success'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # The merge must land exactly what was checked. The App's push wakes ci.yml on the new head,
+      # alongside the acceptance review; the merge then waits for its required jobs.
       - name: Push the merged branch
         id: push
         if: steps.ci.outcome == 'success'
         env:
           BRANCH: ${{ steps.pr.outputs.branch }}
-        run: git push --force-with-lease="$BRANCH" origin "$BRANCH"
+          FACTORY_APP_TOKEN: ${{ steps.app.outputs.token }}
+        run: bash .github/factory/app-push.sh --force-with-lease="$BRANCH" origin "$BRANCH"
 
       - name: Acceptance review
         if: >-
@@ -204,6 +224,17 @@ jobs:
         if: always() && steps.budget.outputs.go == 'true'
         run: bash .github/factory/ledger.sh record verify "$N"
 
+      # A new App token for the merge (#172): one lives an hour, and the merge waits for ci.yml.
+      - name: Factory App token (merge)
+        id: app_merge
+        if: always() && steps.pr.outputs.go == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Merge or send back
         if: always() && steps.pr.outputs.go == 'true'
         env:
@@ -213,6 +244,8 @@ jobs:
           CI_OUTCOME: ${{ steps.ci.outcome }}
           PUSH_OUTCOME: ${{ steps.push.outcome }}
           CONFLICT_FILES: ${{ steps.base.outputs.files }}
+          FACTORY_APP_TOKEN: ${{ steps.app_merge.outputs.token }}
+          PR_MERGE_TOTAL_WAIT: "1200"
         run: |
           # the verdict and the conflicting files, for the ledger's conflict send-back ratio and
           # per-file conflict counts (ledger.sh stats)
@@ -253,12 +286,22 @@ jobs:
               echo
               cat .factory/verify-report.md 2>/dev/null
             } > "$reason"
-          elif bash .github/factory/verify.sh pass "$N" "$PR" .factory/verify-report.md; then
+          elif bash .github/factory/verify.sh pass "$N" "$PR" .factory/verify-report.md 2>&1 | tee .factory/merge.log; [ "${PIPESTATUS[0]}" -eq 0 ]; then
             outcome=merged
             exit 0
           else
+            # scripts/pr-merge.sh refused: a red, unfinished or unregistered ci.yml check, or GitHub
+            # refused the merge (#172). Sent back like a failed acceptance.
             outcome=merge-failed
-            { echo "### 판단은 통과였지만 PR을 병합하지 못했다"; echo; cat .factory/verify-report.md 2>/dev/null; } > "$reason"
+            {
+              echo "### 판단은 통과였지만 PR을 병합하지 못했다(ci 검사 빨강·미완료이거나 GitHub 가 병합을 거절)"
+              echo
+              echo '```'
+              grep -E 'pr-merge|::error::|FAILURE|ERROR|TIMED_OUT|CANCELLED' .factory/merge.log 2>/dev/null | tail -n 30
+              echo '```'
+              echo
+              cat .factory/verify-report.md 2>/dev/null
+            } > "$reason"
           fi
           cat "$reason"
           bash .github/factory/verify.sh sendback "$N" "$PR" "$reason" "$kind"

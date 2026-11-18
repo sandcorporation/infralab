@@ -17,14 +17,17 @@
 #                                       PR, label the spec `ready-for-human` and comment
 #                                       `<!-- factory-human -->` with the reason on it. Nothing is merged.
 #   odin.sh pass <S> <PR> [report]      the checks passed and the workflow pushed Odin's fixes: comment the
-#                                       report on the spec PR, squash-merge it (retrying while GitHub
-#                                       computes mergeability), delete its branch and its job-less
-#                                       bot ci.yml runs (prune-runs.sh), build main, label the
+#                                       report on the spec PR, squash-merge it as the factory App once
+#                                       ci.yml's required jobs are green (merge-pr.sh →
+#                                       scripts/pr-merge.sh, #172), delete its branch and its job-less
+#                                       bot ci.yml runs (prune-runs.sh), label the
 #                                       spec's open tickets `ready-for-agent` and dispatch the first one
 #                                       (dispatch-next.sh --tickets-only --candidates <them>: the
 #                                       label search may lag, so the approved tickets are named: the
-#                                       lowest-numbered approved ticket with no open blocker). Exits 1
-#                                       when the PR could not be merged (nothing else is done then).
+#                                       lowest-numbered approved ticket with no open blocker); release.yml
+#                                       runs on the merge's push. Nothing else is done when the PR is not
+#                                       merged: exit 1 when GitHub refused the merge (conflict path),
+#                                       2 when the checks are red, unfinished or unregistered (a human).
 #   odin.sh empty <S> <PR>              the spec PR has no test: close it and delete its branch, then
 #                                       label the tickets and dispatch the first one as `pass` does.
 #   odin.sh conflict <S> <PR> <files> <reason> [--dispatch]
@@ -43,10 +46,12 @@
 # Environment: REPO (or GITHUB_REPOSITORY), GH_TOKEN, BASE (default main); RUN_URL (link in comments,
 # optional); FACTORY_DISPATCH_NEXT (command run instead of dispatch-next.sh, tests); FACTORY_PRUNE_RUNS
 # (command run with the branch instead of prune-runs.sh, tests);
-# FACTORY_MERGE_WAIT (seconds between merge attempts, default 15); ODIN_CONFLICT_LIMIT (conflict
+# FACTORY_APP_TOKEN, FACTORY_PR_MERGE and FACTORY_MERGE_WAIT (merge-pr.sh); ODIN_CONFLICT_LIMIT (conflict
 # rounds before a human, default 2). Needs bash, gh and jq.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=merge-pr.sh
+. "$here/merge-pr.sh"
 REPO=${REPO:-${GITHUB_REPOSITORY:-}}
 BASE=${BASE:-main}
 HUMAN='<!-- factory-human -->'
@@ -79,9 +84,6 @@ delete_branch() {
 # Delete the job-less ci.yml pull_request runs GitHub left on the spec PR branch (prune-runs.sh).
 prune_runs() {
   if [ -n "${FACTORY_PRUNE_RUNS:-}" ]; then $FACTORY_PRUNE_RUNS "$1"; else bash "$here/prune-runs.sh" "$1"; fi
-}
-dispatch() { # dispatch <workflow file>
-  gh api -X POST "repos/$REPO/actions/workflows/$1/dispatches" -f "ref=$BASE" > /dev/null
 }
 
 # Number of the open spec PR of a spec, empty when there is none (as decompose.sh finds it).
@@ -191,28 +193,22 @@ start_chain() {
 # --- pass ----------------------------------------------------------------------------------------
 
 pass() {
-  local s=$1 pr=$2 report=${3:-} attempt merged=false
+  local s=$1 pr=$2 report=${3:-} rc
   if [ -n "$report" ] && [ -s "$report" ]; then
     comment "$pr" "Odin$(run_link): 통과
 
 $(cat "$report")" || echo "::warning::could not comment on PR #$pr"
   fi
-  for attempt in 1 2 3 4; do
-    if gh api -X PUT "repos/$REPO/pulls/$pr/merge" -f merge_method=squash > /dev/null; then
-      merged=true
-      break
-    fi
-    echo "::notice::merge attempt $attempt of spec PR #$pr failed; GitHub may still be computing mergeability"
-    sleep "${FACTORY_MERGE_WAIT:-15}"
-  done
-  if ! $merged; then
+  # scripts/pr-merge.sh as the factory App: waits for ci.yml's required jobs to be green (#172).
+  factory_merge "$pr"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
     echo "::error::could not merge spec PR #$pr"
-    return 1
+    return "$rc"
   fi
   delete_branch "$(branch_of "$s")"
   prune_runs "$(branch_of "$s")"
-  # A GITHUB_TOKEN merge fires no push event: run main's release (check + image → production) here, as verify.sh does.
-  dispatch release.yml || echo "::warning::could not dispatch release.yml"
+  # The App's merge is a push to main: release.yml (check + image → production) runs on it (#172).
   start_chain "$s"
 }
 

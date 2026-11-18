@@ -77,9 +77,12 @@ concurrency:
 
 jobs:
   # A ticket closed (usually by a merged PR): fill the empty tracks with approved tickets whose
-  # blockers are now all closed.
+  # blockers are now all closed. A close by the factory App is Verify's merge through `Closes #N`
+  # (#172): Verify moves the chain on itself, so that close starts nothing here.
   frontier:
-    if: github.event_name == 'issues' && github.event.action == 'closed'
+    if: >-
+      github.event_name == 'issues' && github.event.action == 'closed' &&
+      github.event.sender.login != 'sandcorp-factory[bot]'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -264,8 +267,8 @@ jobs:
         env:
           MODE: ${{ steps.guard.outputs.mode }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "sandcorp-factory[bot]"
+          git config user.email "358343752+sandcorp-factory[bot]@users.noreply.github.com"
           if [ "$MODE" = conflict ]; then
             git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
             git switch -C "$BRANCH" "origin/$BRANCH"
@@ -460,10 +463,25 @@ jobs:
       # The PR body carries `Closes #N` and the commit `scripts/ci.sh all` passed on
       # (`<!-- factory-checked <sha> -->`): Verify skips its own `scripts/ci.sh all` when the PR head is
       # still that commit and sits on today's main.
+      # The factory GitHub App's token (#172), only to push branches, open and merge PRs: those then
+      # wake ci.yml, which GITHUB_TOKEN's do not. Labels, comments and dispatches stay GITHUB_TOKEN:
+      # an App label would wake the issues-triggered factory runs again. No `workflows` permission, so
+      # the App cannot push workflow files either (workflow-guard.sh).
+      - name: Factory App token
+        id: app
+        if: steps.guard.outputs.go == 'true' && steps.wfguard.outputs.blocked != 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Push and open PR
         id: pr
         if: steps.guard.outputs.go == 'true' && steps.wfguard.outputs.blocked != 'true'
         env:
+          FACTORY_APP_TOKEN: ${{ steps.app.outputs.token }}
           MODE: ${{ steps.guard.outputs.mode }}
           CONFLICT_PR: ${{ steps.guard.outputs.pr }}
         run: |
@@ -477,7 +495,7 @@ jobs:
             # A fresh implementation starts from main and replaces an earlier attempt's branch.
             pushargs=(--force origin "$BRANCH")
           fi
-          if ! git push "${pushargs[@]}" 2> .factory/push.log; then
+          if ! bash .github/factory/app-push.sh "${pushargs[@]}" 2> .factory/push.log; then
             cat .factory/push.log
             # A refused workflow file is for a person, not a failure to count or retry.
             if bash .github/factory/workflow-guard.sh push-failed "$N" .factory/push.log; then exit 0; fi
@@ -501,7 +519,7 @@ jobs:
           if [ -n "$url" ]; then
             gh pr edit "$url" --body-file "$body"
           else
-            url=$(gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "$title" --body-file "$body")
+            url=$(GH_TOKEN=$FACTORY_APP_TOKEN gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "$title" --body-file "$body")
           fi
           number=$(gh pr view "$url" --repo "$REPO" --json number --jq .number)
           echo "PR: $url"

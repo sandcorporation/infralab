@@ -17,7 +17,7 @@ case "$1 $2" in
     n=$(( $(cat "$SCEN/calls" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$SCEN/calls"
     f="$SCEN/$n.json"; [ -f "$f" ] || f="$(ls "$SCEN"/*.json | sort -V | tail -n 1)"
     cat "$f" ;;
-  "pr merge") shift 2; echo "$*" >"$SCEN/merged" ;;
+  "pr merge") shift 2; echo "$*" >"$SCEN/merged"; echo "${GH_TOKEN:-}" >"$SCEN/merge-token" ;;
   *) echo "fake gh: 모르는 명령 $*" >&2; exit 1 ;;
 esac
 FAKE
@@ -87,6 +87,13 @@ check wrong-workflow 3 no "등록되지 않았다" PR_MERGE_REGISTER_WAIT=0
 # 끝나지 않음 → 시간 초과.
 run never-finishes "$(all IN_PROGRESS '')"
 check never-finishes 3 no "끝나지 않았다" PR_MERGE_TOTAL_WAIT=0
+
+# 공장(#172): --repo 로 넘기고, 병합 호출만 PR_MERGE_TOKEN 으로(검사 읽기는 GH_TOKEN).
+run factory "$(all COMPLETED SUCCESS)"
+check factory 0 yes "검사 모두 초록" PR_MERGE_REPO=o/r PR_MERGE_TOKEN=app-token GH_TOKEN=actions-token
+grep -qF -- "--repo o/r --squash" "$tmp/factory/merged" && [ "$(cat "$tmp/factory/merge-token")" = app-token ] \
+  && { pass=$((pass + 1)); echo "ok   factory-repo-token"; } \
+  || { fail=$((fail + 1)); echo "FAIL factory-repo-token: $(cat "$tmp/factory/merged") / $(cat "$tmp/factory/merge-token")"; }
 
 # 사용법.
 rc=0; bash "$here/pr-merge.sh" abc >/dev/null 2>&1 || rc=$?

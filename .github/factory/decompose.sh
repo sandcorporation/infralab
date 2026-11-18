@@ -136,10 +136,11 @@ finish() {
     if git diff --cached --quiet; then
       echo "::warning::Decompose wrote no acceptance tests for #$s; the spec PR has only an empty commit"
     fi
-    git -c user.name='github-actions[bot]' \
-      -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+    git -c user.name='sandcorp-factory[bot]' \
+      -c user.email='358343752+sandcorp-factory[bot]@users.noreply.github.com' \
       commit -q --allow-empty -m "스펙: $title 인수 시험 (#$s)" -m "$list" || exit 1
-    git push -q origin "HEAD:refs/heads/$branch"
+    # as the factory App, so ci.yml runs on the spec PR (#172)
+    bash "$here/app-push.sh" -q origin "HEAD:refs/heads/$branch"
   ) || { echo "::error::could not commit or push $branch"; return 1; }
 
   body="Refs #$s
@@ -149,7 +150,8 @@ Decompose가 쓴 티켓별 인수 시험(꺼 둔 시험, 표식 \`#<티켓>\` �
 ## 티켓
 
 $list"
-  pr=$(gh api "repos/$REPO/pulls" -f "title=스펙: $title 인수 시험 (#$s)" -f "head=$branch" -f "base=$BASE" \
+  # Opened by the factory App (#172): a GITHUB_TOKEN PR gets no ci.yml run. Labels stay GITHUB_TOKEN.
+  pr=$(GH_TOKEN=${FACTORY_APP_TOKEN:-} gh api "repos/$REPO/pulls" -f "title=스펙: $title 인수 시험 (#$s)" -f "head=$branch" -f "base=$BASE" \
     -f "body=$body" | j -r '.number // empty')
   if [ -z "$pr" ]; then echo "::error::could not open the spec PR of #$s"; return 1; fi
   gh api "repos/$REPO/issues/$pr/labels" -f 'labels[]=spec-pr' > /dev/null \

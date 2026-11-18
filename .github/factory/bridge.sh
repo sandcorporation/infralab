@@ -14,6 +14,8 @@
 #   <!-- factory-human -->               a ticket handed to a person
 #   <!-- factory-queue-empty S -->       the last spec S of FACTORY_SPEC_QUEUE was started (ledger issue)
 #   <!-- factory-idle Q -->              every spec of the queue is labelled; the factory is idle (ledger)
+#   <!-- factory-human-check S -->       spec S's tickets are merged but its check issue has unchecked
+#                                        `사람 확인` items, so the spec stays open (human-check.sh gate, #167)
 #
 # Anyone can write those markers on a public repository, so only comments by `github-actions[bot]` or by
 # someone with write access (collaborator permission admin, maintain or write) are sent. A comment by
@@ -25,8 +27,8 @@
 #   switchboard send --to <recipient> --task <name>-factory --idempotency-key <name>-factory-<comment id>
 #     --subject … --body …
 #
-# The recipient depends on the kind (owner's decision 2026-11-18): a question goes to the boss
-# (BRIDGE_TO_BOSS), because only the owner decides it; every other kind (budget-spec, budget-daily, human,
+# The recipient depends on the kind (owner's decision 2026-11-18): a question and a human-check go to
+# the boss (BRIDGE_TO_BOSS), because only the owner decides or checks them by hand; every other kind (budget-spec, budget-daily, human,
 # queue-empty, idle) goes straight to the repository's coordinator (BRIDGE_TO_COORD), who
 # acts on it.
 #
@@ -39,7 +41,7 @@
 #
 # Environment:
 #   FACTORY_REPO          owner/name (default sandcorporation/infralab); gh must be logged in
-#   BRIDGE_TO_BOSS        recipient of questions (default sandcorp/boss)
+#   BRIDGE_TO_BOSS        recipient of questions and human-checks (default sandcorp/boss)
 #   BRIDGE_TO_COORD       recipient of every other kind (default <name>/coordinator)
 #   BRIDGE_TO             removed (it sent every kind to one place) and ignored: a warning is printed when
 #                         it is still set and the two variables above (or their defaults) are used, so a
@@ -98,16 +100,17 @@ matches=$(printf '%s' "$comments" | j -s -r '
      elif ($b | contains("<!-- factory-human -->")) then "human"
      elif ($b | contains("<!-- factory-queue-empty ")) then "queue-empty"
      elif ($b | contains("<!-- factory-idle ")) then "idle"
+     elif ($b | contains("<!-- factory-human-check ")) then "human-check"
      else empty end) as $k
   | [(.id | tostring), $k, (.issue_url | sub(".*/"; "")), (.user.login // "")] | @tsv')
 
-# trusted <login>: github-actions[bot] or a collaborator with write access. Each answer is kept in
+# trusted <login>: github-actions[bot], the factory App sandcorp-factory[bot] (#172) or a collaborator with write access. Each answer is kept in
 # $trust ("<login> yes|no" lines, plain bash 3) so an author is asked once per run.
 # Returns 0 trusted, 1 not trusted, 2 the permission could not be read (tried again next run).
 trust=
 trusted() {
   local login=$1 p v
-  [ "$login" = "github-actions[bot]" ] && return 0
+  case "$login" in "github-actions[bot]" | "sandcorp-factory[bot]") return 0 ;; esac
   [ -n "$login" ] || return 1
   v=$(printf '%s\n' "$trust" | sed -n "s/^$login //p" | head -n 1)
   if [ -z "$v" ]; then
@@ -167,6 +170,9 @@ while IFS=$'\t' read -r id kind n author; do
     idle)
       label="공장 idle"
       todo="FACTORY_SPEC_QUEUE에 spec을 넣고 dispatch-next를 다시 돌린다(조율자 몫)." ;;
+    human-check)
+      label="사람 확인 대기"
+      todo="이 확인 이슈의 항목을 손으로 확인해 체크한다(문제는 새 이슈로). 모두 체크하거나 이슈를 닫으면 다음 dispatch 때 spec이 닫히고 공장이 다음 spec으로 간다." ;;
   esac
   text="종류: $label
 이슈: $url
@@ -177,7 +183,7 @@ $body
 
 할 일: $todo"
   to=$TO_COORD
-  [ "$kind" = question ] && to=$TO_BOSS
+  case "$kind" in question|human-check) to=$TO_BOSS ;; esac
   if switchboard send --to "$to" --task "$NAME-factory" --idempotency-key "$NAME-factory-$id" \
     --subject "[$NAME 공장] $label: #$n $title" --body "$text" > /dev/null; then
     remember "$id"

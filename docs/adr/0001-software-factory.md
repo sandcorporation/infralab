@@ -18,6 +18,8 @@ infralab 은 backend(Django·pytest), web(React·vitest), agent(Go) 세 부분�
 | Orchestrator | GitHub Actions (`.github/workflows/factory-*.yml`) |
 | Runner | 모두 `ubuntu-latest` |
 | 에이전트 | `anthropics/claude-code-action@v1`, 인증은 구독 OAuth 토큰(secret `CLAUDE_OAUTH_TOKEN`) |
+| PR·push·병합 토큰 | 조직 GitHub App `sandcorp-factory`(variable `FACTORY_APP_ID`, secret `FACTORY_APP_PRIVATE_KEY`). 브랜치 push(`app-push.sh`)·PR 열기·병합(`merge-pr.sh` → `scripts/pr-merge.sh`)만 이 토큰(contents·pull-requests 쓰기, workflows 없음). 라벨·댓글·이슈·dispatch 는 `GITHUB_TOKEN` — App 이 라벨을 달면 issues 이벤트가 공장 run 을 다시 깨운다(#172) |
+| 병합 문 | main ruleset: ci.yml 필수 잡(backend·web·agent·exam-proxy-route·factory) 초록, 예외(bypass) 없음. App 의 push 라 공장 PR 에도 ci.yml 이 돈다(#172) |
 | 자동 검사 | `scripts/ci.sh all` (backend pytest + Postgres 서비스, web typecheck·vitest·build, agent gofmt·vet·test, 공장 스크립트 시험) |
 | 장부·원장 | 이슈와 댓글. `specs/` 폴더는 두지 않는다 |
 
@@ -28,7 +30,7 @@ infralab 은 backend(Django·pytest), web(React·vitest), agent(Go) 세 부분�
 | Decompose (`factory-decompose.yml`, Opus) | `spec` 라벨, 수동 실행, 재개 | 새 spec 이면 하위 이슈(티켓)·blocked-by·`model:*` 라벨을 만들고 티켓별 인수 시험을 꺼 둔 채 쓴다(아래 「인수 시험」). 해법이 갈리면 `<!-- factory-question -->` 댓글과 `needs-decision` 을 남기고 멈춘다. 지시 `.github/factory/decompose.md` | `factory/spec-<S>` 에 시험만 커밋해 스펙 PR(`spec-pr`)을 열고 Odin 을 dispatch |
 | Odin (`factory-odin.yml`, Opus) | Decompose·재개의 dispatch | 스펙 PR 에 main 을 merge(충돌은 같은 run 의 에이전트가 양쪽을 남겨 푼다)하고, 티켓·시험을 코드·앞 spec 의 시험·ADR 과 대조해 고친다. 계약의 아직 없는 이름은 `#<티켓>` 스텁으로 둔다. `scripts/ci.sh all` 이 실패하면 한 번 더 고칠 기회. 지시 `.github/factory/odin.md` | 스펙 PR squash 병합, 열린 티켓에 `ready-for-agent`, 사슬 시작. 두 번 실패·충돌 한도(2) 초과면 spec 에 `ready-for-human` |
 | Implementer (`factory-implementer.yml`, 라벨대로 Sonnet/Opus) | `ready-for-agent` 라벨, 티켓 닫힘(`frontier`), 수동 실행, 매일 KST 00:05 | 열린 blocker 가 없을 때만. 자기 티켓의 시험을 켜고 스텁을 구현한다. workflow 가 `scripts/ci.sh all`(실패면 한 번 고칠 기회) 뒤 push·PR(`Closes #N`, `<!-- factory-checked <sha> -->`). **병합하지 않는다.** 충돌로 되돌아온 티켓은 열린 PR 에 main 을 merge 해 풀기만 한다(충돌 모드). 지시 `.github/factory/implementer.md` | Verify dispatch, 빈 트랙 채우기. 코드 실패 2번·인프라 실패 3번이면 `ready-for-human` |
-| Verify (`factory-verify.yml`, Sonnet) | Implementer·재개의 dispatch | 기계 검사(`verify.sh mech`), main 을 merge 한 뒤 `scripts/ci.sh all`(머리가 검사한 커밋 그대로면 건너뜀), 인수 판단. 지시 `.github/factory/verify.md` | 통과: squash 병합·티켓 닫기·main 에 `release.yml` dispatch(검사·이미지·production 승격, docs/ops/deploy.md)·다음 티켓. 실패: `<!-- factory-sendback kind=acceptance|conflict -->` 로 되돌림(인수 2번·충돌 3번이면 `ready-for-human`) |
+| Verify (`factory-verify.yml`, Sonnet) | Implementer·재개의 dispatch | 기계 검사(`verify.sh mech`), main 을 merge 한 뒤 `scripts/ci.sh all`(머리가 검사한 커밋 그대로면 건너뜀), 인수 판단. 지시 `.github/factory/verify.md` | 통과: ci.yml 필수 잡 초록을 기다려 App 으로 squash 병합(빨강·미완료면 인수 실패로 되돌림)·티켓 닫기·다음 티켓. 병합이 App 의 main push 라 `release.yml`(검사·이미지·production 승격, docs/ops/deploy.md)은 그 push 로 돈다. 실패: `<!-- factory-sendback kind=acceptance|conflict -->` 로 되돌림(인수 2번·충돌 3번이면 `ready-for-human`) |
 | 재개 (`factory-resume.yml`) | spec 에서 `needs-decision`·`factory-paused` 를 뗄 때, 수동 실행 | `resume.sh` 가 멈춘 단계를 정해 dispatch | 그 단계 |
 
 **사람이 손으로 만든 티켓**(spec 없이, 인수 시험 없이)도 `ready-for-agent` 를 붙이면 Implementer 가 받는다. 그때 인수 기준은 티켓 본문의 체크리스트이고, 시험은 구현 run 이 일반 시험 파일에 쓴다. 기계 검사는 표식·스텁이 없으므로 그냥 통과하고 Verify 의 인수 판단이 체크리스트를 본다.
@@ -45,7 +47,8 @@ infralab 은 backend(Django·pytest), web(React·vitest), agent(Go) 세 부분�
 
 - backend 파일 이름이 `test_` 로 시작하는 것은 pytest 수집 규칙(`python_files = ["test_*.py"]`) 때문이다.
 - 꺼 둔 시험도 import·컴파일은 되므로 Odin 의 스텁이 있어야 main 의 `scripts/ci.sh all` 이 초록이다. 이것이 원본의 「clippy 로 컴파일 확인」 자리다.
-- 공장 runner 는 Docker 시나리오를 실제로 돌리지 않는다. 인수 시험은 스키마·로직·HTTP 시험까지이고, 실제 실습 환경·화면은 티켓의 「손 확인」으로 간다.
+- 공장 runner 는 Docker 시나리오를 실제로 돌리지 않는다. 인수 시험은 스키마·로직·HTTP 시험까지다. 브라우저·로컬 스택으로 돌릴 수 있는 기준(화면 동작·감독 신호·응시 흐름·터미널 입력)은 구현 run 이 `web/e2e/*.spec.ts`(`scripts/ci.sh e2e`) 시험으로 덮고, 사람만 확인할 수 있는 것(작업 PC 의 실제 실습 환경, 실제 AI 에이전트 세션)만 티켓의 「손 확인」·PR 본문 `사람 확인`으로 간다(#167).
+- **사람 확인은 spec 을 붙잡는다**(#167, 장치): Verify 가 티켓 PR 을 병합할 때 PR 본문 `사람 확인` 항목을 spec 별 확인 이슈(라벨 `human-check`, 「사람 확인: spec #S」, `- [ ] 항목 (PR #x)`)에 쌓는다(`human-check.sh stack`, 같은 PR 은 한 번). 확인 이슈는 sub-issue 도 `## Parent` 도 아니라 티켓으로 집히지 않는다. 티켓이 다 병합돼도 미체크 `- [ ]` 가 남아 있으면 `dispatch-next.sh` 가 spec 을 닫지 않고 실행 중인 spec 으로 센다(`FACTORY_TRACKS=1` 이면 다음 spec 도 기다린다). 처음 막힐 때 확인 이슈에 `<!-- factory-human-check S -->` 를 남기고(둘째 줄 `<!-- prs … -->` 에 알린 미체크 항목의 PR 번호) 다리가 대표(BRIDGE_TO_BOSS)에게 보낸다. 마커 뒤에 새 미체크 항목이 쌓이면 그 항목만 담아 한 번 더 남긴다(#170). 모두 체크하거나 확인 이슈를 닫으면 다음 dispatch 에 spec 이 닫힌다. Judge 는 「코드가 plainly implements」만으로 손 확인 기준을 충족으로 치지 않고, 브라우저로 돌릴 수 있는 기준이 e2e 시험 없이 `사람 확인`으로 오면 반려한다(verify.md).
 
 ### 모델 배정
 
@@ -57,7 +60,7 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 - **spec 사슬**: 할 티켓이 없으면 하위 이슈가 다 닫힌 spec 을 닫고, 변수 `FACTORY_SPEC_QUEUE`(spec 번호를 순서대로, 비면 넘어가지 않음)의 다음 spec 에 `spec` 라벨을 붙여 Decompose 를 띄운다.
 - **되돌림 종류와 한도**: `kind=acceptance`(기계 검사·인수 판단·병합 실패: PR 을 닫고 main 부터 다시) 2번, `kind=conflict`(main 과 충돌·merge 뒤 검사 실패·push 실패: PR 을 두고 충돌 모드로 풀기) 3번이면 사람에게 넘긴다.
 - **비용 장부와 상한**(`ledger.sh`): Claude 단계마다 `factory-ledger` 라벨의 장부 이슈에 비용 댓글. 시작 전 가드가 spec 합계(spec 본문의 `예산: $N` 줄 → 변수 `FACTORY_SPEC_BUDGET_USD` → $60)와 KST 하루 합계(`FACTORY_DAILY_BUDGET_USD` → $150)를 본다. 넘으면 `factory-paused` 또는 하루 멈춤, KST 00:05 예약 실행이 다시 시작한다.
-- **알림 다리**(`bridge.sh`): 공장은 메일을 보내지 않는다. 공장 밖 크론(2분)이 `gh` 로 표식 댓글(질문·상한 멈춤·사람 넘김·큐 바닥남·idle)을 찾아 switchboard 메일함으로 보낸다. 기본값은 `FACTORY_REPO=sandcorporation/infralab`, 질문은 `BRIDGE_TO_BOSS`(기본 `sandcorp/boss`), 나머지는 `BRIDGE_TO_COORD`(기본 `<저장소 이름>/coordinator` = `infralab/coordinator`). 메일의 `--task`·idempotency 접두어는 `<저장소 이름>-factory`. 스크립트에 주소·토큰·호스트는 없고 메일 서버는 switchboard 프로필(`SWITCHBOARD_PROFILE`, 기본 `automation`)이 안다. 첫 설치는 `--seed`.
+- **알림 다리**(`bridge.sh`): 공장은 메일을 보내지 않는다. 공장 밖 크론(2분)이 `gh` 로 표식 댓글(질문·상한 멈춤·사람 넘김·큐 바닥남·idle·사람 확인 대기)을 찾아 switchboard 메일함으로 보낸다. 기본값은 `FACTORY_REPO=sandcorporation/infralab`, 질문·사람 확인 대기는 `BRIDGE_TO_BOSS`(기본 `sandcorp/boss`), 나머지는 `BRIDGE_TO_COORD`(기본 `<저장소 이름>/coordinator` = `infralab/coordinator`). 메일의 `--task`·idempotency 접두어는 `<저장소 이름>-factory`. 스크립트에 주소·토큰·호스트는 없고 메일 서버는 switchboard 프로필(`SWITCHBOARD_PROFILE`, 기본 `automation`)이 안다. 첫 설치는 `--seed`.
 - **사람 넘김**(`ready-for-human`)은 「공장 밖에서 관리 세션이 처리」라는 뜻이다. 관리 세션이 원인을 고치거나 직접 구현하고, 대표에게는 제품 결정만 묻는다.
 
 - **후보에서 빼는 것**(#56): `dispatch-next.sh` 는 `spec` 라벨이 있거나 하위 이슈(sub-issue)가 있는 이슈를 티켓으로 집지 않는다(부모는 티켓이 아니다).
@@ -65,7 +68,7 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 - **spec 귀속**(#56): 티켓의 부모는 GitHub sub-issue 의 parent(`GET /issues/{n}/parent`)를 먼저 보고, 없으면 본문 `## Parent` 절을 본다. 손으로 만든 티켓도 sub-issue 로 묶으면 spec 에 비용이 쌓인다.
 - **`ready-for-agent` 는 부모가 있어야 한다**(#56, 장치): 이슈 템플릿 `.github/ISSUE_TEMPLATE/ticket.md` 가 `## Parent` 절을 깔고, `parent-check.sh`(`approved` job 과 claim 단계)가 부모 없는 티켓의 라벨을 떼고 「부모 spec 이 없다」 댓글(`<!-- factory-no-parent -->`)을 단다. 쓰기 권한이 없는 사람이 붙인 라벨은 보지 않는다.
 - **workflow 티켓은 쪼갤 때부터 공장 밖으로**(#56): Decompose 는 `.github/workflows/` 를 바꿔야 하는 티켓에 `ready-for-human` + `local` 라벨과 「workflow 파일 — 로컬 작업자 몫」 한 줄을 단다(decompose.md). 붙인 결과는 `local-ticket.sh` 가 Decompose 직후·Odin 승인 전·implementer 의 `approved`/claim 에서 다시 확인해, 본문에 `<!-- factory-touches-workflows -->` 표식(또는 체크된 템플릿 줄 「workflow 파일을 바꾼다」)이 있는데 `ready-for-agent` 인 티켓을 같은 라벨로 바꿔 단다. 경로 문자열만 언급한 본문(「건드리지 않는다」)은 local 로 보지 않는다(#66); 표식이 빠져도 `workflow-guard.sh` 가 push 전에 멈춘다. `dispatch-next.sh` 는 `local` 티켓을 집지 않는다. workflows 권한 토큰(`FACTORY_WORKFLOW_TOKEN` 류)은 만들지 않는다.
-- **workflow 파일은 사람 몫**(#56): `GITHUB_TOKEN` 은 `.github/workflows/*` 를 push 할 수 없다(#53 이 세 번 돌아 약 $8.2 를 버렸다). implementer.md 는 workflow 를 고치지 말고 티켓 댓글로 남기고 멈추라 하고, 커밋 뒤 diff 에 `.github/workflows/` 가 있거나 push 가 그 거절을 내면 `workflow-guard.sh` 가 실패 횟수를 늘리지 않고 곧바로 `ready-for-human` + `<!-- factory-human -->`(사유: workflow 파일)로 넘긴다. 다시 dispatch 하지 않는다(6번을 빠져나온 경우의 안전망).
+- **workflow 파일은 사람 몫**(#56): 공장의 push 토큰은 `.github/workflows/*` 를 push 할 수 없다(#53 이 세 번 돌아 약 $8.2 를 버렸다. #172 부터 App 토큰도 workflows 권한 없이 만든다). `.claude/` 도 같다 — 공장 에이전트(Claude Code)는 그 아래 파일 편집을 민감 파일로 거부당한다(#166 이 세 번 실패), Decompose 는 `<!-- factory-touches-claude -->` 로 local 로 뗀다. implementer.md 는 workflow 를 고치지 말고 티켓 댓글로 남기고 멈추라 하고, 커밋 뒤 diff 에 `.github/workflows/` 가 있거나 push 가 그 거절을 내면 `workflow-guard.sh` 가 실패 횟수를 늘리지 않고 곧바로 `ready-for-human` + `<!-- factory-human -->`(사유: workflow 파일)로 넘긴다. 다시 dispatch 하지 않는다(6번을 빠져나온 경우의 안전망).
 
 ### 공개 저장소 규칙 (2026-11-18 공개 전환)
 
@@ -115,5 +118,5 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 - **인수 시험·스텁**: Rust 시험 파일의 `#[ignore]` 표식·`todo!` 스텁을 위 「인수 시험」 표로. web 의 켜기는 줄 지우기가 아니라 줄 바꾸기라 `verify.sh mech` 가 「지운 표식 줄 → 같은 줄에서 `.skip`·`// #N` 만 뺀 줄」 짝을 허용한다.
 - **secret 없음 멈춤**: 원본에 없던 `token` job 을 Claude 를 쓰는 workflow 마다 맨 앞에 둔다.
 - **손 티켓**: 인수 시험 없는 티켓도 받는다(위).
-- **뺀 것**: 벤치(`bench.yml`, `bench-gate.sh`, `factory-bench-regression` 표식과 알림 종류), Windows 빌드·nightly. Verify·Odin 의 병합 뒤 `release.yml` dispatch 는 운영 배포 경로(#53)와 함께 되살렸다, `.gitattributes` 의 CRLF 시험(Windows 전용), Explore task(원본도 꺼져 있다).
+- **뺀 것**: 벤치(`bench.yml`, `bench-gate.sh`, `factory-bench-regression` 표식과 알림 종류), Windows 빌드·nightly. Verify·Odin 의 병합 뒤 `release.yml` dispatch 는 운영 배포 경로(#53)와 함께 되살렸다가 App 병합의 push 이벤트로 바꿨다(#172), `.gitattributes` 의 CRLF 시험(Windows 전용), Explore task(원본도 꺼져 있다).
 - **이름**: 봇 커밋 이름은 `github-actions[bot]`, 알림 다리 기본값(위), 원본 이슈 번호를 단 주석은 번호를 떼고 내용만 남겼다.

@@ -196,6 +196,84 @@ has "idle notice" "the factory is idle" "$(log)"
 has "warns" "could not leave <!-- factory-idle 61 -->" "$(log)"
 eq "no marker" "" "$(marked '<!-- factory-')"
 
+# --- unchecked 사람 확인 items hold the spec open (#167) ---------------------------------------
+
+# done_spec: spec #50 with every ticket merged; check <state> <body>: its check issue #850
+done_spec() {
+  jq -n '{number: 50, state: "open", body: "", labels: [{name: "spec"}],
+    sub_issues_summary: {total: 2, completed: 2}}' | tr -d '\r' > "$FAKE_GH/issue-50.json"
+}
+check() {
+  jq -n --arg s "$1" --arg b "<!-- factory-human-check-of 50 -->
+spec: #50
+
+$2" '{number: 850, state: $s, title: "사람 확인: spec #50", body: $b, labels: [{name: "human-check"}]}' \
+    | tr -d '\r' > "$FAKE_GH/issue-850.json"
+}
+spec_state() { jq -r .state "$FAKE_GH/issue-50.json" | tr -d '\r'; }
+hc_marks() {
+  [ -f "$FAKE_GH/comments-850.json" ] || { echo 0; return; }
+  jq '[.[] | select(.body | startswith("<!-- factory-human-check 50 -->"))] | length' "$FAKE_GH/comments-850.json" | tr -d '\r'
+}
+
+setup "an unchecked item keeps the spec open, holds the next spec and is told once"
+done_spec; ledger; spec 60 ""
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [ ] 환경 준비 표시 (PR #41)"
+FACTORY_SPEC_QUEUE="60" run
+eq code 0 "$(code)"
+eq "spec stays open" open "$(spec_state)"
+eq "next spec not started" "" "$(decomposed)"
+has notice "spec #50 waits for its 사람 확인 items" "$(log)"
+eq "marker on the check issue" 1 "$(hc_marks)"
+has "the count is told" "사람 확인 1 건이 미체크" "$(jq -r '.[0].body' "$FAKE_GH/comments-850.json")"
+FACTORY_SPEC_QUEUE="60" run
+eq "still open" open "$(spec_state)"
+eq "marker not again" 1 "$(hc_marks)"
+eq "still no next spec" "" "$(decomposed)"
+
+setup "items stacked after the marker are told again, once; no new item, no new marker (#170)"
+done_spec; ledger; spec 60 ""
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [ ] 환경 준비 표시 (PR #41)"
+FACTORY_SPEC_QUEUE="60" run
+eq "first marker" 1 "$(hc_marks)"
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [ ] 환경 준비 표시 (PR #41)
+- [ ] 종료 화면 (PR #43)"
+FACTORY_SPEC_QUEUE="60" run
+eq "second marker for the new item" 2 "$(hc_marks)"
+has "new item told" "종료 화면 (PR #43)" "$(jq -r '.[1].body' "$FAKE_GH/comments-850.json")"
+eq "old item not told again" 0 "$(jq -r '.[1].body' "$FAKE_GH/comments-850.json" | grep -c '환경 준비 표시')"
+FACTORY_SPEC_QUEUE="60" run
+eq "no third marker" 2 "$(hc_marks)"
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [x] 환경 준비 표시 (PR #41)
+- [ ] 종료 화면 (PR #43)"
+FACTORY_SPEC_QUEUE="60" run
+eq "an item checked is not new" 2 "$(hc_marks)"
+
+setup "every item checked: the spec closes and the next one starts"
+done_spec; ledger; spec 60 ""
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [X] 환경 준비 표시 (PR #41)"
+FACTORY_SPEC_QUEUE="60" run
+eq code 0 "$(code)"
+eq "spec closed" closed "$(spec_state)"
+eq "next spec" 60 "$(decomposed)"
+eq "no marker" 0 "$(hc_marks)"
+
+setup "a closed check issue lets the spec close"
+done_spec; ledger
+check closed "- [ ] 환경 준비 표시 (PR #41)"
+run
+eq "spec closed" closed "$(spec_state)"
+
+setup "a spec without a check issue closes as before"
+done_spec; ledger
+run
+eq "spec closed" closed "$(spec_state)"
+
 setup "no ledger issue only warns"
 spec 50 spec
 run

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# PR 을 CI 초록일 때만 squash 병합한다(#164). 로컬 작업자(사람·에이전트)의 병합은 이 스크립트로만 —
-# .claude/hooks/block-direct-merge.py 가 `gh pr merge`·`gh api .../merge` 직접 호출을 막는다.
+# PR 을 CI 초록일 때만 squash 병합한다(#164). 로컬 작업자(사람·에이전트)와 공장(#172)이 함께 쓴다.
+# 초록 전 병합은 main ruleset 의 필수 검사가 GitHub 에서 거절한다 — 이 스크립트는 검사가 끝날 때까지
+# 기다렸다가 병합하고, 실패한 검사를 이름·링크로 보여 준다.
 #   scripts/pr-merge.sh <PR 번호>
 #
 # 1. 검사가 등록될 때까지 기다린다(PR_MERGE_REGISTER_WAIT 초, 기본 600). push 직후 목록이 빈 것을
@@ -11,6 +12,10 @@
 #
 # SKIPPED 는 필수 잡에서 실패로 본다: ci.yml 에는 paths 거름도 잡 if: 도 없어서 필수 잡이 건너뛰어졌다면
 # 정상 경로가 아니다. 필수 아닌 검사의 SKIPPED·NEUTRAL 은 괜찮다.
+#
+# 공장(.github/factory/verify.sh·odin.sh, #172)도 이 스크립트로 병합한다. 그때 쓰는 환경:
+#   PR_MERGE_REPO   owner/name — gh 에 --repo 로 넘긴다(Actions 셸: 로컬 브랜치 정리를 건너뛴다).
+#   PR_MERGE_TOKEN  병합 호출에만 쓰는 토큰(공장 App 토큰). 검사 읽기는 GH_TOKEN 그대로.
 #
 # 종료 코드: 0 병합함 / 1 검사 실패·필수 잡이 SUCCESS 아님 / 2 사용법 / 3 시간 초과(미등록·안 끝남) /
 #            4 PR 이 열려 있지 않음·조회 실패 / 5 gh pr merge 실패
@@ -28,6 +33,10 @@ total_wait="${PR_MERGE_TOTAL_WAIT:-2400}"
 poll="${PR_MERGE_POLL:-20}"
 required_json="$(printf '%s\n' "${REQUIRED[@]}" | jq -R . | jq -cs .)"
 start=$SECONDS
+repo_args=()
+[ -n "${PR_MERGE_REPO:-}" ] && repo_args=(--repo "$PR_MERGE_REPO")
+merge_env=()
+[ -n "${PR_MERGE_TOKEN:-}" ] && merge_env=(env "GH_TOKEN=$PR_MERGE_TOKEN")
 
 # 검사 한 줄 모양: 이름<TAB>상태<TAB>링크. CheckRun 은 status·conclusion, StatusContext(외부 CI)는 state.
 # 상태는 PENDING / SUCCESS / SKIPPED / NEUTRAL / 그 밖(실패: FAILURE·CANCELLED·TIMED_OUT·ERROR …).
@@ -42,7 +51,7 @@ JQ_ROWS='
 
 while :; do
   elapsed=$((SECONDS - start))
-  if ! view="$(gh pr view "$pr" --json state,headRefOid,statusCheckRollup 2>&1)" || ! jq -e . >/dev/null 2>&1 <<<"$view"; then
+  if ! view="$(gh pr view "$pr" ${repo_args[@]+"${repo_args[@]}"} --json state,headRefOid,statusCheckRollup 2>&1)" || ! jq -e . >/dev/null 2>&1 <<<"$view"; then
     echo "pr-merge: PR #$pr 조회 실패: $view" >&2; exit 4
   fi
   state="$(jq -r .state <<<"$view")"
@@ -81,9 +90,9 @@ if [ -n "$notok" ]; then
 fi
 
 echo "pr-merge: #$pr 검사 모두 초록(head $head) — squash 병합"
-if ! gh pr merge "$pr" --squash --delete-branch --match-head-commit "$head"; then
+if ! ${merge_env[@]+"${merge_env[@]}"} gh pr merge "$pr" ${repo_args[@]+"${repo_args[@]}"} --squash --delete-branch --match-head-commit "$head"; then
   # 워크트리에서는 병합 뒤 로컬 브랜치 정리(main checkout)만 실패할 수 있다 — 병합 여부는 PR 상태로 본다.
-  if [ "$(gh pr view "$pr" --json state 2>/dev/null | jq -r '.state // ""' 2>/dev/null)" = MERGED ]; then
+  if [ "$(gh pr view "$pr" ${repo_args[@]+"${repo_args[@]}"} --json state 2>/dev/null | jq -r '.state // ""' 2>/dev/null)" = MERGED ]; then
     echo "pr-merge: 병합됨(로컬 브랜치 정리는 실패 — 직접 지운다)" >&2; exit 0
   fi
   echo "pr-merge: gh pr merge 실패" >&2; exit 5

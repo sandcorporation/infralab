@@ -47,7 +47,7 @@ x"
 setup() {
   current=$1
   tmp=$(mktemp -d "$root/t.XXXXXX")
-  export FACTORY_TRACKS=1 FACTORY_DISPATCH_SEEN_WAIT=0 FACTORY_LIST_RETRY_WAIT=0 FAKE_GH="$tmp/gh" GITHUB_OUTPUT="$tmp/output" FACTORY_MERGE_WAIT=0 RUN_URL=https://example.invalid/run/1
+  export FACTORY_TRACKS=1 FACTORY_DISPATCH_SEEN_WAIT=0 FACTORY_LIST_RETRY_WAIT=0 FAKE_GH="$tmp/gh" GITHUB_OUTPUT="$tmp/output" FACTORY_MERGE_WAIT=0 RUN_URL=https://example.invalid/run/1 FACTORY_PR_MERGE="$here/fake/pr-merge"
   unset FACTORY_DISPATCH_NEXT
   mkdir -p "$FAKE_GH"
   : > "$FAKE_GH/calls.log"
@@ -160,7 +160,8 @@ eq "merged" true "$(merged)"
 has "squash" "pulls/70/merge -f merge_method=squash" "$(calls)"
 has "branch deleted" "git/refs/heads/factory/spec-50" "$(calls)"
 eq "bot pull_request run deleted (#270)" "" "$(runs_left)"
-has "main released" "actions/workflows/release.yml/dispatches" "$(calls)"
+has "merged through pr-merge.sh (#172)" "pr-merge 70" "$(calls)"
+lacks "release.yml runs on the App's push, not dispatched (#172)" "release.yml" "$(calls)"
 eq "open tickets approved" "61 62 63" "$(approved)"
 # #61 is blocked (an open blocker); #62 is the lowest-numbered unblocked ticket.
 eq "first dispatch" 62 "$(dispatched)"
@@ -203,6 +204,22 @@ eq "not merged" false "$(merged)"
 eq "no ticket approved" "" "$(approved)"
 eq "nothing dispatched" "" "$(dispatched)"
 lacks "branch kept" "git/refs/heads/factory/spec-50" "$(calls)"
+eq "three attempts" 3 "$(grep -c '^pr-merge 70' "$FAKE_GH/calls.log")"
+
+# A red check is no conflict: exit 2 at once, for a human (#172).
+setup checks-red
+touch "$FAKE_GH/checks-red"
+bash "$odin" pass 50 70 > /dev/null 2>&1
+eq "exit" 2 "$?"
+eq "not merged" false "$(merged)"
+eq "one attempt" 1 "$(grep -c '^pr-merge 70' "$FAKE_GH/calls.log")"
+eq "no ticket approved" "" "$(approved)"
+
+# Without the test hook and without the App token nothing is merged (no GITHUB_TOKEN fallback).
+setup no-app-token
+FACTORY_PR_MERGE= FACTORY_APP_TOKEN= bash "$odin" pass 50 70 > /dev/null 2>&1
+eq "exit" 2 "$?"
+eq "not merged" false "$(merged)"
 
 # --- empty spec PR --------------------------------------------------------------------------------
 
