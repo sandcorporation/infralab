@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fake `agent-mail` for the bridge tests: put this folder first on PATH.
+# Fake `switchboard` for the bridge tests: put this folder first on PATH.
 # State lives in $FAKE_MAIL:
 #   sent.jsonl   one JSON object per successful send: {profile, args: [...]}
 #   fail         if present, every send fails
@@ -7,10 +7,10 @@
 set -u -o pipefail
 d=${FAKE_MAIL:?FAKE_MAIL is not set}
 printf '%s\n' "$*" >> "$d/calls.log"
-[ "${1:-}" = send ] || { echo "fake agent-mail: unsupported command: $*" >&2; exit 2; }
-if [ -e "$d/fail" ]; then echo "fake agent-mail: sending is broken" >&2; exit 1; fi
+[ "${1:-}" = send ] || { echo "fake switchboard: unsupported command: $*" >&2; exit 2; }
+if [ -e "$d/fail" ]; then echo "fake switchboard: sending is broken" >&2; exit 1; fi
 # Each argument as a JSON string (works on every jq, whatever the argument starts with).
 args=$(for a in "$@"; do printf '%s' "$a" | jq -Rs .; done | jq -cs .) || exit 1
-jq -cn --arg p "${AGENT_MAIL_PROFILE:-}" --argjson a "$args" '{profile: $p, args: $a}' | tr -d '\r' >> "$d/sent.jsonl" \
+jq -cn --arg p "${SWITCHBOARD_PROFILE:-}" --argjson a "$args" '{profile: $p, args: $a}' | tr -d '\r' >> "$d/sent.jsonl" \
   || exit 1
 echo "message 1 -> sandcorp/boss · pending"

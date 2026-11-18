@@ -57,7 +57,7 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 - **spec 사슬**: 할 티켓이 없으면 하위 이슈가 다 닫힌 spec 을 닫고, 변수 `FACTORY_SPEC_QUEUE`(spec 번호를 순서대로, 비면 넘어가지 않음)의 다음 spec 에 `spec` 라벨을 붙여 Decompose 를 띄운다.
 - **되돌림 종류와 한도**: `kind=acceptance`(기계 검사·인수 판단·병합 실패: PR 을 닫고 main 부터 다시) 2번, `kind=conflict`(main 과 충돌·merge 뒤 검사 실패·push 실패: PR 을 두고 충돌 모드로 풀기) 3번이면 사람에게 넘긴다.
 - **비용 장부와 상한**(`ledger.sh`): Claude 단계마다 `factory-ledger` 라벨의 장부 이슈에 비용 댓글. 시작 전 가드가 spec 합계(spec 본문의 `예산: $N` 줄 → 변수 `FACTORY_SPEC_BUDGET_USD` → $60)와 KST 하루 합계(`FACTORY_DAILY_BUDGET_USD` → $150)를 본다. 넘으면 `factory-paused` 또는 하루 멈춤, KST 00:05 예약 실행이 다시 시작한다.
-- **알림 다리**(`bridge.sh`): 공장은 메일을 보내지 않는다. 공장 밖 크론(2분)이 `gh` 로 표식 댓글(질문·상한 멈춤·사람 넘김·큐 바닥남·idle)을 찾아 Agent Mail 로 보낸다. 기본값은 `FACTORY_REPO=sandcorporation/infralab`, 질문은 `BRIDGE_TO_BOSS`(기본 `sandcorp/boss`), 나머지는 `BRIDGE_TO_COORD`(기본 `<저장소 이름>/coordinator` = `infralab/coordinator`). 메일의 `--task`·idempotency 접두어는 `<저장소 이름>-factory`. 스크립트에 주소·토큰·호스트는 없고 메일 서버는 agent-mail 프로필이 안다. 첫 설치는 `--seed`.
+- **알림 다리**(`bridge.sh`): 공장은 메일을 보내지 않는다. 공장 밖 크론(2분)이 `gh` 로 표식 댓글(질문·상한 멈춤·사람 넘김·큐 바닥남·idle)을 찾아 switchboard 메일함으로 보낸다. 기본값은 `FACTORY_REPO=sandcorporation/infralab`, 질문은 `BRIDGE_TO_BOSS`(기본 `sandcorp/boss`), 나머지는 `BRIDGE_TO_COORD`(기본 `<저장소 이름>/coordinator` = `infralab/coordinator`). 메일의 `--task`·idempotency 접두어는 `<저장소 이름>-factory`. 스크립트에 주소·토큰·호스트는 없고 메일 서버는 switchboard 프로필(`SWITCHBOARD_PROFILE`, 기본 `automation`)이 안다. 첫 설치는 `--seed`.
 - **사람 넘김**(`ready-for-human`)은 「공장 밖에서 관리 세션이 처리」라는 뜻이다. 관리 세션이 원인을 고치거나 직접 구현하고, 대표에게는 제품 결정만 묻는다.
 
 - **후보에서 빼는 것**(#56): `dispatch-next.sh` 는 `spec` 라벨이 있거나 하위 이슈(sub-issue)가 있는 이슈를 티켓으로 집지 않는다(부모는 티켓이 아니다).
@@ -106,7 +106,7 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 
 - 관리할 서버가 없다(알림 다리 크론만 공장 밖).
 - 구독 OAuth 토큰을 쓰므로 공장 run 이 구독 사용량을 함께 쓴다.
-- 공장 스크립트는 가짜 `gh`·`agent-mail` 로 시험한다(`.github/factory/test.sh`, `scripts/ci.sh factory`, CI 의 `factory` job 이 actionlint 와 함께 돌린다). workflow 연결은 시범으로 확인한다.
+- 공장 스크립트는 가짜 `gh`·`switchboard` 로 시험한다(`.github/factory/test.sh`, `scripts/ci.sh factory`, CI 의 `factory` job 이 actionlint 와 함께 돌린다). workflow 연결은 시범으로 확인한다.
 
 ## 원본에서 바꾼 것
 
