@@ -1,0 +1,17 @@
+﻿infralab 실습 환경 설치 전 확인
+
+1. Docker Desktop 이 필요합니다.
+   이 설치 프로그램은 Docker Desktop 을 함께 설치하지 않습니다.
+   https://www.docker.com/products/docker-desktop/ 에서 먼저 설치하세요.
+
+2. Linux 컨테이너 모드여야 합니다.
+   Docker Desktop 트레이 아이콘을 우클릭했을 때 「Switch to Windows containers...」가 보이면
+   이미 Linux 컨테이너 모드입니다. 「Switch to Linux containers...」가 보이면 눌러 바꾸세요.
+
+3. 기업 유료 요금제 안내.
+   Docker Desktop 은 직원 250명 이상이거나 연 매출 1,000만 달러 이상인 기업이 쓰려면
+   유료 구독(Pro·Team·Business)이 필요합니다. 개인·교육·소규모 기업(250명 미만이고 연 매출
+   1,000만 달러 미만)은 무료입니다. 소속 회사의 요금제를 확인한 뒤 설치하세요.
+   https://www.docker.com/pricing/
+
+설치가 끝난 뒤 첫 실행에서 Docker 엔진·Linux 모드·권한을 점검하고, 문제가 있으면 안내 페이지를 엽니다.
