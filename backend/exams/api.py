@@ -28,16 +28,17 @@ from cohorts.api import _cohorts_with_counts as cohorts_with_counts
 from cohorts.models import Cohort, Membership
 from cohorts.schemas import CohortOut
 
-from . import ai, services
+from . import ai, grading, services
 from submissions.models import MAX_OUTPUT_CHARS
 
-from .models import ExamEvent, ExamInvite
+from .models import AIExchange, ExamEvent, ExamInvite, ExamRubric, RubricEdit
 from .schemas import (
     AiConfigOut,
     ExamEventIn,
     ExamEventOut,
     ExamInviteIn,
     ExamInviteOut,
+    ExamReportOut,
     ExamScoreOut,
     FinalChecksOut,
     FinalResultsIn,
@@ -47,6 +48,7 @@ from .schemas import (
     ProxyAuthorizeIn,
     ProxyExchangeIn,
     ProxyVerdictOut,
+    RubricEditIn,
 )
 
 instructor_router = Router(tags=["instructor"], auth=instructor_auth)
@@ -162,19 +164,93 @@ def exam_events(request: HttpRequest, cohort_id: int, invite_id: int):
     return list(invite.events.all())
 
 
-@instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/report")
+def _report_invite(request: HttpRequest, cohort_id: int, invite_id: int) -> ExamInvite:
+    cohort = _exam_cohort(request, cohort_id)
+    return get_object_or_404(cohort.exam_invites.select_related("cohort", "membership"), pk=invite_id)
+
+
+def _exchanges(invite: ExamInvite) -> list[AIExchange]:
+    """이 응시의 프록시 기록만(채점 재료)."""
+
+    return list(AIExchange.objects.filter(ai_token__invite=invite))
+
+
+def _report(invite: ExamInvite) -> ExamReportOut:
+    rubric = ExamRubric.objects.filter(invite=invite).first()
+    return ExamReportOut(
+        invite_id=invite.id,
+        label=invite.label,
+        status=_status(invite),
+        score=services.score(invite),
+        rubric=None
+        if rubric is None
+        else {
+            "grader": rubric.grader,
+            "graded_at": rubric.graded_at,
+            "items": [{**item, "label": grading.RUBRIC_LABELS.get(item["key"], item["key"])} for item in rubric.items],
+        },
+        local_model_unverified=AIExchange.objects.filter(ai_token__invite=invite, tool="local_llm").exists(),
+        edits=list(invite.rubric_edits.all()),
+    )
+
+
+@instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/report", response=ExamReportOut)
 def exam_report(request: HttpRequest, cohort_id: int, invite_id: int):
-    raise NotImplementedError("#76")
+    """지원자 보고서. 채점 전이면 rubric 은 null."""
+
+    return _report(_report_invite(request, cohort_id, invite_id))
 
 
-@instructor_router.post("/cohorts/{cohort_id}/exam-invites/{invite_id}/report/grade")
+@instructor_router.post("/cohorts/{cohort_id}/exam-invites/{invite_id}/report/grade", response=ExamReportOut)
 def grade_exam_report(request: HttpRequest, cohort_id: int, invite_id: int):
-    raise NotImplementedError("#76")
+    """이 응시의 프록시 기록으로 루브릭을 (다시) 채점한다. 점수는 새 LLM 점수로 돌아가고 수정 이력은 남는다."""
+
+    invite = _report_invite(request, cohort_id, invite_id)
+    grader = grading.get_grader()
+    try:
+        result = {item.key: item for item in grader.grade(_exchanges(invite))}
+    except Exception as e:  # 채점기 바깥 서비스 실패
+        raise HttpError(502, f"채점에 실패했습니다: {e}") from e
+    items = []
+    for key in grading.RUBRIC_KEYS:
+        item = result.get(key) or grading.RubricItem(key=key, score=0)
+        score = max(0, min(grading.MAX_SCORE, int(item.score)))
+        items.append({"key": key, "score": score, "llm_score": score, "evidence": list(item.evidence), "edited": False})
+    ExamRubric.objects.update_or_create(
+        invite=invite,
+        defaults={"grader": getattr(grader, "name", type(grader).__name__), "graded_at": timezone.now(), "items": items},
+    )
+    return _report(invite)
 
 
-@instructor_router.patch("/cohorts/{cohort_id}/exam-invites/{invite_id}/report/rubric/{key}")
-def edit_rubric_item(request: HttpRequest, cohort_id: int, invite_id: int, key: str):
-    raise NotImplementedError("#76")
+@instructor_router.patch("/cohorts/{cohort_id}/exam-invites/{invite_id}/report/rubric/{key}", response=ExamReportOut)
+def edit_rubric_item(request: HttpRequest, cohort_id: int, invite_id: int, key: str, payload: RubricEditIn):
+    """담당자가 한 항목의 점수를 고치고 사유를 남긴다. LLM 점수는 그대로, 수정은 이력에 쌓인다."""
+
+    invite = _report_invite(request, cohort_id, invite_id)
+    if key not in grading.RUBRIC_KEYS:
+        raise HttpError(404, "모르는 루브릭 항목입니다.")
+    with transaction.atomic():
+        rubric = ExamRubric.objects.select_for_update().filter(invite=invite).first()
+        if rubric is None:
+            raise HttpError(409, "먼저 채점하세요.")
+        items = list(rubric.items)
+        n = next((i for i, item in enumerate(items) if item["key"] == key), None)
+        if n is None:
+            raise HttpError(409, "이 항목은 채점되지 않았습니다.")
+        user = request.auth
+        RubricEdit.objects.create(
+            invite=invite,
+            key=key,
+            from_score=items[n]["score"],
+            to_score=payload.score,
+            reason=payload.reason,
+            by=(getattr(user, "display_name", "") or user.get_username()),
+        )
+        items[n] = {**items[n], "score": payload.score, "edited": True}
+        rubric.items = items
+        rubric.save(update_fields=["items"])
+    return _report(invite)
 
 
 @instructor_router.get("/exam-dashboard")

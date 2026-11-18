@@ -112,7 +112,6 @@ def _items(report):
     return {item["key"]: item for item in report["rubric"]["items"]}
 
 
-@pytest.mark.skip(reason="#76")
 def test_report_before_grading_has_scores_and_no_rubric(api):
     teacher, cohort, invite = _setup(api)
 
@@ -131,7 +130,6 @@ def test_report_before_grading_has_scores_and_no_rubric(api):
     assert patched.status_code == 409
 
 
-@pytest.mark.skip(reason="#76")
 def test_grading_fills_four_items_with_scores_and_quoted_evidence(api):
     teacher, cohort, invite = _setup(api)
 
@@ -156,7 +154,6 @@ def test_grading_fills_four_items_with_scores_and_quoted_evidence(api):
     assert api.get(_path(cohort["id"], invite["id"]), teacher).json()["rubric"] == rubric
 
 
-@pytest.mark.skip(reason="#76")
 def test_fake_grader_is_deterministic(api):
     teacher, cohort, invite = _setup(api)
 
@@ -169,7 +166,6 @@ def test_fake_grader_is_deterministic(api):
     assert strip(first) == strip(second)
 
 
-@pytest.mark.skip(reason="#76")
 def test_get_grader_is_the_fake_one_without_a_key():
     from exams.grading import FakeGrader, get_grader
 
@@ -177,7 +173,6 @@ def test_get_grader_is_the_fake_one_without_a_key():
         assert isinstance(get_grader(), FakeGrader)
 
 
-@pytest.mark.skip(reason="#76")
 def test_instructor_edits_keep_the_llm_score_and_the_history(api):
     teacher, cohort, invite = _setup(api)
     llm = _items(_grade(api, teacher, cohort["id"], invite["id"]))["verification"]["llm_score"]
@@ -208,7 +203,6 @@ def test_instructor_edits_keep_the_llm_score_and_the_history(api):
     assert api.get(_path(cohort["id"], invite["id"]), teacher).json()["edits"] == res.json()["edits"]
 
 
-@pytest.mark.skip(reason="#76")
 def test_regrading_returns_to_the_llm_score_and_keeps_the_history(api):
     teacher, cohort, invite = _setup(api)
     llm = _items(_grade(api, teacher, cohort["id"], invite["id"]))["decomposition"]["llm_score"]
@@ -233,7 +227,6 @@ def test_regrading_returns_to_the_llm_score_and_keeps_the_history(api):
     ],
     ids=["empty-reason", "blank-reason", "no-reason", "score-6", "score-minus"],
 )
-@pytest.mark.skip(reason="#76")
 def test_invalid_edits_are_422_and_change_nothing(api, body):
     teacher, cohort, invite = _setup(api)
     before = _grade(api, teacher, cohort["id"], invite["id"])
@@ -246,7 +239,6 @@ def test_invalid_edits_are_422_and_change_nothing(api, body):
     assert after["edits"] == []
 
 
-@pytest.mark.skip(reason="#76")
 def test_unknown_item_is_404_and_another_orgs_report_is_404(api):
     teacher, cohort, invite = _setup(api)
     _grade(api, teacher, cohort["id"], invite["id"])
@@ -260,7 +252,6 @@ def test_unknown_item_is_404_and_another_orgs_report_is_404(api):
     assert patched.status_code == 404
 
 
-@pytest.mark.skip(reason="#76")
 def test_another_attempts_exchanges_are_not_used_as_evidence(api):
     teacher, cohort, invite = _setup(api)
     _finished_attempt(api, teacher, cohort["id"], "지원자 B", THEIRS)
