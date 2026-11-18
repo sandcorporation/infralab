@@ -16,7 +16,7 @@
 # `in-progress` label left by a broken run would hold a track for ever.
 #
 # 1. Fills every empty track, lowest track first, with the lowest-numbered open `ready-for-agent`
-#    ticket with no open blocker, no running implement run, and a budget guard (ledger.sh guard) that
+#    ticket (not a spec: no `spec` label and no sub-issues; not `local`) with no open blocker, no running implement run, and a budget guard (ledger.sh guard) that
 #    says go (--first N is tried before the others: the ticket Verify just sent back). A ticket whose
 #    spec is paused or needs a decision is passed over; when the daily budget is spent nothing starts
 #    (the schedule resumes after KST midnight). The tickets are those of the label search plus
@@ -178,10 +178,20 @@ fi
 for n in $first $(printf '%s\n' $found $candidates | sort -n -u | grep -vx "${first:-x}"); do
   [ $# -gt 0 ] || break
   case "$busy_tickets" in *" $n "*) echo "::notice::#$n already has an implement run"; continue ;; esac
-  read -r state ready open < <(gh api "repos/$REPO/issues/$n" --jq '[.state,
+  read -r state ready open isspec islocal subs < <(gh api "repos/$REPO/issues/$n" --jq '[.state,
     (any(.labels[]; .name == "ready-for-agent") | tostring),
-    (.issue_dependencies_summary.blocked_by // 0 | tostring)] | @tsv')
+    (.issue_dependencies_summary.blocked_by // 0 | tostring),
+    (any(.labels[]; .name == "spec") | tostring),
+    (any(.labels[]; .name == "local") | tostring),
+    (.sub_issues_summary.total // 0 | tostring)] | @tsv')
   [ "${state:-}" = open ] && [ "${ready:-}" = true ] || continue
+  # A spec (label `spec`) or an issue with sub-issues is a parent, not a ticket.
+  # A `local` ticket (workflow files) is for a local worker, never the factory.
+  if [ "${islocal:-false}" = true ]; then echo "::notice::#$n is local; not for the factory"; continue; fi
+  if [ "${isspec:-false}" = true ] || [ "${subs:-0}" -gt 0 ]; then
+    echo "::notice::#$n is a spec or has sub-issues; not a ticket"
+    continue
+  fi
   [ "${open:-1}" -eq 0 ] || continue
   if reason=$(go "$n"); then
     dispatch "$n" "$1" || exit 1

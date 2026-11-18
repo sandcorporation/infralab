@@ -317,6 +317,15 @@ FACTORY_TRACKS=1 FACTORY_SPEC_QUEUE="60" run
 eq "no ticket" "" "$(dispatched)"
 eq "no decompose" "" "$(decomposed)"
 
+setup "a spec or an issue with sub-issues is not a ticket"
+issue 61 ready-for-agent,spec
+issue 62 ready-for-agent
+jq '.sub_issues_summary = {total: 3, completed: 0}' "$FAKE_GH/issue-62.json" | tr -d '\r' > "$FAKE_GH/x" && mv "$FAKE_GH/x" "$FAKE_GH/issue-62.json"
+issue 63 ready-for-agent
+run --tickets-only
+eq code 0 "$(code)"
+eq "only the plain ticket" 63 "$(dispatched)"
+
 setup "FACTORY_TRACKS=1: one ticket per call, track 1"
 issue 61 ready-for-agent; issue 62 ready-for-agent
 FACTORY_TRACKS=1 run --tickets-only

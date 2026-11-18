@@ -12,8 +12,9 @@
 #                                     ledger issue or jq only warns.
 #   ledger.sh spec-total <S>          sum of the ledger comments with spec=#S, in USD
 #   ledger.sh day-total [YYYY-MM-DD]  sum of the ledger comments created on that KST date (default: today)
-#   ledger.sh spec-of <issue>         the spec of an issue: the first #number in its "## Parent" section,
-#                                     or the issue itself when it has none
+#   ledger.sh spec-of <issue>         the spec of an issue: its GitHub sub-issue parent, else the first
+#                                     #number in its "## Parent" section, or the issue itself when it has none
+#   ledger.sh parent-of <issue>       the same without the fallback: empty when the issue has no parent
 #   ledger.sh guard <issue>           decide whether a stage may start for <issue>. Writes go=true|false and
 #                                     reason=<why> to $GITHUB_OUTPUT (stdout when unset). Stops when the spec
 #                                     has `needs-decision` or `factory-paused`, the KST day's total reached the
@@ -71,6 +72,19 @@ ledger_issue() {
     | j -r '[.[] | select(.pull_request | not)] | sort_by(.number) | .[0].number // empty'
 }
 
+# ledger_issue, creating the ledger (title "공장 비용 장부", label `factory-ledger`) when there is none,
+# so a cost is never dropped. Empty when it cannot be made.
+ensure_ledger() {
+  local n; n=$(ledger_issue)
+  if [ -z "$n" ]; then
+    warn "no open factory-ledger issue; creating one" >&2
+    n=$(gh api "repos/$REPO/issues" -f title="공장 비용 장부" -f 'labels[]=factory-ledger' \
+      -f body="소프트웨어 공장의 비용 장부. 이 이슈를 닫지 않는다 (docs/adr/0001-software-factory.md)." \
+      2>/dev/null | j -r '.number // empty' 2>/dev/null)
+  fi
+  echo "$n"
+}
+
 # All comments of an issue as one JSON object per line: {created_at, body}.
 comments() {
   gh api "repos/$REPO/issues/$1/comments?per_page=100" --paginate \
@@ -108,8 +122,21 @@ parent_of_body() {
        inp && match($0, /#[0-9]+/) { print substr($0, RSTART + 1, RLENGTH - 1); exit }'
 }
 
+# The GitHub sub-issue parent of an issue (GET …/issues/<n>/parent), empty when it has none or the
+# call fails (404 = no parent).
+sub_issue_parent() {
+  gh api "repos/$REPO/issues/$1/parent" 2>/dev/null | j -r '.number // empty' 2>/dev/null
+}
+
+# The parent of an issue: its GitHub sub-issue parent first, else the "## Parent" section of the body.
+parent_of() {
+  local p; p=$(sub_issue_parent "$1")
+  [ -n "$p" ] || p=$(body_of "$1" | parent_of_body)
+  echo "$p"
+}
+
 spec_of() {
-  local p; p=$(body_of "$1" | parent_of_body)
+  local p; p=$(parent_of "$1")
   echo "${p:-$1}"
 }
 
@@ -155,8 +182,8 @@ record() {
 
   local spec; spec=$(spec_of "$issue")
   local line="spec=#${spec:-$issue} node=$node issue=#$issue run=${GITHUB_RUN_ID:-local} $usage"
-  local n; n=$(ledger_issue)
-  if [ -z "$n" ]; then warn "no open factory-ledger issue; not recorded: $line"; return 0; fi
+  local n; n=$(ensure_ledger)
+  if [ -z "$n" ]; then warn "could not find or create the factory-ledger issue; not recorded: $line"; return 0; fi
   if post_comment "$n" "<!-- ledger -->
 $line"; then
     echo "ledger #$n: $line"
@@ -285,7 +312,7 @@ stats() {
 }
 
 usage() {
-  echo "usage: ledger.sh record <node> <issue> | spec-total <spec> | day-total [YYYY-MM-DD] | spec-of <issue> | guard <issue> | event <kind> <issue> [key=value …] | stats" >&2
+  echo "usage: ledger.sh record <node> <issue> | spec-total <spec> | day-total [YYYY-MM-DD] | spec-of <issue> | parent-of <issue> | guard <issue> | event <kind> <issue> [key=value …] | stats" >&2
   exit 2
 }
 
@@ -296,6 +323,7 @@ case "${1:-}" in
   spec-total) [ $# -eq 2 ] || usage; spec_total "$2" ;;
   day-total) [ $# -le 2 ] || usage; day_total "${2:-}" ;;
   spec-of) [ $# -eq 2 ] || usage; spec_of "$2" ;;
+  parent-of) [ $# -eq 2 ] || usage; parent_of "$2" ;;
   guard) [ $# -eq 2 ] || usage; guard "$2" ;;
   event) [ $# -ge 3 ] || usage; shift; event "$@" ;;
   stats) [ $# -eq 1 ] || usage; stats ;;

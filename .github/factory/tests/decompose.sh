@@ -146,6 +146,15 @@ eq "pull requests" 0 "$(pull_count)"
 eq dispatches 0 "$(dispatches)"
 eq branch no "$(remote_branch 249)"
 
+setup "finish: a ticket that changes workflow files becomes ready-for-human + local"
+issue 249 spec,needs-decision
+issue 301 model:sonnet ".github/workflows/ 에 단계를 더한다"
+issue 302 model:sonnet
+subs 249 301:open 302:open
+finish 249 decomposed
+eq "#301 labels" "model:sonnet,local,ready-for-human" "$(labels_of 301)"
+eq "#302 labels" "model:sonnet" "$(labels_of 302)"
+
 setup "finish: a question (decomposed spec) also takes ready-for-agent off the open tickets"
 issue 249 spec,needs-decision
 issue 301 ready-for-agent,model:sonnet
