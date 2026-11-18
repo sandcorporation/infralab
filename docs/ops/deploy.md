@@ -44,6 +44,12 @@ production push → Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)
 | `POSTGRES_DB`, `POSTGRES_USER` | 아니오 | 기본 `infralab` |
 | `FLOCI_IMAGE` | 아니오 | 학생 compose 의 Floci 이미지. 비면 backend 기본값 |
 | `GUNICORN_WORKERS` | 아니오 | 기본 2 |
+| `INFRALAB_ANTHROPIC_EXAM_KEY`, `INFRALAB_OPENAI_EXAM_KEY` | 시험 | 시험용 공급사 키. **`proxy` 서비스만** 받는다(backend 는 받지 않는다) |
+| `INFRALAB_EXAM_PROXY_SECRET` | 시험 | proxy 와 backend 가 나누는 공유 비밀. 둘 다 같은 값을 받는다 |
+| `INFRALAB_EXAM_PROXY_URL` | 아니오 | backend 가 지원자에게 알려 줄 프록시 주소. 기본 `http://proxy:58090`(compose 안). 지원자 PC 가 닿는 호스트로 정한다 |
+| `INFRALAB_GRADER_ANTHROPIC_KEY` | 시험 | 루브릭 채점 키(backend 만). 비면 가짜 채점기 |
+| `INFRALAB_PROBLEMS_DIR` | 아니오 | backend 안의 문제은행 경로. 기본 `/problems` — 호스트 폴더(`INFRALAB_PROBLEMS_HOST_DIR`, 기본 `./problems`)를 읽기 전용으로 붙인다. 폴더가 없거나 비면 「숨은 검사」 건너뜀 경고만 남고 기동한다 |
+| `INFRALAB_PROXY_IMAGE` | 아니오 | proxy 이미지. 비면 `proxy/` 에서 빌드(Jenkins 가 넣을 값, #82) |
 | `HTTP_BIND`, `HTTP_PORT` | 아니오 | web 이 듣는 호스트 주소·포트. 기본 `127.0.0.1:18093` |
 
 Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `INFRALAB_WEB_IMAGE`, `INFRALAB_AGENT_IMAGE`, `INFRALAB_WORKSTATION_IMAGE`.
@@ -59,7 +65,14 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 - [ ] sandcorp-auth 에 기밀 클라이언트 등록(auth 조율자): redirect_uri `https://infralab.sandcorp.co.kr/api/auth/callback`, 리소스 `https://infralab.sandcorp.co.kr/api` 와 그 스코프 `infralab`(일반 사용자 허용), 클라이언트의 「일반 사용자 허용」, 웹훅 URL `https://infralab.sandcorp.co.kr/api/auth/webhook`. 나온 client id·secret·웹훅 비밀을 `.env` 에.
 - [ ] GitHub ruleset: `production` 브랜치 강제 push·삭제 금지(승격은 fast-forward 만).
 - [ ] ghcr 패키지 넷(`infralab-backend`·`-web`·`-agent`·`-workstation`)의 공개 범위 — 응시자 PC 가 로그인 없이 pull 하려면 agent·workstation 은 공개.
+- [ ] 시험 모드(#82, 이 저장소 밖 몫): Jenkinsfile 에 proxy 이미지(`images`·`extraServices`)와 문제은행 받기(`extraCheckouts`, 자격 `infralab-problems-deploy-key`, `problems.ref`) 배선이 아직 남았다. 서버 `.env` 에 위 시험 환경변수(공급사 키 둘·공유 비밀·채점 키) 추가, 프록시 호스트를 지원자 PC 가 닿게 열고 `INFRALAB_EXAM_PROXY_URL` 설정.
 - [ ] 첫 강사 지정: `docker compose -f compose.prod.yml run --rm backend python manage.py set_instructor sandcorp:<sub>` — 「기본 조직」 owner 로 넣는다. Sandcorp 계정으로 한 번 로그인한 뒤에 한다(그 전에는 사용자가 없다). `sub` 는 `/api/accounts/me` 의 `username` 에서 본다.
+
+## 시험 모드(AI 프록시·문제은행)
+
+- `compose.prod.yml` 에 `proxy` 서비스가 있다. Jenkins 가 부르기 전에는 뜨지 않으므로 지금 배포는 그대로다.
+- 문제은행은 비공개 저장소다. Jenkins 자격 이름은 `infralab-problems-deploy-key`(읽기 전용 deploy key), 받을 커밋은 저장소 루트 `problems.ref` 에 적는다. 받은 폴더가 호스트 `INFRALAB_PROBLEMS_HOST_DIR`(기본 `./problems`)이고 backend 에 `INFRALAB_PROBLEMS_DIR` 로 붙는다. 공개 이미지에는 굽지 않는다.
+- 공급사 키·공유 비밀은 서버 `.env` 에만 둔다. 공급사 키는 proxy 만 받는다.
 
 ## 로컬에서 운영 compose 확인
 
