@@ -16,7 +16,7 @@ infralab 의 도메인 용어. 화면·코드·이슈·커밋에서 이 뜻으�
 | **AI 프록시** | 지원자의 AI 도구(Claude Code·Codex)와 공급사 사이에 서는 별도 서비스. 진짜 공급사 키는 이 서비스만 갖는다(backend 도 갖지 않는다). 요청마다 backend 프록시 전용 내부 API(`/api/proxy/…`, 공유 비밀 `INFRALAB_EXAM_PROXY_SECRET`)에 임시 토큰을 물어 허용·고정 모델을 받고, 요청·응답과 사용량을 backend 에 기록으로 넘긴다(채점 재료). 주소는 `INFRALAB_EXAM_PROXY_URL`. | `config.settings.EXAM_PROXY_URL`, `exams.AIExchange` |
 | **임시 토큰** | 지원자가 AI 도구에 넣는 응시 한 번짜리 키. 진짜 공급사 키가 아니며 AI 프록시에서만 통한다. 응시 중 「AI 키 설정」을 처음 받을 때 발급되고, 시험 시간 창 밖·회수됨·허용하지 않은 도구·사용량 한도 초과(한도 0 은 한도 없음)·다른 클라이언트가 마지막 사용 5분 안에 쓰는 중이면 거절된다. 담당자가 즉시 회수할 수 있고, 응시를 끝내거나 응시 링크를 회수하면 함께 회수된다. | `exams.AIToken` |
 | **기수** | 수업 종류 묶음의 표시 이름. 화면과 API 경로(`/cohorts`)는 이 이름을 쓴다. | `cohorts.Cohort` |
-| **응시자** | 묶음에 들어온 사람(수업이면 학생, 시험이면 지원자). 묶음마다 에이전트 토큰 하나를 갖는다. | `cohorts.Membership` |
+| **응시자** | 묶음에 들어온 사람(수업이면 학생, 시험이면 지원자). 에이전트 토큰은 응시자가 아니라 사용자 하나에 하나다 — 수업·연습이 같은 토큰·같은 compose.yml 을 쓰고, 응시는 숨은 사용자라 따로다. | `cohorts.Membership` |
 | **제출** | 응시자가 한 시나리오에 대해 보낸 자동 검사 결과 한 번(대화 기록이 붙을 수 있다). | `submissions.Submission` |
 | **숨은 검사** | 시나리오에 붙지만 공개 검사와 섞이지 않는 검사. 문제은행의 `<id>/hidden.yaml` 에서 읽고(공개 검사와 같은 스키마, id 는 겹칠 수 없다), 시나리오 상세·환경 준비·제출 검증은 공개 검사만 본다. | `scenarios.loader.Scenario.hidden_checks` |
 | **문제은행** | 숨은 검사를 담은 비공개 저장소. 저장소 루트 `problems.ref` 가 고정 sha 를 가리키고, 서버는 `PROBLEMS_DIR`(`INFRALAB_PROBLEMS_DIR`) 폴더에서 읽는다. 폴더가 비었거나 없으면 숨은 검사를 건너뛰고 경고만 남긴다. 저장소 안 `problems-sample/` 은 시험·개발용 견본이다. | `problems.ref`, `config.settings.PROBLEMS_DIR` |

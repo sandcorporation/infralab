@@ -60,10 +60,14 @@ def merge_users(from_sub: str, to_sub: str) -> None:
                 kept_role.save(update_fields=["role"])
             role.delete()
 
+    if not target.agent_token and source.agent_token:
+        # 합쳐진 쪽 PC 에서 돌던 compose.yml 이 그대로 맞게 토큰도 옮긴다(유일 제약 — 원래 쪽을 먼저 비운다).
+        target.agent_token, source.agent_token = source.agent_token, None
+        source.save(update_fields=["agent_token"])
     if not target.display_name and source.display_name:
         target.display_name = source.display_name
     target.is_instructor = target.is_instructor or source.is_instructor
-    target.save(update_fields=["display_name", "is_instructor"])
+    target.save(update_fields=["display_name", "is_instructor", "agent_token"])
     source.is_active = False
     source.save(update_fields=["is_active"])
 
