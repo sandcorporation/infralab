@@ -10,6 +10,7 @@ import {
   type ToolTranscript,
 } from "../api";
 import { GroupedCheckResultList } from "./CheckResultList";
+import { PracticeFeedbackPanel } from "./PracticeFeedbackPanel";
 
 type Phase =
   | { kind: "idle" }
@@ -47,6 +48,7 @@ export function GradePanel({
   ready,
   lockedReason,
   onSubmitted,
+  practice = false,
 }: {
   cohortId: number;
   scenario: ScenarioDetail;
@@ -56,6 +58,8 @@ export function GradePanel({
   /** 막혀 있는 이유 — 채점 버튼 옆에 보인다. */
   lockedReason?: string;
   onSubmitted?: (s: Submission) => void;
+  /** 연습 묶음인가 — 그러면 최근 제출의 결과 아래에 과정 피드백(#134)을 보인다. */
+  practice?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [shown, setShown] = useState<Shown | null>(null);
@@ -223,6 +227,7 @@ export function GradePanel({
           );
         })
       )}
+      {practice && latest && <PracticeFeedbackPanel submission={latest} />}
     </>
   );
 }

@@ -7,22 +7,22 @@ import { describe, expect, it } from "vitest";
 import { feedbackAction } from "../practice";
 
 describe("연습 피드백 버튼", () => {
-  it.skip("대화 기록이 있고 횟수가 남았으면 「피드백 받기」다", () => { // #134
+  it("대화 기록이 있고 횟수가 남았으면 「피드백 받기」다", () => {
     expect(feedbackAction({ has_transcript: true, has_feedback: false }, 5)).toBe("request");
     expect(feedbackAction({ has_transcript: true, has_feedback: false }, 1)).toBe("request");
   });
 
-  it.skip("이미 받은 피드백은 남은 횟수와 상관없이 보여 준다", () => { // #134
+  it("이미 받은 피드백은 남은 횟수와 상관없이 보여 준다", () => {
     expect(feedbackAction({ has_transcript: true, has_feedback: true }, 3)).toBe("show");
     expect(feedbackAction({ has_transcript: true, has_feedback: true }, 0)).toBe("show");
   });
 
-  it.skip("대화 기록이 없으면 버튼 대신 다시 제출 안내다", () => { // #134
+  it("대화 기록이 없으면 버튼 대신 다시 제출 안내다", () => {
     expect(feedbackAction({ has_transcript: false, has_feedback: false }, 5)).toBe("no_transcript");
     expect(feedbackAction({ has_transcript: false, has_feedback: false }, 0)).toBe("no_transcript");
   });
 
-  it.skip("오늘 횟수를 다 썼으면 한도 소진 안내다", () => { // #134
+  it("오늘 횟수를 다 썼으면 한도 소진 안내다", () => {
     expect(feedbackAction({ has_transcript: true, has_feedback: false }, 0)).toBe("limit_reached");
     expect(feedbackAction({ has_transcript: true, has_feedback: false }, -1)).toBe("limit_reached");
   });

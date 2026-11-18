@@ -223,6 +223,21 @@ export type PracticeStatus = { cohort_id: number; name: string; joined: boolean 
 export const getPractice = () => api<PracticeStatus>("/api/practice");
 export const joinPractice = () =>
   api<{ cohort_id: number; name: string; created: boolean }>("/api/practice/join", { method: "POST" });
+export type PracticeFeedbackItem = { key: string; label: string; score: number; evidence: string[] };
+export type PracticeFeedback = { submission_id: number; grader: string; graded_at: string; items: PracticeFeedbackItem[] };
+export type FeedbackQuota = { limit: number; used: number; remaining: number };
+export const getFeedbackQuota = () => api<FeedbackQuota>("/api/practice/feedback-quota");
+/** 이 연습 제출의 피드백. 아직 없으면 null. */
+export const getPracticeFeedback = async (submissionId: number): Promise<PracticeFeedback | null> => {
+  try {
+    return await api<PracticeFeedback>(`/api/practice/submissions/${submissionId}/feedback`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+};
+export const requestPracticeFeedback = (submissionId: number) =>
+  api<PracticeFeedback>(`/api/practice/submissions/${submissionId}/feedback`, { method: "POST" });
 export const getMyCohort = (id: number) => api<MyCohortDetail>(`/api/cohorts/${id}`);
 export const regenerateAgentToken = (id: number) =>
   api<MyCohortDetail>(`/api/cohorts/${id}/agent-token/regenerate`, { method: "POST" });

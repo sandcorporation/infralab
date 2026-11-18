@@ -5,16 +5,23 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from django.http import HttpRequest
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from accounts.auth import jwt_auth
-from cohorts.models import Membership
+from cohorts.models import Cohort, Membership
 from cohorts.schemas import JoinOut
+from exams import grading
 from exams.api import HIDDEN_USER_PREFIX
+from submissions.models import Submission
 
+from .models import PracticeFeedback
 from .services import practice_cohort
 
 practice_router = Router(tags=["practice"], auth=jwt_auth)
@@ -58,19 +65,135 @@ def join_practice(request: HttpRequest):
 # ---------- 피드백 ----------
 
 
-@practice_router.post("/practice/submissions/{submission_id}/feedback")
+#: 사용자당 하루 피드백 수(Asia/Seoul 날짜 기준). 실패한 채점은 세지 않는다.
+FEEDBACK_DAILY_LIMIT = 5
+FEEDBACK_LIMIT_MESSAGE = "오늘 피드백 5회를 다 썼습니다 — 내일 다시"
+SEOUL = ZoneInfo("Asia/Seoul")
+
+
+class FeedbackItemOut(Schema):
+    key: str
+    label: str
+    score: int
+    evidence: list[str]
+
+
+class FeedbackOut(Schema):
+    submission_id: int
+    grader: str
+    graded_at: datetime
+    items: list[FeedbackItemOut]
+
+
+class FeedbackQuotaOut(Schema):
+    limit: int
+    used: int
+    remaining: int
+
+
+def _today() -> date:
+    """「오늘」(Asia/Seoul). 요청 때마다 `timezone.now()` 를 부른다."""
+
+    return timezone.localtime(timezone.now(), SEOUL).date()
+
+
+def _used(user, day: date) -> int:
+    return PracticeFeedback.objects.filter(submission__membership__user=user, day=day).count()
+
+
+def _my_practice_submission(request: HttpRequest, submission_id: int) -> Submission:
+    """내 연습 묶음 제출. 남의 것·연습이 아닌 묶음의 것은 404."""
+
+    sub = (
+        Submission.objects.filter(
+            id=submission_id,
+            membership__user=request.auth,
+            membership__cohort__kind=Cohort.Kind.PRACTICE,
+        )
+        .only("id", "ai_transcript")
+        .first()
+    )
+    if sub is None:
+        raise HttpError(404, "연습 제출을 찾을 수 없습니다.")
+    return sub
+
+
+def _feedback_out(fb: PracticeFeedback) -> FeedbackOut:
+    return FeedbackOut(
+        submission_id=fb.submission_id,
+        grader=fb.grader,
+        graded_at=fb.graded_at,
+        items=[
+            FeedbackItemOut(
+                key=item["key"],
+                label=grading.RUBRIC_LABELS.get(item["key"], item["key"]),
+                score=item["score"],
+                evidence=list(item.get("evidence") or []),
+            )
+            for item in fb.items
+        ],
+    )
+
+
+@practice_router.post("/practice/submissions/{submission_id}/feedback", response=FeedbackOut)
 def request_feedback(request: HttpRequest, submission_id: int):
-    raise NotImplementedError("#134")
+    """「피드백 받기」 — 제출의 AI 대화 기록을 루브릭으로 채점해 저장한다. 이미 있으면 그것(한도를 쓰지 않음).
+
+    「남은 횟수 확인 → 채점 → 저장」 을 사용자 행 잠금 안에서 하므로 동시에 눌러도 하루 한도와 제출당 하나가 지켜진다.
+    """
+
+    sub = _my_practice_submission(request, submission_id)
+    existing = PracticeFeedback.objects.filter(submission=sub).first()
+    if existing is not None:
+        return _feedback_out(existing)
+    turns = grading.turns_from_transcript(sub.ai_transcript)
+    if not turns:
+        raise HttpError(422, "AI 대화 기록이 없는 제출입니다. AI 대화 함께 제출을 켜고 다시 제출하세요.")
+
+    user_model = type(request.auth)
+    with transaction.atomic():
+        user_model.objects.select_for_update().get(pk=request.auth.pk)
+        existing = PracticeFeedback.objects.filter(submission=sub).first()
+        if existing is not None:
+            return _feedback_out(existing)
+        day = _today()
+        if _used(request.auth, day) >= FEEDBACK_DAILY_LIMIT:
+            raise HttpError(429, FEEDBACK_LIMIT_MESSAGE)
+        grader = grading.get_grader()
+        try:
+            result = {item.key: item for item in grader.grade_turns(turns)}
+        except Exception as e:  # 채점기 바깥 서비스 실패 — 행을 만들지 않으니 세지 않는다
+            raise HttpError(502, f"채점에 실패했습니다: {e}") from e
+        items = []
+        for key in grading.RUBRIC_KEYS:
+            item = result.get(key) or grading.RubricItem(key=key, score=0)
+            score = max(0, min(grading.MAX_SCORE, int(item.score)))
+            items.append({"key": key, "score": score, "evidence": list(item.evidence)})
+        fb = PracticeFeedback.objects.create(
+            submission=sub,
+            grader=getattr(grader, "name", type(grader).__name__),
+            graded_at=timezone.now(),
+            day=day,
+            items=items,
+        )
+    # 저장한 값 그대로 돌려준다 — 뒤의 GET 과 같은 모양·같은 시각.
+    fb.refresh_from_db()
+    return _feedback_out(fb)
 
 
-@practice_router.get("/practice/submissions/{submission_id}/feedback")
+@practice_router.get("/practice/submissions/{submission_id}/feedback", response=FeedbackOut)
 def get_feedback(request: HttpRequest, submission_id: int):
-    raise NotImplementedError("#134")
+    sub = _my_practice_submission(request, submission_id)
+    fb = PracticeFeedback.objects.filter(submission=sub).first()
+    if fb is None:
+        raise HttpError(404, "아직 피드백이 없습니다.")
+    return _feedback_out(fb)
 
 
-@practice_router.get("/practice/feedback-quota")
+@practice_router.get("/practice/feedback-quota", response=FeedbackQuotaOut)
 def feedback_quota(request: HttpRequest):
-    raise NotImplementedError("#134")
+    used = _used(request.auth, _today())
+    return FeedbackQuotaOut(limit=FEEDBACK_DAILY_LIMIT, used=used, remaining=max(0, FEEDBACK_DAILY_LIMIT - used))
 
 
 # ---------- 내 기록 ----------
