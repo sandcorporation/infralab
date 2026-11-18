@@ -83,6 +83,16 @@ export function makeInstructor(uid: string): void {
   compose(["exec", "-T", "backend", "python", "manage.py", "set_instructor", `sandcorp:${uid}`]);
 }
 
+/** 조직을 만들고 첫 담당자(owner)를 넣는다(`create_org`). 사용자는 먼저 로그인으로 만들어져 있어야 한다. */
+export function createOrg(name: string, ownerUid: string): void {
+  compose(["exec", "-T", "backend", "python", "manage.py", "create_org", name, "--owner", `sandcorp:${ownerUid}`]);
+}
+
+/** 조직에 담당자를 넣는다(`add_org_member`, 기본 owner). 사용자는 먼저 로그인으로 만들어져 있어야 한다. */
+export function addOrgMember(org: string, uid: string, role: "owner" | "staff" = "owner"): void {
+  compose(["exec", "-T", "backend", "python", "manage.py", "add_org_member", org, `sandcorp:${uid}`, "--role", role]);
+}
+
 /** 시계를 당긴다(e2e 전용 관리 명령, #194) — 그 회차의 응시 중인 응시가 마감이 지난 꼴이 된다. 1분을 기다리지 않는다. */
 export function expireExam(cohortId: number): void {
   compose(["exec", "-T", "backend", "python", "manage.py", "e2e_expire_exam", String(cohortId)]);
