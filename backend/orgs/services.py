@@ -44,7 +44,7 @@ def find_user(username: str):
 
     user = get_user_model().objects.filter(username=username).first()
     if user is None:
-        raise CommandError(f"사용자가 없습니다: {username} — 먼저 소셜 로그인으로 들어와야 합니다.")
+        raise CommandError(f"사용자가 없습니다: {username} — 먼저 로그인으로 들어와야 합니다.")
     return user
 
 

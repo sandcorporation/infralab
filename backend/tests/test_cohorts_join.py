@@ -96,7 +96,7 @@ def test_participants_show_name_and_join_time_and_are_instructor_only(api):
     assert res.status_code == 200
     people = res.json()
     assert [p["display_name"] for p in people] == ["철수", "영희"]
-    assert all(p["joined_at"] and p["username"].startswith("kakao:") for p in people)
+    assert all(p["joined_at"] and p["username"].startswith("sandcorp:") for p in people)
 
     assert api.get(f"/api/instructor/cohorts/{cohort['id']}/participants", a).status_code == 403
 

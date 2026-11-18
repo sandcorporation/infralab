@@ -114,7 +114,7 @@ def test_owner_lists_changes_role_and_removes_members(api):
     org_id = _org_id(api, owner)
 
     members = api.get(f"{BASE}/{org_id}/members", owner).json()
-    assert [(m["username"], m["role"]) for m in members] == [("kakao:owner", "owner"), ("kakao:staff", "staff")]
+    assert [(m["username"], m["role"]) for m in members] == [("sandcorp:owner", "owner"), ("sandcorp:staff", "staff")]
     staff_id = members[1]["id"]
 
     res = api.patch(f"{BASE}/{org_id}/members/{staff_id}", {"role": "owner"}, owner)

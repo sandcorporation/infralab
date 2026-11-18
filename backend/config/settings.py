@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import os
-from datetime import timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,6 +41,7 @@ if not DEBUG:
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
+    "django.contrib.sessions",
     "accounts",
     "orgs",
     "scenarios",
@@ -62,6 +62,7 @@ SCENARIOS_DIR = _env("SCENARIOS_DIR", str(BASE_DIR.parent / "scenarios"))
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
 
@@ -91,16 +92,21 @@ USE_I18N = True
 USE_TZ = True
 
 # ---------- 인증 ----------
-# 액세스 토큰은 짧게, 리프레시 토큰은 회전시킨다. 서명 키는 SECRET_KEY 와 분리해 둘 수 있다.
-JWT_SIGNING_KEY = _env("JWT_SIGNING_KEY") or SECRET_KEY
-ACCESS_TOKEN_TTL = timedelta(minutes=int(_env("ACCESS_TOKEN_TTL_MINUTES", "30")))
-REFRESH_TOKEN_TTL = timedelta(days=int(_env("REFRESH_TOKEN_TTL_DAYS", "14")))
+# 로그인은 sandcorp-auth(기밀 클라이언트·PKCE) → Django 세션 쿠키. 규칙은 accounts/sandcorp_auth.py.
+# 공개 원점: DASHBOARD_ORIGIN 의 첫 값. redirect_uri 는 {원점}/api/auth/callback, 리소스(aud)는 {원점}/api.
+DASHBOARD_ORIGINS = [o.strip().rstrip("/") for o in DASHBOARD_ORIGIN.split(",") if o.strip()]
+PUBLIC_ORIGIN = DASHBOARD_ORIGINS[0] if DASHBOARD_ORIGINS else ""
+INFRALAB_AUTH_URL = _env("INFRALAB_AUTH_URL", "https://auth.sandcorp.co.kr")
+INFRALAB_AUTH_CLIENT_ID = _env("INFRALAB_AUTH_CLIENT_ID")
+INFRALAB_AUTH_CLIENT_SECRET = _env("INFRALAB_AUTH_CLIENT_SECRET")
+INFRALAB_AUTH_WEBHOOK_SECRET = _env("INFRALAB_AUTH_WEBHOOK_SECRET")
+# openid·profile 이 일반 사용자에게 막힌 클라이언트면 "infralab" 만 줘도 된다 — ID 토큰 없이 sub 로만 로그인한다.
+INFRALAB_AUTH_SCOPE = _env("INFRALAB_AUTH_SCOPE", "openid profile infralab")
+# 개발용 로그인(POST /api/auth/dev-login) — auth 없이 아무 uid 로나 들어온다. DEBUG 에서만 열린다.
+DEV_LOGIN_ENABLED = DEBUG
 
-# 소셜 어댑터 바인딩. DEBUG 에서는 fake 가 기본 — 카카오 키 없이 로컬·시험이 돈다. DEBUG 가
-# 꺼진 곳에서 fake 는 누구나 임의 uid 로(강사 포함) 로그인하는 구멍이라 기본도 real 이고 fake 를
-# 명시해도 부팅을 막는다.
-SOCIAL_AUTH_MODE = _env("SOCIAL_AUTH_MODE", "fake" if DEBUG else "real")
-if not DEBUG and SOCIAL_AUTH_MODE == "fake":
-    from django.core.exceptions import ImproperlyConfigured
-
-    raise ImproperlyConfigured("DJANGO_DEBUG=false 인데 SOCIAL_AUTH_MODE 가 fake 다 — 인증 우회가 된다.")
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
+SESSION_COOKIE_AGE = 12 * 60 * 60
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = not DEBUG

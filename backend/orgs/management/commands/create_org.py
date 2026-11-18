@@ -1,6 +1,6 @@
 """조직을 만들고 첫 담당자(owner)를 넣는다. 화면이 없으므로 코드에 경로가 있어야 한다.
 
-사용자는 먼저 소셜 로그인으로 들어와 있어야 한다(사용자 이름은 `<provider>:<uid>`, 예 `kakao:12345`).
+사용자는 먼저 로그인으로 들어와 있어야 한다(사용자 이름은 auth `sub` 로 만든 `sandcorp:<sub>`).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("name", help="조직 이름(유일)")
-        parser.add_argument("--owner", required=True, help="owner 가 될 사용자 이름, 예 kakao:12345")
+        parser.add_argument("--owner", required=True, help="owner 가 될 사용자 이름, 예 sandcorp:m_01JB…")
 
     def handle(self, *args, **options) -> None:
         name = options["name"].strip()

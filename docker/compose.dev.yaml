@@ -45,9 +45,11 @@ services:
       DJANGO_DEBUG: "true"
       DJANGO_SECRET_KEY: dev-only-insecure-key-do-not-use-in-deploy
       DJANGO_ALLOWED_HOSTS: "*"
-      # 카카오 REST 키를 주면(web 과 같은 변수) 실제 카카오 어댑터로, 없으면 Fake 로. 둘이 따로 놀면 카카오
-      # 토큰이 Fake 어댑터에 들어가 항상 401 이다.
-      SOCIAL_AUTH_MODE: ${VITE_KAKAO_REST_KEY:+real}
+      # 로그인: DEBUG 라 개발용 로그인(POST /api/auth/dev-login)이 열린다. sandcorp-auth 로 직접 확인하려면
+      # 개발 클라이언트 값을 준다(redirect_uri 는 DASHBOARD_ORIGIN 첫 값 + /api/auth/callback).
+      INFRALAB_AUTH_URL: ${INFRALAB_AUTH_URL:-}
+      INFRALAB_AUTH_CLIENT_ID: ${INFRALAB_AUTH_CLIENT_ID:-}
+      INFRALAB_AUTH_CLIENT_SECRET: ${INFRALAB_AUTH_CLIENT_SECRET:-}
       SCENARIOS_DIR: /scenarios
       # 학생 compose.yml 에 들어가는 값. 이미지는 로컬 빌드 이름(docker build -t infralab/agent:dev agent/ 등).
       # compose 의 web 과, 호스트에서 `npm run dev` 로 직접 띄운 Vite(5173) 둘 다 허용한다.
@@ -74,8 +76,6 @@ services:
     environment:
       # Vite 개발 서버가 /api 를 이 주소로 넘긴다 — 브라우저는 web 오리진 하나만 본다.
       INFRALAB_API_PROXY: http://backend:8000
-      # 카카오 REST API 키. 비우면 화면은 Fake 로그인만 보인다.
-      VITE_KAKAO_REST_KEY: ${VITE_KAKAO_REST_KEY:-}
     ports:
       - "${INFRALAB_WEB_PORT:-53040}:5173"
     volumes:

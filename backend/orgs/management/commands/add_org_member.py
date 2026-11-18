@@ -16,7 +16,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("org", help="조직 id 또는 이름")
-        parser.add_argument("username", help="사용자 이름, 예 kakao:12345")
+        parser.add_argument("username", help="사용자 이름, 예 sandcorp:m_01JB…")
         parser.add_argument("--role", choices=[r.value for r in OrgMember.Role], default=OrgMember.Role.OWNER)
 
     def handle(self, *args, **options) -> None:

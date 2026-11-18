@@ -5,8 +5,8 @@
 건드리지 않는다. 옛 `is_instructor` 플래그도 같이 맞춰 두지만 권한 판정에는 쓰이지 않는다.
 새 조직은 `create_org`, 담당자 추가는 `add_org_member`.
 
-사용자는 먼저 소셜 로그인으로 들어와 있어야 한다(사용자 이름은 `<provider>:<uid>`, 예
-`kakao:12345`).
+사용자는 먼저 로그인으로 들어와 있어야 한다(사용자 이름은 auth `sub` 로 만든
+`sandcorp:<sub>`).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ class Command(BaseCommand):
     help = f"사용자를 「{DEFAULT_ORG_NAME}」의 owner 로 넣는다(--off 면 뺀다)."
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument("username", help="소셜 로그인으로 만들어진 사용자 이름, 예 kakao:12345")
+        parser.add_argument("username", help="로그인으로 만들어진 사용자 이름, 예 sandcorp:m_01JB…")
         parser.add_argument("--off", action="store_true", help=f"「{DEFAULT_ORG_NAME}」에서 뺀다")
 
     def handle(self, *args, **options) -> None:
@@ -30,7 +30,7 @@ class Command(BaseCommand):
         user = User.objects.filter(username=options["username"]).first()
         if user is None:
             raise CommandError(
-                f"사용자가 없습니다: {options['username']} — 먼저 소셜 로그인으로 들어와야 합니다."
+                f"사용자가 없습니다: {options['username']} — 먼저 로그인으로 들어와야 합니다."
             )
         with transaction.atomic():
             if options["off"]:
