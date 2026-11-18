@@ -27,7 +27,7 @@
 
 ## 읽는 방법
 
-1. `~/.infralab/<scenario_id>.prepared` 의 UTC 시각(환경 준비 때 에이전트가 쓴다)을 읽는다. 없으면 404 「환경 준비 먼저」.
+1. `/work/.infralab/<scenario_id>.prepared` 의 UTC 시각(환경 준비 때 에이전트가 쓴다)을 읽는다. 없으면 404 「환경 준비 먼저」.
 2. 표시보다 나중에 바뀐 세션 파일만 `find … -newer <표시>` 로 찾는다(`/root/.claude/projects` 의 `*.jsonl`, `/root/.codex/sessions` 의 `rollout-*.jsonl`).
 3. 각 파일을 `docker exec … cat` 으로 읽어 표시 시각 이후의 사용자·어시스턴트 텍스트만 시간순으로 모은다. 마지막 줄이 쓰다 만 것이면 건너뛰고, 그 밖의 JSON 아닌 줄은 그 도구의 `error` 다.
 4. 두 도구 합계 200KB(발화 하나는 32KB)를 넘으면 오래된 것부터 버리고 `truncated`.

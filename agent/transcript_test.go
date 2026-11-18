@@ -25,9 +25,9 @@ type transcriptResponse struct {
 }
 
 const (
-	markCat     = "docker exec infralab-workstation cat /root/.infralab/web-down.prepared"
-	claudeFind  = "docker exec infralab-workstation find /root/.claude/projects -name *.jsonl -type f -newer /root/.infralab/web-down.prepared"
-	codexFind   = "docker exec infralab-workstation find /root/.codex/sessions -name rollout-*.jsonl -type f -newer /root/.infralab/web-down.prepared"
+	markCat     = "docker exec infralab-workstation cat /work/.infralab/web-down.prepared"
+	claudeFind  = "docker exec infralab-workstation find /root/.claude/projects -name *.jsonl -type f -newer /work/.infralab/web-down.prepared"
+	codexFind   = "docker exec infralab-workstation find /root/.codex/sessions -name rollout-*.jsonl -type f -newer /work/.infralab/web-down.prepared"
 	claudeFile1 = "/root/.claude/projects/-work/aaa.jsonl"
 	codexFile1  = "/root/.codex/sessions/2026/10/23/rollout-2026-10-23T07-10-00-xyz.jsonl"
 )
@@ -71,7 +71,7 @@ func transcriptFake() *fakeRunner {
 
 func TestAITranscript_MissingMarkIs404PrepareFirst(t *testing.T) {
 	fake := withRunningWorkstation(newFakeRunner())
-	fake.respondFull(markCat, Result{Stderr: "cat: can't open '/root/.infralab/web-down.prepared': No such file or directory", ExitCode: 1})
+	fake.respondFull(markCat, Result{Stderr: "cat: can't open '/work/.infralab/web-down.prepared': No such file or directory", ExitCode: 1})
 	srv := newTestServer(t, fake)
 	res := do(t, srv, "GET", "/api/ai-transcript?scenario_id=web-down", "", authed(nil))
 	if res.StatusCode != http.StatusNotFound {

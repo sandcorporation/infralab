@@ -15,7 +15,7 @@ type setupResponse struct {
 
 const (
 	rulesWritePrefix = "docker exec -i infralab-workstation sh -c mkdir -p /work && cat > /work/"
-	markWritePrefix  = "docker exec -i infralab-workstation sh -c mkdir -p /root/.infralab && cat > /root/.infralab/"
+	markWritePrefix  = "docker exec -i infralab-workstation sh -c mkdir -p /work/.infralab && cat > /work/.infralab/"
 )
 
 func setupFake() *fakeRunner {
@@ -103,7 +103,7 @@ func TestSetup_RunsResetRulesMarkAndSetupInOrder(t *testing.T) {
 	if len(claude) != 1 || len(agents) != 1 || claude[0].Stdin != "# 규칙\n80 포트 금지\n" || agents[0].Stdin != claude[0].Stdin {
 		t.Errorf("rules writes: claude=%+v agents=%+v", claude, agents)
 	}
-	// 준비 표시: 홈 볼륨의 ~/.infralab/<scenario_id>.prepared 에 UTC 시각.
+	// 준비 표시: 준비한 /work 의 .infralab/<scenario_id>.prepared 에 UTC 시각 — 홈 볼륨은 기수 사이에 이어 쓰인다(#124).
 	marks := fake.callsWithPrefix(markWritePrefix + "web-down.prepared")
 	if len(marks) != 1 {
 		t.Fatalf("mark writes = %+v", marks)
@@ -187,7 +187,7 @@ func TestSetup_FailingSetupIsNotOkAndKeepsItsOutput(t *testing.T) {
 	if n := len(fake.callsWithPrefix(markWritePrefix)); n != 0 {
 		t.Errorf("mark was written after a failed setup (%d writes)", n)
 	}
-	rm := indexOf(fake, "docker exec infralab-workstation rm -f /root/.infralab/web-down.prepared")
+	rm := indexOf(fake, "docker exec infralab-workstation rm -f /work/.infralab/web-down.prepared")
 	if rm < 0 || rm > indexOf(fake, "docker run -d --name infralab-floci") {
 		t.Errorf("old mark was not removed before the reset (rm at %d)", rm)
 	}
@@ -306,4 +306,12 @@ func TestSetup_IsRefusedWhileEnvironmentIsChanging(t *testing.T) {
 	}
 	close(release)
 	<-first
+}
+
+// 준비 표시는 준비한 /work 안에 있어야 한다 — 홈 볼륨(/root)은 기수마다 다른 compose 폴더가 이어 쓰므로,
+// 거기 두면 다른 기수 폴더의 빈 /work 에서도 「준비됨」이 된다(#124).
+func TestPrepareMark_LivesInTheWorkDirItMarks(t *testing.T) {
+	if got := prepareMarkPath("python-api-feature"); !strings.HasPrefix(got, rulesDirInWorkst+"/") {
+		t.Fatalf("prepare mark %q is outside %s", got, rulesDirInWorkst)
+	}
 }
