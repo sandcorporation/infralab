@@ -19,7 +19,7 @@
 #                                        `- [ ]` line (none at all, all checked, or closed). Exit 1 otherwise,
 #                                        and when the check issues could not be read; the first time it
 #                                        waits for a check issue it comments `<!-- factory-human-check <spec> -->`
-#                                        on it (once per check issue), which bridge.sh mails to the boss.
+#                                        on it (again, with only the new items, when unchecked items of PRs the earlier markers did not list are stacked later; #170), which bridge.sh mails to the boss.
 #
 # The items of `사람 확인`: from a heading line (`#`…) containing 사람 확인 to the next heading, every list
 # item (`-`, `*`, `+`, `1.`, `1)`, an existing `[ ]`/`[x]` dropped) with its indented continuation lines
@@ -99,7 +99,7 @@ stack() {
 }
 
 gate() {
-  local spec=$1 issues waiting n left marker firsts
+  local spec=$1 issues waiting n left marker prs told fresh new text p
   issues=$(check_issues "$spec") || { echo "could not read the check issues of spec #$spec"; return 1; }
   waiting=$(printf '%s' "$issues" | j -r '.[] | "\(.number) \([(.body // "") | split("\n")[]
     | select(test("^\\s*[-*+] \\[ \\]"))] | length)" | select(endswith(" 0") | not)')
@@ -107,11 +107,33 @@ gate() {
   marker="<!-- factory-human-check $spec -->"
   while read -r n left; do
     echo "check issue #$n of spec #$spec has $left unchecked item(s)"
-    firsts=$(gh api "repos/$REPO/issues/$n/comments?per_page=100" --paginate --jq '.[].body | split("\n")[0]') \
+    # PRs of the unchecked items, and the PRs the markers already left on this issue told about
+    # (second line `<!-- prs 41 42 -->`; an older marker without it told about none).
+    prs=$(printf '%s' "$issues" | j -r --argjson n "$n" '.[] | select(.number == $n) | (.body // "") | split("\n")[]
+      | select(test("^\\s*[-*+] \\[ \\]")) | (capture("\\(PR #(?<p>[0-9]+)\\)\\s*$") | .p) // empty' | sort -un)
+    told=$(gh api "repos/$REPO/issues/$n/comments?per_page=100" --paginate --jq '.[].body
+      | select(split("\n")[0] == "'"$marker"'") | "M " + ((split("\n")[1] // "") | sub("^<!-- prs ?"; "") | sub(" ?-->$"; ""))') \
       || { echo "::warning::human-check: could not read the comments of #$n"; continue; }
-    printf '%s\n' "$firsts" | tr -d '\r' | grep -qxF -- "$marker" && continue
+    told=$(printf '%s\n' "$told" | tr -d '\r')
+    fresh=
+    for p in $prs; do
+      printf '%s\n' "$told" | grep -qE "^M (.* )?$p( .*)?$" || fresh="$fresh $p"
+    done
+    # nothing new since the last marker (a marker was left and no unchecked PR is missing from it)
+    if [ -n "$told" ] && [ -z "$fresh" ]; then continue; fi
+    if [ -z "$told" ]; then
+      text="spec #$spec 의 티켓이 모두 병합됐다. 이 이슈의 사람 확인 $left 건이 미체크라 공장이 spec #$spec 을 닫지 않고 기다린다. 확인한 항목을 체크하고(문제는 새 이슈로) 모두 체크하거나 이 이슈를 닫으면 다음 dispatch 때 spec 이 닫힌다."
+      fresh=$(printf ' %s' $prs)
+    else
+      new=$(printf '%s' "$issues" | j -r --argjson n "$n" --arg f "$fresh " '.[] | select(.number == $n) | (.body // "") | split("\n")[]
+        | select(test("^\\s*[-*+] \\[ \\]")) | select((capture("\\(PR #(?<p>[0-9]+)\\)\\s*$").p) as $p | $f | contains(" " + $p + " "))')
+      text="앞서 알린 뒤 사람 확인 항목이 새로 쌓였다. 공장은 여전히 spec #$spec 을 닫지 않고 기다린다. 새 미체크 항목:
+
+$new"
+    fi
     gh api "repos/$REPO/issues/$n/comments" -f "body=$marker
-spec #$spec 의 티켓이 모두 병합됐다. 이 이슈의 사람 확인 $left 건이 미체크라 공장이 spec #$spec 을 닫지 않고 기다린다. 확인한 항목을 체크하고(문제는 새 이슈로) 모두 체크하거나 이 이슈를 닫으면 다음 dispatch 때 spec 이 닫힌다.${RUN_URL:+ ($RUN_URL)}" > /dev/null \
+<!-- prs${fresh} -->
+$text${RUN_URL:+ ($RUN_URL)}" > /dev/null \
       || echo "::warning::human-check: could not comment on #$n"
   done <<< "$waiting"
   return 1

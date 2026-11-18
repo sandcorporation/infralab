@@ -232,6 +232,27 @@ eq "still open" open "$(spec_state)"
 eq "marker not again" 1 "$(hc_marks)"
 eq "still no next spec" "" "$(decomposed)"
 
+setup "items stacked after the marker are told again, once; no new item, no new marker (#170)"
+done_spec; ledger; spec 60 ""
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [ ] 환경 준비 표시 (PR #41)"
+FACTORY_SPEC_QUEUE="60" run
+eq "first marker" 1 "$(hc_marks)"
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [ ] 환경 준비 표시 (PR #41)
+- [ ] 종료 화면 (PR #43)"
+FACTORY_SPEC_QUEUE="60" run
+eq "second marker for the new item" 2 "$(hc_marks)"
+has "new item told" "종료 화면 (PR #43)" "$(jq -r '.[1].body' "$FAKE_GH/comments-850.json")"
+eq "old item not told again" 0 "$(jq -r '.[1].body' "$FAKE_GH/comments-850.json" | grep -c '환경 준비 표시')"
+FACTORY_SPEC_QUEUE="60" run
+eq "no third marker" 2 "$(hc_marks)"
+check open "- [x] 붙여넣기 신호 (PR #40)
+- [x] 환경 준비 표시 (PR #41)
+- [ ] 종료 화면 (PR #43)"
+FACTORY_SPEC_QUEUE="60" run
+eq "an item checked is not new" 2 "$(hc_marks)"
+
 setup "every item checked: the spec closes and the next one starts"
 done_spec; ledger; spec 60 ""
 check open "- [x] 붙여넣기 신호 (PR #40)
