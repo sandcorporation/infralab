@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { prepareEnvironment, type Step } from "../agent";
 import { getPrepare, type Prepare } from "../api";
 import type { AgentProbe } from "./AgentStatusBadge";
@@ -25,6 +26,8 @@ export function PrepareButton({
   token,
   prepared,
   onPrepared,
+  barSlot,
+  onStart,
 }: {
   cohortId: number;
   scenarioId: string;
@@ -33,6 +36,10 @@ export function PrepareButton({
   token: string;
   prepared: boolean | null;
   onPrepared: (prepared: boolean | null) => void;
+  /** 작업 공간의 도구줄 자리 — 주면 버튼 줄은 거기에, 진행 단계·결과는 제자리에 그린다. null 이면 자리가 아직 없다. */
+  barSlot?: HTMLElement | null;
+  /** 준비를 시작한 순간(진행 단계를 보이는 탭으로 옮길 때). */
+  onStart?: () => void;
 }) {
   const [plan, setPlan] = useState<Prepare | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -67,6 +74,7 @@ export function PrepareButton({
   }, [running]);
 
   async function run() {
+    onStart?.();
     setConfirm(false);
     setRunning(true);
     setError(null);
@@ -89,26 +97,29 @@ export function PrepareButton({
   if (!plan) return error ? <p className="error">{error}</p> : null;
   const label = plan.setup ? "환경 준비" : "시작";
   const idle = connected && !running;
+  const buttons = (
+    <div className="row">
+      {confirm ? (
+        <>
+          <span className="muted">지금 환경이 지워집니다.</span>
+          <button className="danger" disabled={!idle} onClick={run}>
+            {label} 확정
+          </button>
+          <button className="link" onClick={() => setConfirm(false)}>
+            취소
+          </button>
+        </>
+      ) : (
+        <button disabled={!idle} onClick={() => setConfirm(true)}>
+          {running ? `${label} 중… ${elapsed}s` : prepared ? `${label} 다시` : label}
+        </button>
+      )}
+      {prepared && !running && <span className="sc-badge sc-badge--success">준비됨</span>}
+    </div>
+  );
   return (
     <div className="env-actions prepare">
-      <div className="row">
-        {confirm ? (
-          <>
-            <span className="muted">지금 환경이 지워집니다.</span>
-            <button className="danger" disabled={!idle} onClick={run}>
-              {label} 확정
-            </button>
-            <button className="link" onClick={() => setConfirm(false)}>
-              취소
-            </button>
-          </>
-        ) : (
-          <button disabled={!idle} onClick={() => setConfirm(true)}>
-            {running ? `${label} 중… ${elapsed}s` : prepared ? `${label} 다시` : label}
-          </button>
-        )}
-        {prepared && !running && <span className="sc-badge sc-badge--success">준비됨</span>}
-      </div>
+      {barSlot === undefined ? buttons : barSlot ? createPortal(buttons, barSlot) : null}
       {running && (
         <ol className="muted planned">
           {plannedSteps(plan).map((n) => (

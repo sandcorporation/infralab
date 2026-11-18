@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AgentTimeout, AgentUnreachable, fetchTranscript, runChecks, type CheckResult } from "../agent";
 import {
   ApiError,
@@ -49,6 +50,8 @@ export function GradePanel({
   lockedReason,
   onSubmitted,
   practice = false,
+  barSlot,
+  onGrade,
 }: {
   cohortId: number;
   scenario: ScenarioDetail;
@@ -58,6 +61,10 @@ export function GradePanel({
   /** 막혀 있는 이유 — 채점 버튼 옆에 보인다. */
   lockedReason?: string;
   onSubmitted?: (s: Submission) => void;
+  /** 작업 공간의 도구줄 자리 — 주면 채점 버튼·점수는 거기에 그린다. null 이면 자리가 아직 없다. */
+  barSlot?: HTMLElement | null;
+  /** 채점 버튼을 누른 순간(결과를 보이는 탭으로 옮길 때). */
+  onGrade?: () => void;
   /** 연습 묶음인가 — 그러면 최근 제출의 결과 아래에 과정 피드백(#134)을 보인다. */
   practice?: boolean;
 }) {
@@ -149,25 +156,40 @@ export function GradePanel({
   const constraints = new Map(scenario.checks.map((c) => [c.id, !!c.constraint]));
   const hasConstraints = scenario.checks.some((c) => c.constraint);
 
+  const head = (
+    <>
+      <button
+        onClick={() => {
+          onGrade?.();
+          void grade();
+        }}
+        disabled={!ready || busy}
+      >
+        {phase.kind === "running" ? "채점 중…" : "채점"}
+      </button>
+      {lockedReason && <span className="muted">{lockedReason}</span>}
+      {shown && (
+        <span className={shown.passed === shown.total ? "score done" : "score"}>
+          {shown.passed}/{shown.total}
+        </span>
+      )}
+      {!shown && latest && (
+        <span className="muted">
+          최근 {latest.passed}/{latest.total} · {formatTime(latest.submitted_at)}
+        </span>
+      )}
+    </>
+  );
   return (
     <>
-      <div className="row">
-        <h2>검사 {scenario.checks.length}</h2>
-        <button onClick={grade} disabled={!ready || busy}>
-          {phase.kind === "running" ? "채점 중…" : "채점"}
-        </button>
-        {lockedReason && <span className="muted">{lockedReason}</span>}
-        {shown && (
-          <span className={shown.passed === shown.total ? "score done" : "score"}>
-            {shown.passed}/{shown.total}
-          </span>
-        )}
-        {!shown && latest && (
-          <span className="muted">
-            최근 {latest.passed}/{latest.total} · {formatTime(latest.submitted_at)}
-          </span>
-        )}
-      </div>
+      {barSlot === undefined ? (
+        <div className="row">
+          <h2>검사 {scenario.checks.length}</h2>
+          {head}
+        </div>
+      ) : barSlot ? (
+        createPortal(head, barSlot)
+      ) : null}
       <label className="row toggle">
         <input type="checkbox" checked={attach} disabled={busy} onChange={(e) => toggleAttach(e.target.checked)} />
         <span>AI 대화 함께 제출</span>

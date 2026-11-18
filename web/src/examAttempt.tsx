@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { formatRemaining, getExamStatus, postExamEvent, remainingSecondsAt, watchProctorSignals, type ExamStatus } from "./exam";
+import { ConfirmDialog } from "./components/ui";
+import { finishExam, formatRemaining, getExamStatus, postExamEvent, remainingSecondsAt, watchProctorSignals, type ExamStatus } from "./exam";
 
 // 지원자의 응시 상태와 남은 시간. 남은 시간은 서버가 준 deadline·server_time 과 그 응답 뒤 흐른 시간으로 센다 —
 // 브라우저 시계가 틀려도 같다. 30초마다 서버에 다시 물어 「끝내기」·회수·시간 설정 변경을 따라간다.
@@ -85,11 +86,27 @@ export function useExamClock(): Clock | null {
   return useContext(ExamClockContext);
 }
 
-/** 상단 띠 — 회차 이름과 남은 시간(또는 마감). */
+/** 상단 띠(고정) — 회차 이름, 남은 시간(또는 마감), 「제출하고 끝내기」. 디자인시스템의 띠 요소는 sandcorp-design#27. */
 export function ExamBar() {
   const clock = useExamClock();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!clock?.status) return null;
   const { status, remaining, finished } = clock;
+  const finish = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      clock.apply(await finishExam(clock.token));
+      setConfirming(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await clock.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className={`exam-bar${finished ? " ended" : ""}`} role="status">
       <Link to={`/exam/${encodeURIComponent(clock.token)}`}>{status.cohort_name}</Link>
@@ -98,10 +115,26 @@ export function ExamBar() {
         (finished ? (
           <strong>마감 — 더 제출할 수 없습니다</strong>
         ) : (
-          <span>
-            남은 시간 <strong className="exam-clock">{formatRemaining(remaining ?? 0)}</strong>
-          </span>
+          <>
+            <span>
+              남은 시간 <strong className="exam-clock">{formatRemaining(remaining ?? 0)}</strong>
+            </span>
+            <button type="button" className="sc-btn sc-btn--sm" onClick={() => setConfirming(true)}>
+              제출하고 끝내기
+            </button>
+          </>
         ))}
+      <ConfirmDialog
+        open={confirming}
+        title="제출하고 끝내기"
+        confirmLabel="끝내기"
+        busy={busy}
+        onConfirm={() => void finish()}
+        onClose={() => setConfirming(false)}
+      >
+        <p>끝낸 뒤에는 더 제출할 수 없습니다.</p>
+        {error && <p className="error">{error}</p>}
+      </ConfirmDialog>
     </div>
   );
 }

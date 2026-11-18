@@ -3,7 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { ApiError, fetchComposeFile, parseId, regenerateAgentToken } from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
 import { WindowsInstallerNotice } from "../components/SmartScreenNotice";
+import { PageHead } from "../components/ui";
 import { useMyCohort } from "../hooks";
+import { useCrumbs, useInShell } from "../shell/crumbs";
 
 export default function SetupPage() {
   const { id } = useParams();
@@ -62,18 +64,20 @@ export default function SetupPage() {
     }
   }
 
+  const inShell = useInShell();
+  useCrumbs([{ label: "내 기수", to: "/" }, { label: cohort?.name ?? "…", to: `/cohorts/${cohortId}` }, { label: "설치" }]);
+
   if (loadError) return <p className="error">{loadError}</p>;
   if (!cohort) return <p className="muted">불러오는 중…</p>;
 
   return (
     <section>
-      <p>
-        <Link to={`/cohorts/${cohort.id}`}>← {cohort.name}</Link>
-      </p>
-      <div className="row">
-        <h1>실습 환경 설치</h1>
-        <AgentStatusBadge probe={probe} />
-      </div>
+      {!inShell && (
+        <p>
+          <Link to={`/cohorts/${cohort.id}`}>← {cohort.name}</Link>
+        </p>
+      )}
+      <PageHead title="실습 환경 설치" badges={<AgentStatusBadge probe={probe} />} />
       {error && <p className="error">{error}</p>}
 
       <section className="card">
