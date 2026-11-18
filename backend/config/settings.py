@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "accounts",
+    "orgs",
     "scenarios",
     "cohorts",
     "submissions",

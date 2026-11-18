@@ -1,6 +1,7 @@
 """기수(Cohort)와 참여(Membership).
 
-강사는 한 명이라 기수에 소유자가 없다. 가입 링크는 기수의 `join_token` 하나로, 재발급하면 옛 링크는
+조직 → 묶음 → 응시자: 기수(`Cohort`)는 수업 묶음이고 반드시 한 조직(`orgs.Organization`)에 속한다.
+강사 표면은 그 조직의 담당자만 쓴다(`orgs.services`). 참여(`Membership`)가 응시자다. 가입 링크는 기수의 `join_token` 하나로, 재발급하면 옛 링크는
 바로 죽는다. 참여는 사용자 × 기수 하나이고 학생별 에이전트 토큰을 든다(compose.yml 에 박힌다).
 """
 
@@ -17,6 +18,7 @@ def new_token() -> str:
 
 
 class Cohort(models.Model):
+    org = models.ForeignKey("orgs.Organization", related_name="cohorts", on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
     join_token = models.CharField(max_length=64, unique=True, default=new_token)
     join_open = models.BooleanField(default=True)

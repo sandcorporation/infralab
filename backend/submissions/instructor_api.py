@@ -1,4 +1,4 @@
-"""강사의 제출 조회 — 기수 × 시나리오 격자, 학생의 제출 이력, 제출 상세(증거)."""
+"""강사의 제출 조회 — 기수 × 시나리오 격자, 학생의 제출 이력, 제출 상세(증거). 내 조직의 기수 것만(남의 것은 404)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from accounts.auth import instructor_auth
-from cohorts.models import Cohort, Membership
-from cohorts.services import open_scenarios
+from cohorts.models import Membership
+from cohorts.services import managed_cohort, managed_cohorts, open_scenarios
 
 from .api import submission_out, summary_out
 from .models import Submission
@@ -53,7 +53,7 @@ class GridOut(Schema):
 def grid(request: HttpRequest, cohort_id: int):
     """참여자 × 열린 시나리오 × 최신 제출 요약. 제출이 없는 칸은 null. 쿼리 수는 참여자 수와 무관하다."""
 
-    cohort = get_object_or_404(Cohort, pk=cohort_id)
+    cohort = managed_cohort(request, cohort_id)
     scenarios = open_scenarios(cohort)
     latest = latest_submissions_for_cohort(cohort)
     rows = []
@@ -95,11 +95,13 @@ def grid(request: HttpRequest, cohort_id: int):
 def participant_history(request: HttpRequest, cohort_id: int, membership_id: int, scenario_id: str):
     """한 학생의 같은 시나리오 제출 이력 — 최신 것부터."""
 
-    if not Membership.objects.filter(pk=membership_id, cohort_id=cohort_id).exists():
+    cohort = managed_cohort(request, cohort_id)
+    if not Membership.objects.filter(pk=membership_id, cohort=cohort).exists():
         raise HttpError(404, "그 학생은 이 기수에 없습니다.")
     return [summary_out(s) for s in Submission.objects.filter(membership_id=membership_id, scenario_id=scenario_id)]
 
 
 @instructor_router.get("/submissions/{submission_id}", response=SubmissionOut)
 def submission_detail(request: HttpRequest, submission_id: int):
-    return submission_out(get_object_or_404(Submission, pk=submission_id))
+    mine = Submission.objects.filter(membership__cohort__in=managed_cohorts(request.auth))
+    return submission_out(get_object_or_404(mine, pk=submission_id))

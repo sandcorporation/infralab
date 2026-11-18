@@ -15,6 +15,8 @@ def _clean_name(value: str) -> str:
 
 class CohortCreateIn(Schema):
     name: str = Field(max_length=100)
+    #: 기수를 둘 조직. 담당 조직이 하나뿐이면 생략할 수 있다.
+    org_id: int | None = None
 
     @field_validator("name")
     @classmethod
@@ -37,6 +39,7 @@ class CohortOut(Schema):
     """강사가 보는 기수."""
 
     id: int
+    org_id: int
     name: str
     join_token: str
     join_open: bool
