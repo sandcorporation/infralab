@@ -1,4 +1,4 @@
-import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Outlet, Route, Routes, matchPath, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import LoginPage from "./pages/LoginPage";
 import JoinPage from "./pages/JoinPage";
@@ -11,11 +11,18 @@ import ScenarioPage from "./pages/ScenarioPage";
 import InstructorOrgPage from "./pages/InstructorOrgPage";
 import OrgInvitePage from "./pages/OrgInvitePage";
 import InstructorGridPage from "./pages/InstructorGridPage";
+import ExamPage from "./pages/ExamPage";
+import { isExamUser, rememberedExamToken } from "./exam";
+import { ExamBar, ExamClockProvider } from "./examAttempt";
 
 function Layout() {
   const { me, logout } = useAuth();
+  const location = useLocation();
+  // 응시 화면이면 그 링크, 응시자 세션이면 들어온 링크의 시계를 어느 화면에서나 보인다.
+  const examToken =
+    matchPath("/exam/:token", location.pathname)?.params.token ?? (isExamUser(me?.username) ? rememberedExamToken() : null);
   return (
-    <>
+    <ExamClockProvider token={examToken}>
       <header className="topbar">
         <Link to="/" className="brand">
           infralab
@@ -34,10 +41,11 @@ function Layout() {
           )}
         </nav>
       </header>
+      <ExamBar />
       <main className="page">
         <Outlet />
       </main>
-    </>
+    </ExamClockProvider>
   );
 }
 
@@ -57,6 +65,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/join/:token" element={<JoinPage />} />
         <Route path="/org-invite/:token" element={<OrgInvitePage />} />
+        <Route path="/exam/:token" element={<ExamPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/" element={<MyCohortsPage />} />
           <Route path="/cohorts/:id" element={<CohortPage />} />

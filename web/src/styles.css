@@ -437,3 +437,23 @@ th {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* 응시 중 상단 띠 — 회차 이름과 남은 시간. */
+.exam-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  background: var(--notice-bg);
+  color: var(--notice-fg);
+  border-bottom: 1px solid var(--line);
+}
+.exam-bar.ended {
+  background: var(--card);
+  color: var(--error);
+}
+.exam-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.1em;
+}

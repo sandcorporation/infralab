@@ -11,6 +11,7 @@ import { GradePanel } from "../components/GradePanel";
 import { RequiresTags } from "../components/ScenarioPicker";
 import { Terminal } from "../components/Terminal";
 import { useMyCohort } from "../hooks";
+import { useExamClock } from "../examAttempt";
 
 export default function ScenarioPage() {
   const { id, scenarioId = "" } = useParams();
@@ -19,6 +20,8 @@ export default function ScenarioPage() {
   const [scenario, setScenario] = useState<ScenarioDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const probe = useAgentProbe(cohort?.agent_url, cohort?.agent_token);
+  const exam = useExamClock();
+  const examEnded = exam?.status?.cohort_id === cohortId && exam.finished;
   // 터미널은 에이전트에 한 번 붙은 뒤로는 상태 폴링 한 번의 실패로 떼지 않는다 — 떼면 셸과 거기서 돌던 명령이
   // 죽는다. 끊김은 터미널 자신이 보여 주고 재연결한다.
   const [agentSeen, setAgentSeen] = useState(false);
@@ -94,8 +97,8 @@ export default function ScenarioPage() {
                   scenario={scenario}
                   agentUrl={cohort.agent_url}
                   agentToken={cohort.agent_token}
-                  ready={(env?.ready ?? false) && prepared === true}
-                  lockedReason={env?.ready ? (prepared === false ? "환경 준비 먼저" : prepared === null ? "준비 확인 중…" : undefined) : undefined}
+                  ready={(env?.ready ?? false) && prepared === true && !examEnded}
+                  lockedReason={examEnded ? "시험 마감" : env?.ready ? (prepared === false ? "환경 준비 먼저" : prepared === null ? "준비 확인 중…" : undefined) : undefined}
                 />
               </section>
             </>
