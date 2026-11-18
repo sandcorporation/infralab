@@ -80,7 +80,6 @@ export default function InstructorCohortsPage() {
             </button>
           ))}
         </div>
-        {kind === "exam" && <span className="tag">2단계 준비 중</span>}
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}

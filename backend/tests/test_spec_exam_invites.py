@@ -47,7 +47,6 @@ def _invites_path(cohort_id):
     return f"/api/instructor/cohorts/{cohort_id}/exam-invites"
 
 
-@pytest.mark.skip(reason="#70")
 def test_exam_settings_are_saved_and_shown_on_the_cohort(api):
     teacher = api.login_instructor()
     cohort = _exam_cohort(api, teacher)
@@ -61,7 +60,6 @@ def test_exam_settings_are_saved_and_shown_on_the_cohort(api):
     assert again["exam_settings"] == EXAM_SETTINGS
 
 
-@pytest.mark.skip(reason="#70")
 def test_models_of_tools_that_are_not_allowed_are_dropped(api):
     teacher = api.login_instructor()
     cohort = _exam_cohort(api, teacher)
@@ -75,7 +73,6 @@ def test_models_of_tools_that_are_not_allowed_are_dropped(api):
     assert saved["models"] == {"claude_code": "m1"}
 
 
-@pytest.mark.skip(reason="#70")
 def test_exam_without_ai_tools_is_allowed(api):
     teacher = api.login_instructor()
     cohort = _exam_cohort(api, teacher)
@@ -87,7 +84,6 @@ def test_exam_without_ai_tools_is_allowed(api):
     assert saved["tools"] == [] and saved["models"] == {} and saved["ai_token_limit"] == 0
 
 
-@pytest.mark.skip(reason="#70")
 def test_exam_settings_on_a_class_cohort_is_422_and_on_another_org_is_404(api):
     teacher = api.login_instructor()
     klass = api.create_cohort(teacher, "수업 1기")
@@ -111,7 +107,6 @@ def test_exam_settings_on_a_class_cohort_is_422_and_on_another_org_is_404(api):
     ],
     ids=["claude-model-missing", "claude-model-empty", "codex-model-blank", "time-0", "time-601", "limit-negative", "unknown-tool"],
 )
-@pytest.mark.skip(reason="#70")
 def test_invalid_exam_settings_are_422_and_not_saved(api, change):
     teacher = api.login_instructor()
     cohort = _exam_cohort(api, teacher)
@@ -123,7 +118,6 @@ def test_invalid_exam_settings_are_422_and_not_saved(api, change):
     assert api.get(f"/api/instructor/cohorts/{cohort['id']}", teacher).json()["exam_settings"] == EXAM_SETTINGS
 
 
-@pytest.mark.skip(reason="#70")
 def test_time_limit_bounds_are_inclusive(api):
     teacher = api.login_instructor()
     cohort = _exam_cohort(api, teacher)
@@ -133,7 +127,6 @@ def test_time_limit_bounds_are_inclusive(api):
         assert res.json()["exam_settings"]["time_limit_minutes"] == minutes
 
 
-@pytest.mark.skip(reason="#70")
 def test_invite_before_exam_settings_is_409(api):
     teacher = api.login_instructor()
     cohort = _exam_cohort(api, teacher)
@@ -144,7 +137,6 @@ def test_invite_before_exam_settings_is_409(api):
     assert api.get(_invites_path(cohort["id"]), teacher).json() == []
 
 
-@pytest.mark.skip(reason="#70")
 def test_invites_are_issued_listed_and_revoked(api):
     teacher = api.login_instructor()
     cohort = _exam_cohort(api, teacher)
@@ -175,7 +167,6 @@ def test_invites_are_issued_listed_and_revoked(api):
     assert statuses == {a["id"]: "revoked", b["id"]: "invited"}
 
 
-@pytest.mark.skip(reason="#70")
 def test_invites_on_a_class_cohort_are_422_and_on_another_org_are_404(api):
     teacher = api.login_instructor()
     klass = api.create_cohort(teacher, "수업 1기")
@@ -195,7 +186,6 @@ def test_invites_on_a_class_cohort_are_422_and_on_another_org_are_404(api):
     assert [i["status"] for i in api.get(_invites_path(exam["id"]), teacher).json()] == ["invited"]
 
 
-@pytest.mark.skip(reason="#70")
 def test_null_sender_sends_nothing_and_there_is_no_smtp_setting(api):
     from exams.models import ExamInvite
     from exams.senders import InviteSender, NullSender

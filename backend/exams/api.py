@@ -8,10 +8,21 @@
 
 from __future__ import annotations
 
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ninja import Router
+from ninja.errors import HttpError
+from ninja.responses import Status
 
 from accounts.auth import instructor_auth
+from cohorts.api import _cohort_out as cohort_out
+from cohorts.api import _cohorts_with_counts as cohorts_with_counts
+from cohorts.models import Cohort
+from cohorts.schemas import CohortOut
+
+from .models import ExamInvite
+from .schemas import ExamInviteIn, ExamInviteOut, ExamSettingsIn
 
 instructor_router = Router(tags=["instructor"], auth=instructor_auth)
 exam_router = Router(tags=["exam"])
@@ -21,24 +32,67 @@ proxy_router = Router(tags=["proxy"])
 # ---------- 강사 ----------
 
 
-@instructor_router.put("/cohorts/{cohort_id}/exam-settings")
-def put_exam_settings(request: HttpRequest, cohort_id: int):
-    raise NotImplementedError("#70")
+def _exam_cohort(request: HttpRequest, cohort_id: int) -> Cohort:
+    """내 조직의 시험 회차. 남의 조직이면 404, 수업 묶음이면 422."""
+
+    cohort = get_object_or_404(cohorts_with_counts(request.auth), pk=cohort_id)
+    if cohort.kind != Cohort.Kind.EXAM:
+        raise HttpError(422, "시험 회차가 아닙니다.")
+    return cohort
 
 
-@instructor_router.post("/cohorts/{cohort_id}/exam-invites")
-def create_exam_invite(request: HttpRequest, cohort_id: int):
-    raise NotImplementedError("#70")
+def _status(invite: ExamInvite) -> str:
+    if invite.revoked_at is not None:
+        return "revoked"
+    if invite.finished_at is not None:
+        return "finished"
+    if invite.started_at is not None:
+        return "in_progress"
+    return "invited"
 
 
-@instructor_router.get("/cohorts/{cohort_id}/exam-invites")
+def _invite_out(invite: ExamInvite) -> ExamInviteOut:
+    return ExamInviteOut(
+        id=invite.id,
+        label=invite.label,
+        token=invite.token,
+        status=_status(invite),
+        created_at=invite.created_at,
+        started_at=invite.started_at,
+        finished_at=invite.finished_at,
+    )
+
+
+@instructor_router.put("/cohorts/{cohort_id}/exam-settings", response=CohortOut)
+def put_exam_settings(request: HttpRequest, cohort_id: int, payload: ExamSettingsIn):
+    cohort = _exam_cohort(request, cohort_id)
+    cohort.exam_settings = payload.normalized()
+    cohort.save(update_fields=["exam_settings"])
+    return cohort_out(get_object_or_404(cohorts_with_counts(request.auth), pk=cohort_id))
+
+
+@instructor_router.post("/cohorts/{cohort_id}/exam-invites", response={201: ExamInviteOut})
+def create_exam_invite(request: HttpRequest, cohort_id: int, payload: ExamInviteIn):
+    cohort = _exam_cohort(request, cohort_id)
+    if not cohort.exam_settings:
+        raise HttpError(409, "시험 설정을 먼저 저장하세요.")
+    return Status(201, _invite_out(ExamInvite.objects.create(cohort=cohort, label=payload.label)))
+
+
+@instructor_router.get("/cohorts/{cohort_id}/exam-invites", response=list[ExamInviteOut])
 def list_exam_invites(request: HttpRequest, cohort_id: int):
-    raise NotImplementedError("#70")
+    cohort = _exam_cohort(request, cohort_id)
+    return [_invite_out(i) for i in cohort.exam_invites.all()]
 
 
-@instructor_router.delete("/cohorts/{cohort_id}/exam-invites/{invite_id}")
+@instructor_router.delete("/cohorts/{cohort_id}/exam-invites/{invite_id}", response={204: None})
 def revoke_exam_invite(request: HttpRequest, cohort_id: int, invite_id: int):
-    raise NotImplementedError("#70")
+    cohort = _exam_cohort(request, cohort_id)
+    invite = get_object_or_404(cohort.exam_invites, pk=invite_id)
+    if invite.revoked_at is None:
+        invite.revoked_at = timezone.now()
+        invite.save(update_fields=["revoked_at"])
+    return HttpResponse(status=204)
 
 
 @instructor_router.post("/cohorts/{cohort_id}/exam-invites/{invite_id}/ai-token/revoke")

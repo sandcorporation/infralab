@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, formatTime, instructor, joinUrl, type Cohort, type Participant } from "../api";
+import { ExamPanel } from "../components/ExamPanel";
 import { ScenarioPicker } from "../components/ScenarioPicker";
 
 export default function InstructorCohortPage() {
@@ -107,6 +108,8 @@ export default function InstructorCohortPage() {
         </Link>
       </div>
       {error && <p className="error">{error}</p>}
+
+      {c.kind === "exam" && <ExamPanel cohort={c} onSaved={setCohort} />}
 
       <section className="card">
         <h2>가입 링크</h2>
