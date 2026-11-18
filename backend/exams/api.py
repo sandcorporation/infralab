@@ -28,11 +28,16 @@ from cohorts.models import Cohort, Membership
 from cohorts.schemas import CohortOut
 
 from . import ai, services
+from submissions.models import MAX_OUTPUT_CHARS
+
 from .models import ExamInvite
 from .schemas import (
     AiConfigOut,
     ExamInviteIn,
     ExamInviteOut,
+    ExamScoreOut,
+    FinalChecksOut,
+    FinalResultsIn,
     ExamSettingsIn,
     ExamStartIn,
     ExamStatusOut,
@@ -134,9 +139,13 @@ def revoke_ai_token(request: HttpRequest, cohort_id: int, invite_id: int):
     return HttpResponse(status=204)
 
 
-@instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/score")
+@instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/score", response=ExamScoreOut)
 def exam_score(request: HttpRequest, cohort_id: int, invite_id: int):
-    raise NotImplementedError("#74")
+    """공개·숨은 점수와 최종 점수. 숨은 결과를 기다리는 동안 final_percent 는 null."""
+
+    cohort = _exam_cohort(request, cohort_id)
+    invite = get_object_or_404(cohort.exam_invites.select_related("cohort", "membership"), pk=invite_id)
+    return services.score(invite)
 
 
 @instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/events")
@@ -281,14 +290,59 @@ def exam_ai_config(request: HttpRequest, token: str):
     return AiConfigOut(proxy_url=ai.proxy_url(), token=ai_token.token, tools=ai.tool_configs(invite, ai_token.token))
 
 
-@exam_router.get("/exam/{token}/final-checks", auth=None)
+@exam_router.get("/exam/{token}/final-checks", auth=None, response=FinalChecksOut)
 def exam_final_checks(request: HttpRequest, token: str):
-    raise NotImplementedError("#74")
+    """마감 뒤에만 열린 시나리오별 숨은 검사 정의를 준다(공개 검사는 없음). 응시 중에는 409."""
+
+    invite = _candidate_invite(request, token)
+    if services.attempt_status(invite) != "finished":
+        raise HttpError(409, "응시가 끝난 뒤에만 받을 수 있습니다.")
+    return {
+        "scenarios": [
+            {"scenario_id": s.id, "checks": s.hidden_check_definitions(), "scripts": s.hidden_check_scripts()}
+            for s in services.hidden_scenarios(invite)
+        ]
+    }
 
 
-@exam_router.post("/exam/{token}/final-results", auth=None)
-def exam_final_results(request: HttpRequest, token: str):
-    raise NotImplementedError("#74")
+@exam_router.post("/exam/{token}/final-results", auth=None, response={204: None})
+def exam_final_results(request: HttpRequest, token: str, payload: FinalResultsIn):
+    """마감 뒤 숨은 검사 결과를 한 번 받는다. 마감 전·두 번째는 409, 검사 id 가 맞지 않으면 422."""
+
+    invite = _candidate_invite(request, token)
+    with transaction.atomic():
+        invite = ExamInvite.objects.select_for_update(of=("self",)).select_related("cohort", "membership").get(pk=invite.pk)
+        if services.attempt_status(invite) != "finished":
+            raise HttpError(409, "응시가 끝난 뒤에만 올릴 수 있습니다.")
+        if invite.final_results_at is not None:
+            raise HttpError(409, "숨은 검사 결과는 이미 받았습니다.")
+        expected = {s.id: s for s in services.hidden_scenarios(invite)}
+        if not expected:
+            raise HttpError(409, "이 응시에는 숨은 검사가 없습니다.")
+        got = [s.scenario_id for s in payload.scenarios]
+        if sorted(got) != sorted(expected):
+            raise HttpError(422, f"시나리오가 맞지 않습니다 (기대 {sorted(expected)}, 받음 {sorted(got)})")
+        stored: dict[str, list[dict]] = {}
+        for item in payload.scenarios:
+            scenario = expected[item.scenario_id]
+            ids = [c.id for c in scenario.hidden_checks]
+            if sorted(r.id for r in item.results) != sorted(ids):
+                raise HttpError(422, f"{item.scenario_id}: 숨은 검사 결과가 맞지 않습니다.")
+            by_id = {r.id: r for r in item.results}
+            stored[item.scenario_id] = [
+                {
+                    "check_id": cid,
+                    "pass": by_id[cid].pass_,
+                    "output": by_id[cid].output[:MAX_OUTPUT_CHARS],
+                    "exit_code": by_id[cid].exit_code,
+                    "error": by_id[cid].error[:500],
+                }
+                for cid in ids
+            ]
+        invite.final_results = stored
+        invite.final_results_at = timezone.now()
+        invite.save(update_fields=["final_results", "final_results_at"])
+    return HttpResponse(status=204)
 
 
 @exam_router.post("/exam/{token}/events", auth=None)

@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Literal
 
 from ninja import Field, Schema
+from scenarios.schemas import CheckOut
+from submissions.schemas import CheckResultIn
 from pydantic import field_validator, model_validator
 
 Tool = Literal["claude_code", "codex", "local_llm"]
@@ -122,3 +124,32 @@ class ProxyExchangeIn(Schema):
     output_tokens: int = Field(ge=0)
     request: str = ""
     response: str = ""
+
+
+class FinalChecksScenarioOut(Schema):
+    scenario_id: str
+    checks: list[CheckOut]
+    scripts: dict[str, str]
+
+
+class FinalChecksOut(Schema):
+    scenarios: list[FinalChecksScenarioOut]
+
+
+class FinalResultsScenarioIn(Schema):
+    scenario_id: str
+    results: list[CheckResultIn]
+
+
+class FinalResultsIn(Schema):
+    agent_version: str = ""
+    scenarios: list[FinalResultsScenarioIn]
+
+
+class ExamScoreOut(Schema):
+    public_passed: int
+    public_total: int
+    hidden_passed: int
+    hidden_total: int
+    hidden_status: Literal["done", "pending", "skipped"]
+    final_percent: int | None

@@ -12,6 +12,9 @@ from django.utils import timezone
 from ninja.errors import HttpError
 
 from cohorts.models import Cohort, Membership
+from cohorts.services import open_scenarios
+from scenarios.loader import Scenario
+from submissions.services import latest_submissions_by_scenario, passed_against
 
 from .models import ExamInvite
 
@@ -68,3 +71,48 @@ def check_attempt(membership: Membership, *, submitting: bool = False) -> None:
         raise HttpError(403, "시험을 시작해야 볼 수 있습니다.")
     if submitting and ended_at(invite) is not None:
         raise HttpError(403, "시험이 마감되었습니다.")
+
+
+def hidden_scenarios(invite: ExamInvite) -> list[Scenario]:
+    """이 응시에서 숨은 검사가 도는 시나리오 — 회차 설정 `hidden_checks` 가 켜져 있고 문제은행에서 읽힌 것만."""
+
+    if not (invite.cohort.exam_settings or {}).get("hidden_checks"):
+        return []
+    return [s for s in open_scenarios(invite.cohort) if s.hidden_checks]
+
+
+def score(invite: ExamInvite) -> dict:
+    """공개·숨은 점수와 최종 점수. 공개는 열린 시나리오마다 최신 제출(없으면 0, 전체는 지금 정의)."""
+
+    scenarios = open_scenarios(invite.cohort)
+    latest = latest_submissions_by_scenario(invite.membership) if invite.membership else {}
+    public_passed = sum(passed_against(latest[s.id], s) for s in scenarios if s.id in latest)
+    public_total = sum(len(s.checks) for s in scenarios)
+
+    hidden = hidden_scenarios(invite)
+    hidden_total = sum(len(s.hidden_checks) for s in hidden)
+    hidden_passed = 0
+    if not hidden:
+        status = "skipped"
+    elif invite.final_results_at is None:
+        status = "pending"
+    else:
+        status = "done"
+        stored = invite.final_results or {}
+        for s in hidden:
+            ids = {c.id for c in s.hidden_checks}
+            hidden_passed += sum(1 for r in stored.get(s.id, []) if r.get("pass") and r.get("check_id") in ids)
+
+    total = public_total + hidden_total
+    if status == "pending" or total == 0:
+        percent = None
+    else:
+        percent = round(100 * (public_passed + hidden_passed) / total)
+    return {
+        "public_passed": public_passed,
+        "public_total": public_total,
+        "hidden_passed": hidden_passed,
+        "hidden_total": hidden_total,
+        "hidden_status": status,
+        "final_percent": percent,
+    }

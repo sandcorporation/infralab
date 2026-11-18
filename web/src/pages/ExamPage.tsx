@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError } from "../api";
+import { ApiError, getMyCohort } from "../api";
+import { runChecks } from "../agent";
 import { useAuth } from "../auth";
 import {
   enterExam,
@@ -8,6 +9,8 @@ import {
   finishExam,
   formatRemaining,
   getAiConfig,
+  getFinalChecks,
+  postFinalResults,
   rememberExamToken,
   startExam,
 } from "../exam";
@@ -111,7 +114,10 @@ export default function ExamPage() {
         </>
       )}
       {status && clock.finished && (
-        <p className="notice">시험이 마감되었습니다. 수고하셨습니다 — 더 제출할 수 없습니다.</p>
+        <>
+          <p className="notice">시험이 마감되었습니다. 수고하셨습니다 — 더 제출할 수 없습니다.</p>
+          <FinalGrading token={token} cohortId={status.cohort_id} />
+        </>
       )}
     </section>
   );
@@ -178,4 +184,75 @@ function AiKeySetup({ token }: { token: string }) {
       {config && <p className="muted">이 키는 이 응시에서만, 시험 시간 안에만 쓸 수 있습니다.</p>}
     </div>
   );
+}
+
+// 마감 뒤 숨은 검사 — 정의를 한 번 받아 내 PC 의 agent 로 돌리고 결과를 올린다. 결과는 지원자에게 보이지 않는다.
+// 숨은 검사가 없으면(꺼짐·문제은행 없음) 바로 「제출 완료」.
+function FinalGrading({ token, cohortId }: { token: string; cohortId: number }) {
+  const [phase, setPhase] = useState<"running" | "done" | "failed">("running");
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const started = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = `${token}:${attempt}`;
+    if (started.current === key) return;
+    started.current = key;
+    setPhase("running");
+    setError(null);
+    void (async () => {
+      try {
+        const { scenarios } = await getFinalChecks(token);
+        if (scenarios.length > 0) {
+          const cohort = await getMyCohort(cohortId);
+          const out = [];
+          let version = "";
+          for (const s of scenarios) {
+            const res = await runChecks(cohort.agent_url, cohort.agent_token, s.checks, {
+              checks: s.checks,
+              scripts: s.scripts,
+            });
+            version = res.agent_version;
+            out.push({
+              scenario_id: s.scenario_id,
+              results: res.results.map((r) => ({
+                id: r.id,
+                name: r.name,
+                pass: r.pass,
+                output: r.output,
+                truncated: r.truncated,
+                exit_code: r.exit_code,
+                error: r.error ?? "",
+              })),
+            });
+          }
+          try {
+            await postFinalResults(token, { agent_version: version, scenarios: out });
+          } catch (err) {
+            // 이미 받았으면(409) 끝난 것이다.
+            if (!(err instanceof ApiError && err.status === 409)) throw err;
+          }
+        }
+        setPhase("done");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setPhase("failed");
+      }
+    })();
+  }, [token, cohortId, attempt]);
+
+  if (phase === "running") return <p className="muted" role="status">채점 마무리 중…</p>;
+  if (phase === "failed")
+    return (
+      <>
+        <p className="error">채점을 마무리하지 못했습니다: {error}</p>
+        <p className="muted">에이전트가 켜져 있는지 확인한 뒤 다시 시도하세요.</p>
+        <p>
+          <button className="secondary" onClick={() => setAttempt((n) => n + 1)}>
+            다시 시도
+          </button>
+        </p>
+      </>
+    );
+  return <p role="status">제출 완료</p>;
 }
