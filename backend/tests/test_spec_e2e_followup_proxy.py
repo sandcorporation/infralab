@@ -11,14 +11,14 @@ proxy/proxy_test.go 가 본다). e2e 의 화면 흐름(「AI 키 설정」·토�
 from pathlib import Path
 
 import pytest
-import yaml
+from tests.compose_yaml import load_compose
 
 REPO = Path(__file__).resolve().parents[2]
 FAKE = "INFRALAB_PROXY_FAKE_PROVIDER"
 
 
 def _services(compose_file: Path) -> dict:
-    return yaml.safe_load(compose_file.read_text(encoding="utf-8"))["services"]
+    return load_compose(compose_file)["services"]
 
 
 def _env(services: dict, name: str) -> dict:

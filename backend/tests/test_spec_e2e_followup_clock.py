@@ -15,12 +15,12 @@ import runpy
 from pathlib import Path
 
 import pytest
-import yaml
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, override_settings
 
 from tests.api_helpers import S3, S3_CHECK_IDS, Session, s3_results
+from tests.compose_yaml import load_compose
 
 BACKEND = Path(__file__).resolve().parent.parent
 SETTINGS_FILE = str(BACKEND / "config" / "settings.py")
@@ -45,7 +45,7 @@ def _fresh_settings(monkeypatch: pytest.MonkeyPatch, **env: str) -> dict[str, ob
 
 
 def _backend_env(compose_file: Path) -> dict:
-    doc = yaml.safe_load(compose_file.read_text(encoding="utf-8"))
+    doc = load_compose(compose_file)
     return doc["services"]["backend"].get("environment") or {}
 
 
