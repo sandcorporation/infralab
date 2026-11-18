@@ -65,8 +65,8 @@ PROBLEMS_DIR = _env("INFRALAB_PROBLEMS_DIR", "")
 
 # ---------- 시험 모드 ----------
 # AI 프록시 주소 ← INFRALAB_EXAM_PROXY_URL, 프록시 전용 내부 API 의 공유 비밀 ← INFRALAB_EXAM_PROXY_SECRET.
-EXAM_PROXY_URL = ""  # #72
-EXAM_PROXY_SECRET = ""  # #72
+EXAM_PROXY_URL = _env("INFRALAB_EXAM_PROXY_URL", "http://127.0.0.1:58090").rstrip("/")
+EXAM_PROXY_SECRET = _env("INFRALAB_EXAM_PROXY_SECRET")
 # 루브릭 채점 키 ← INFRALAB_GRADER_ANTHROPIC_KEY. 비면 가짜 채점기.
 GRADER_ANTHROPIC_KEY = ""  # #76
 

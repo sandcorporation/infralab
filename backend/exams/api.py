@@ -8,6 +8,9 @@
 
 from __future__ import annotations
 
+import hmac
+
+from django.conf import settings as django_settings
 from django.contrib.auth import get_user, get_user_model, login
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse
@@ -15,6 +18,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
+from ninja.security import HttpBearer
 from ninja.responses import Status
 
 from accounts.auth import check_origin, instructor_auth
@@ -23,13 +27,35 @@ from cohorts.api import _cohorts_with_counts as cohorts_with_counts
 from cohorts.models import Cohort, Membership
 from cohorts.schemas import CohortOut
 
-from . import services
+from . import ai, services
 from .models import ExamInvite
-from .schemas import ExamInviteIn, ExamInviteOut, ExamSettingsIn, ExamStartIn, ExamStatusOut
+from .schemas import (
+    AiConfigOut,
+    ExamInviteIn,
+    ExamInviteOut,
+    ExamSettingsIn,
+    ExamStartIn,
+    ExamStatusOut,
+    ProxyAuthorizeIn,
+    ProxyExchangeIn,
+    ProxyVerdictOut,
+)
 
 instructor_router = Router(tags=["instructor"], auth=instructor_auth)
 exam_router = Router(tags=["exam"])
-proxy_router = Router(tags=["proxy"])
+
+
+class ProxyAuth(HttpBearer):
+    """AI 프록시 전용 — `Authorization: Bearer <EXAM_PROXY_SECRET>`. 비밀이 비어 있으면 아무도 못 부른다."""
+
+    def authenticate(self, request: HttpRequest, token: str):
+        secret = django_settings.EXAM_PROXY_SECRET
+        if secret and hmac.compare_digest(token.encode(), secret.encode()):
+            return "proxy"
+        return None
+
+
+proxy_router = Router(tags=["proxy"], auth=ProxyAuth())
 
 #: 응시마다 하나씩 만드는 숨은 사용자의 이름 앞부분 — sandcorp 로그인 사용자(`sandcorp:<sub>`)와 겹치지 않는다.
 HIDDEN_USER_PREFIX = "exam-invite:"
@@ -98,9 +124,14 @@ def revoke_exam_invite(request: HttpRequest, cohort_id: int, invite_id: int):
     return HttpResponse(status=204)
 
 
-@instructor_router.post("/cohorts/{cohort_id}/exam-invites/{invite_id}/ai-token/revoke")
+@instructor_router.post("/cohorts/{cohort_id}/exam-invites/{invite_id}/ai-token/revoke", response={204: None})
 def revoke_ai_token(request: HttpRequest, cohort_id: int, invite_id: int):
-    raise NotImplementedError("#72")
+    """임시 토큰을 즉시 회수한다 — 프록시의 다음 확인부터 `revoked`."""
+
+    cohort = _exam_cohort(request, cohort_id)
+    invite = get_object_or_404(cohort.exam_invites, pk=invite_id)
+    ai.revoke(invite)
+    return HttpResponse(status=204)
 
 
 @instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/score")
@@ -233,12 +264,21 @@ def finish_exam(request: HttpRequest, token: str):
         if invite.finished_at is None:
             invite.finished_at = services.ended_at(invite) or timezone.now()
             invite.save(update_fields=["finished_at"])
+        ai.revoke(invite, invite.finished_at)
     return _exam_status_out(invite)
 
 
-@exam_router.get("/exam/{token}/ai-config", auth=None)
+@exam_router.get("/exam/{token}/ai-config", auth=None, response=AiConfigOut)
 def exam_ai_config(request: HttpRequest, token: str):
-    raise NotImplementedError("#72")
+    """응시 중에만 허용 도구마다 AI 키 설정을 준다. 시작 전·마감 뒤·임시 토큰 회수 뒤에는 409."""
+
+    invite = _candidate_invite(request, token)
+    if services.attempt_status(invite) != "in_progress":
+        raise HttpError(409, "응시 중에만 AI 키 설정을 받을 수 있습니다.")
+    ai_token = ai.issue(invite)
+    if ai_token.revoked_at is not None:
+        raise HttpError(409, "임시 토큰이 회수되었습니다.")
+    return AiConfigOut(proxy_url=ai.proxy_url(), token=ai_token.token, tools=ai.tool_configs(invite, ai_token.token))
 
 
 @exam_router.get("/exam/{token}/final-checks", auth=None)
@@ -259,11 +299,27 @@ def exam_event(request: HttpRequest, token: str):
 # ---------- AI 프록시 전용 ----------
 
 
-@proxy_router.post("/proxy/authorize", auth=None)
-def proxy_authorize(request: HttpRequest):
-    raise NotImplementedError("#72")
+@proxy_router.post("/proxy/authorize", response=ProxyVerdictOut)
+def proxy_authorize(request: HttpRequest, payload: ProxyAuthorizeIn):
+    """임시 토큰으로 온 요청 하나를 허용할지. 허용이면 고정 모델과 남은 사용량(한도 0 이면 null)."""
+
+    v = ai.verdict(payload.token, payload.tool, payload.client_id)
+    return ProxyVerdictOut(allowed=v.allowed, reason=v.reason, model=v.model, remaining_tokens=v.remaining_tokens)
 
 
-@proxy_router.post("/proxy/exchanges", auth=None)
-def proxy_exchanges(request: HttpRequest):
-    raise NotImplementedError("#72")
+@proxy_router.post("/proxy/exchanges", response={204: None})
+def proxy_exchanges(request: HttpRequest, payload: ProxyExchangeIn):
+    """프록시가 넘긴 요청·응답·사용량을 채점 재료로 적고 사용량을 한도에서 깎는다. 모르는 토큰이면 404."""
+
+    if not ai.record_exchange(
+        payload.token,
+        tool=payload.tool,
+        model=payload.model,
+        client_id=payload.client_id,
+        input_tokens=payload.input_tokens,
+        output_tokens=payload.output_tokens,
+        request=payload.request,
+        response=payload.response,
+    ):
+        raise HttpError(404, "모르는 임시 토큰입니다.")
+    return HttpResponse(status=204)
