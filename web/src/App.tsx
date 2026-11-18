@@ -9,6 +9,8 @@ import InstructorCohortPage from "./pages/InstructorCohortPage";
 import CohortPage from "./pages/CohortPage";
 import SetupPage from "./pages/SetupPage";
 import ScenarioPage from "./pages/ScenarioPage";
+import InstructorOrgPage from "./pages/InstructorOrgPage";
+import OrgInvitePage from "./pages/OrgInvitePage";
 import InstructorGridPage from "./pages/InstructorGridPage";
 
 function Layout() {
@@ -56,6 +58,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/kakao/callback" element={<KakaoCallbackPage />} />
         <Route path="/join/:token" element={<JoinPage />} />
+        <Route path="/org-invite/:token" element={<OrgInvitePage />} />
         <Route element={<RequireAuth />}>
           <Route path="/" element={<MyCohortsPage />} />
           <Route path="/cohorts/:id" element={<CohortPage />} />
@@ -64,6 +67,7 @@ export default function App() {
         </Route>
         <Route element={<RequireAuth instructor />}>
           <Route path="/instructor" element={<InstructorCohortsPage />} />
+          <Route path="/instructor/org" element={<InstructorOrgPage />} />
           <Route path="/instructor/cohorts/:id" element={<InstructorCohortPage />} />
           <Route path="/instructor/cohorts/:id/grid" element={<InstructorGridPage />} />
         </Route>

@@ -7,8 +7,12 @@ owner 전용 동작은 다음 단계에서 붙는다.
 
 from __future__ import annotations
 
+import secrets
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 #: 이전(cohorts 0003) 이 만드는 조직, 그리고 `set_instructor` 가 강사를 넣는 조직의 이름.
 DEFAULT_ORG_NAME = "기본 조직"
@@ -42,3 +46,29 @@ class OrgMember(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.user_id}@{self.org_id}:{self.role}"
+
+
+def new_invite_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+def default_invite_expiry():
+    return timezone.now() + timedelta(days=7)
+
+
+class OrgInvite(models.Model):
+    """조직 담당자 초대 링크. 만료되었거나 닫힌(`revoked_at`) 링크는 수락할 수 없다."""
+
+    org = models.ForeignKey(Organization, related_name="invites", on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True, default=new_invite_token)
+    role = models.CharField(max_length=16, choices=OrgMember.Role.choices, default=OrgMember.Role.STAFF)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(default=default_invite_expiry)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    @property
+    def is_active(self) -> bool:
+        return self.revoked_at is None and self.expires_at > timezone.now()
