@@ -112,6 +112,17 @@ def test_exam_compose_url_is_gone_after_finish_and_404_when_revoked(api):
 
     _expire(invite["id"])
     assert Client().get(url).status_code == 410
+    # 끝난 응시는 회수되지 않는다(#154) — 그대로 410.
+    invites = f"/api/instructor/cohorts/{cohort['id']}/exam-invites"
+    assert api.delete(f"{invites}/{invite['id']}", teacher).status_code == 409
+    assert Client().get(url).status_code == 410
 
-    assert api.delete(f"/api/instructor/cohorts/{cohort['id']}/exam-invites/{invite['id']}", teacher).status_code == 204
-    assert Client().get(url).status_code == 404
+    # 진행 중에 회수한 응시는 404.
+    other = api.post(invites, {"label": "지원자 B"}, teacher).json()
+    cand2 = _browser()
+    _enter(api, cand2, other["token"])
+    _start(api, cand2, other["token"])
+    other_url = f"/api/exam/{other['token']}/compose.yml"
+    assert Client().get(other_url).status_code == 200
+    assert api.delete(f"{invites}/{other['id']}", teacher).status_code == 204
+    assert Client().get(other_url).status_code == 404
