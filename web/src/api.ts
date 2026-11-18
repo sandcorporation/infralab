@@ -219,7 +219,7 @@ export const devLogin = (uid: string, nickname: string) =>
 export const logoutSession = () => api<void>("/api/auth/logout", { method: "POST" });
 export const getMe = () => api<Me>("/api/accounts/me");
 export const getMyCohorts = () => api<MyCohort[]>("/api/cohorts");
-export type PracticeStatus = { cohort_id: number; name: string; joined: boolean };
+export type PracticeStatus = { cohort_id: number; name: string; joined: boolean; scenario_count: number };
 export const getPractice = () => api<PracticeStatus>("/api/practice");
 export const joinPractice = () =>
   api<{ cohort_id: number; name: string; created: boolean }>("/api/practice/join", { method: "POST" });
