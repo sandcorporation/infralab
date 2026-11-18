@@ -11,12 +11,12 @@ import type { ExamInvite } from "../api";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("응시 링크", () => {
-  it.skip("응시 링크는 <오리진>/exam/<토큰> 이다", () => { // #70
+  it("응시 링크는 <오리진>/exam/<토큰> 이다", () => {
     vi.stubGlobal("location", { origin: "https://infralab.test" });
     expect(examInviteUrl("tok123")).toBe("https://infralab.test/exam/tok123");
   });
 
-  it.skip("발급은 회차의 exam-invites 경로로 이름표를 실어 POST 한다", async () => { // #70
+  it("발급은 회차의 exam-invites 경로로 이름표를 실어 POST 한다", async () => {
     const issued: ExamInvite = {
       id: 7,
       label: "지원자 A",

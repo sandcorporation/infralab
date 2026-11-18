@@ -88,6 +88,15 @@ export type Participant = {
   display_name: string;
   joined_at: string;
 };
+export type ExamTool = "claude_code" | "codex" | "local_llm";
+export type ExamSettings = {
+  time_limit_minutes: number;
+  tools: ExamTool[];
+  models: Record<string, string>;
+  proctoring: boolean;
+  hidden_checks: boolean;
+  ai_token_limit: number;
+};
 export type ExamInvite = {
   id: number;
   label: string;
@@ -232,9 +241,19 @@ export const instructor = {
       method: "PUT",
       body: JSON.stringify({ scenario_ids: scenarioIds }),
     }),
-  createExamInvite: (_cohortId: number, _label: string): Promise<ExamInvite> => {
-    throw new Error("#70");
-  },
+  setExamSettings: (cohortId: number, settings: ExamSettings) =>
+    api<Cohort>(`/api/instructor/cohorts/${cohortId}/exam-settings`, {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
+  examInvites: (cohortId: number) => api<ExamInvite[]>(`/api/instructor/cohorts/${cohortId}/exam-invites`),
+  createExamInvite: (cohortId: number, label: string) =>
+    api<ExamInvite>(`/api/instructor/cohorts/${cohortId}/exam-invites`, {
+      method: "POST",
+      body: JSON.stringify({ label }),
+    }),
+  revokeExamInvite: (cohortId: number, inviteId: number) =>
+    api<void>(`/api/instructor/cohorts/${cohortId}/exam-invites/${inviteId}`, { method: "DELETE" }),
 };
 
 export const previewOrgInvite = (token: string) =>
@@ -264,8 +283,8 @@ export function orgInviteUrl(token: string): string {
   return `${location.origin}/org-invite/${token}`;
 }
 
-export function examInviteUrl(_token: string): string {
-  throw new Error("#70");
+export function examInviteUrl(token: string): string {
+  return `${location.origin}/exam/${token}`;
 }
 
 export function joinUrl(token: string): string {
