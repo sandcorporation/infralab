@@ -149,6 +149,25 @@ eq "human to" repo/coordinator "$(arg 3 --to)"
 eq "budget-spec to" repo/coordinator "$(arg 1 --to)"
 has warning "BRIDGE_TO is ignored" "$(cat "$tmp/log")"
 
+setup "a human-check (#167) goes to the boss, once"
+issue 950 open human-check "사람 확인: spec #62"
+comment 31 950 "<!-- factory-human-check 62 -->
+spec #62 의 티켓이 모두 병합됐다."
+run
+eq code 0 "$(code)"
+eq sends 1 "$(sent_count)"
+eq "human-check to" sandcorp/boss "$(arg 0 --to)"
+has subject "사람 확인 대기: #950" "$(arg 0 --subject)"
+has todo "모두 체크하거나 이슈를 닫으면" "$(arg 0 --body)"
+run
+eq "not sent again" 1 "$(sent_count)"
+setup "a human-check follows BRIDGE_TO_BOSS"
+issue 950 open human-check "사람 확인: spec #62"
+comment 31 950 "<!-- factory-human-check 62 -->"
+export BRIDGE_TO_BOSS=boss/else BRIDGE_TO_COORD=coord/else
+run
+eq "human-check to" boss/else "$(arg 0 --to)"
+
 # --- what is not sent ----------------------------------------------------------------------
 
 setup "a question whose needs-decision is gone, and closed issues, are not sent"

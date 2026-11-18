@@ -44,7 +44,8 @@
 #   verify.sh pass <N> <PR> [report]     squash-merge the PR (retrying while GitHub computes
 #                                        mergeability), delete its branch and its job-less bot
 #                                        ci.yml runs (prune-runs.sh), comment the report on the
-#                                        PR, close the ticket, dispatch release.yml on main
+#                                        PR, stack its `사람 확인` items on the spec's check issue
+#                                        (human-check.sh stack), close the ticket, dispatch release.yml on main
 #                                        and then the next ticket (dispatch-next.sh). Exits 1 when the
 #                                        PR could not be merged (nothing else is done then).
 #
@@ -281,6 +282,9 @@ pass() {
   fi
   delete_branch "$branch"
   prune_runs "$branch"
+  # The PR's `사람 확인` items go on the spec's check issue; the spec stays open until they are checked
+  # (human-check.sh, #167). Failing to stack only warns: the merge is done.
+  bash "$here/human-check.sh" stack "$n" "$pr" || echo "::warning::could not stack the 사람 확인 items of PR #$pr"
   if [ -n "$report" ] && [ -s "$report" ]; then
     gh api "repos/$REPO/issues/$pr/comments" -f "body=Verify$(run_link): 통과
 
