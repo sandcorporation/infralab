@@ -15,8 +15,11 @@ services:
     ports: !reset []
     environment:
       SCENARIOS_DIR: /e2e-scenarios
+      # 숨은 검사 견본 문제은행(#193) — e2e 시나리오에 붙는 검사는 여기에만 둔다.
+      INFRALAB_PROBLEMS_DIR: /e2e-problems
     volumes:
       - ../web/e2e/fixtures/scenarios:/e2e-scenarios:ro
+      - ../web/e2e/fixtures/problems:/e2e-problems:ro
 
   agent:
     profiles: [agent]

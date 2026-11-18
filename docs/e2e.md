@@ -13,6 +13,7 @@ bash scripts/check_workstation_image.sh --build   # workstation 이미지 실행
 - 스택: `docker/compose.dev.yaml` + `docker/compose.e2e.yaml`, 프로젝트 `infralab-e2e`. 호스트에는 web(그때 빈 포트)과 에이전트(7777)만 연다. 로그인은 dev-login, 강사는 `set_instructor`.
 - 학생 PC 쪽: 실제 에이전트(`docker/agent.e2e.Dockerfile` — 운영과 같은 바이너리, kind·kubectl 없음)와 bash 만 든 작은 workstation. 에이전트 주소는 서버가 정한 `127.0.0.1:7777` 이라 그 포트가 비어 있어야 한다. 토큰은 사용자마다 달라 시험이 토큰을 안 뒤 에이전트를 다시 올린다(`web/e2e/stack.ts`).
 - 시나리오는 `web/e2e/fixtures/scenarios/e2e-prepare` 하나(준비가 `/work/app/ready.txt` 를 만들고, 검사 하나).
+- 숨은 검사: backend 는 `INFRALAB_PROBLEMS_DIR=/e2e-problems`(`web/e2e/fixtures/problems`, 견본 문제은행)를 읽고 e2e 시나리오에 검사 하나가 붙는다. `problems-sample/` 에 두지 않은 까닭: 그 폴더의 모든 `<id>` 는 저장소 `scenarios/` 에 있어야 하는데(backend 시험이 그렇게 읽는다) e2e 시나리오는 저장소 시나리오가 아니다. 실제 문제은행 내용은 넣지 않는다.
 - 재시도 없음, workers 1. 실패하면 `web/test-results/` 에 trace 가 남는다(CI 는 아티팩트 `e2e-traces`).
 
 ## 어디서 도는가
@@ -33,6 +34,7 @@ release 뒤 스모크로 두지 않은 까닭: 목적이 병합 전에 잡는 �
 | 응시 흐름: 시작 → 응시 중 → 탭 이탈·붙여넣기 신호 → 제출하고 끝내기 → 끝남·보고서 | `exam-flow.spec.ts` | 회차 설정·링크 발급, 에이전트 꺼짐이면 시작 막힘, 남은 시간 흐름·새로 고침, 감독 신호 시각순 |
 | 회수한 응시 링크: 「회수됨」, 그 링크로 못 들어옴 | `exam-flow.spec.ts` | 회수 |
 | 환경 준비 → 「준비됨」 → 채점 1/1·제출됨, 새 /work(같은 홈)면 「준비됨」 없음 | `prepare-mark.spec.ts` | #124 — 표시를 홈에 쓰면 실패한다 |
+| 숨은 검사 켠 시험: 끝내기 → 「채점 마무리 중」 → 「제출 완료」, 숨은 검사 결과가 서버(보고서 API 숨은 검사 1/1)에 올라감 | `hidden-checks.spec.ts` | #100 — 결과 업로드를 되돌리면 보고서가 「대기」에 머물러 실패한다 |
 | workstation: root·로그인 셸 IS_SANDBOX=1·claude 가 root 거부 안 함(네트워크 없음) | `scripts/check_workstation_image.sh` | #125 — `IS_SANDBOX` 를 비우면 거부 문구로 실패한다 |
 
 ## spec #45·#62·#130 의 사람 확인 항목
@@ -64,7 +66,7 @@ release 뒤 스모크로 두지 않은 까닭: 목적이 병합 전에 잡는 �
 | #98 | 가짜 공급사 모드로 프록시를 띄우는 명령 | 후속 |
 | #98 | 담당자 화면에서 임시 토큰 회수 → 다음 요청 401 | 후속: e2e 스택에 프록시를 더해야 한다 |
 | #98 | workstation → 프록시 원격 주소·`client_id` 가 지원자마다 안정 | 남김: 실제 학생 PC 네트워크(NAT) |
-| #100 | 견본 문제은행으로 시험을 끝까지 치러 「채점 마무리 중」→「제출 완료」 | 후속(위험 높음): `INFRALAB_PROBLEMS_DIR=problems-sample` 과 숨은 검사 켠 회차 |
+| #100 | 견본 문제은행으로 시험을 끝까지 치러 「채점 마무리 중」→「제출 완료」 | 옮김: 「숨은 검사 켠 시험」(견본 문제은행은 `web/e2e/fixtures/problems`) |
 | #101 | 탭 전환·창 밖 클릭·붙여넣기 뒤 감독 기록에 신호가 시각순 | 옮김: 「응시 흐름」(탭 이탈·붙여넣기 시각순), 「터미널 Ctrl+V」 |
 | #102 | 보고서 「채점」 → 네 항목 점수·근거, 한 항목 수정 시 이력 | 후속: 가짜 채점기로 |
 | #102 | 실제 Anthropic 채점기가 같은 모양인지, 모델 이름 | 남김: 실제 공급사 키 |
@@ -92,4 +94,4 @@ release 뒤 스모크로 두지 않은 까닭: 목적이 병합 전에 잡는 �
 | #144 | 시나리오의 제출 이력 두 줄 | 후속 |
 | #144 | 이력 한 줄 → 검사별 결과·피드백 | 후속 |
 
-셈: 50항목 중 옮김 10(일부 포함), 남김 12, 후속 28(#103 은 후속으로 셈). 새로 더한 회귀: #126·#124·#125.
+셈: 50항목 중 옮김 11(일부 포함), 남김 12, 후속 27(#103 은 후속으로 셈). 새로 더한 회귀: #126·#124·#125.
