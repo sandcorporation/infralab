@@ -130,15 +130,19 @@ jobs:
     env:
       IMAGE_REPO: ghcr.io/sandcorporation/${{ matrix.name }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # GHCR 은 태그를 push 한 직후 잠깐 not found 를 돌려줄 수 있다(#145) — inspect 만 재시도한다.
       - name: amd64·arm64 묶기
         env:
           SHA: ${{ github.sha }}
         run: |
           docker buildx imagetools create --tag "$IMAGE_REPO:$SHA" "$IMAGE_REPO:$SHA-amd64" "$IMAGE_REPO:$SHA-arm64"
-          docker buildx imagetools inspect "$IMAGE_REPO:$SHA"
+          scripts/retry.sh docker buildx imagetools inspect "$IMAGE_REPO:$SHA"
