@@ -49,9 +49,8 @@ release() {
   bash scripts/check_image_pins_test.sh
   bash scripts/check_workstation_env_test.sh
   bash scripts/retry_test.sh
-  # 병합 장치(#164): CI 초록일 때만 병합하는 스크립트와 직접 병합을 막는 Claude Code 훅.
+  # 병합 장치(#164): CI 초록일 때만 병합하는 스크립트(로컬 작업자·공장 공용, #172).
   bash scripts/pr-merge_test.sh
-  bash .claude/hooks/block-direct-merge_test.sh
 }
 
 case "${1:-}" in

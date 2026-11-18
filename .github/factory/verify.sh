@@ -41,22 +41,27 @@
 #   verify.sh next-verify [PR]           when no other Verify run is going, dispatch Verify for the
 #                                        oldest open PR still waiting for one (not [PR]); the guard
 #                                        against a lost pending run.
-#   verify.sh pass <N> <PR> [report]     squash-merge the PR (retrying while GitHub computes
-#                                        mergeability), delete its branch and its job-less bot
+#   verify.sh pass <N> <PR> [report]     squash-merge the PR as the factory App once ci.yml's
+#                                        required jobs are green (merge-pr.sh → scripts/pr-merge.sh,
+#                                        #172), delete its branch and its job-less bot
 #                                        ci.yml runs (prune-runs.sh), comment the report on the
 #                                        PR, stack its `사람 확인` items on the spec's check issue
-#                                        (human-check.sh stack), close the ticket, dispatch release.yml on main
-#                                        and then the next ticket (dispatch-next.sh). Exits 1 when the
-#                                        PR could not be merged (nothing else is done then).
+#                                        (human-check.sh stack), close the ticket and dispatch the
+#                                        next ticket (dispatch-next.sh); release.yml runs on the
+#                                        merge's push. Exits 1 when the PR could not be merged —
+#                                        red or unfinished checks included (nothing else is done then).
 #
-# Environment: REPO (or GITHUB_REPOSITORY), GH_TOKEN; RUN_URL (link in comments, optional);
+# Environment: REPO (or GITHUB_REPOSITORY), GH_TOKEN; FACTORY_APP_TOKEN (the merge, merge-pr.sh);
+# RUN_URL (link in comments, optional);
 # FACTORY_DISPATCH_NEXT (command run instead of dispatch-next.sh, tests); FACTORY_PRUNE_RUNS (command
-# run with the branch instead of prune-runs.sh, tests); FACTORY_MERGE_WAIT
-# (seconds between merge attempts, default 15). Needs bash, git, gh and jq.
+# run with the branch instead of prune-runs.sh, tests); FACTORY_PR_MERGE and FACTORY_MERGE_WAIT
+# (merge-pr.sh). Needs bash, git, gh and jq.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=spec-tests.sh
 . "$here/spec-tests.sh"
+# shellcheck source=merge-pr.sh
+. "$here/merge-pr.sh"
 REPO=${REPO:-${GITHUB_REPOSITORY:-}}
 # Every send-back comment starts with this; `kind=` follows since  (none: acceptance).
 SENDBACK='<!-- factory-sendback'
@@ -152,12 +157,6 @@ mech() {
 comment() { gh api "repos/$REPO/issues/$1/comments" -f "body=$2" >/dev/null; }
 add_label() { gh api "repos/$REPO/issues/$1/labels" -f "labels[]=$2" >/dev/null; }
 remove_label() { gh api -X DELETE "repos/$REPO/issues/$1/labels/$2" >/dev/null 2>&1 || true; }
-dispatch() { # dispatch <workflow file> [<input>=<value> ...]
-  local wf=$1; shift
-  local args=() kv
-  for kv in "$@"; do args+=(-f "inputs[${kv%%=*}]=${kv#*=}"); done
-  gh api -X POST "repos/$REPO/actions/workflows/$wf/dispatches" -f ref=main "${args[@]}" >/dev/null
-}
 # Delete the job-less ci.yml pull_request runs GitHub left on a factory PR branch (prune-runs.sh).
 prune_runs() {
   [ -n "$1" ] || return 0
@@ -267,16 +266,10 @@ conflict_pr() {
 # --- pass ----------------------------------------------------------------------------------------
 
 pass() {
-  local n=$1 pr=$2 report=${3:-} branch attempt merged=false
+  local n=$1 pr=$2 report=${3:-} branch
   branch=$(pr_branch "$pr")
-  for attempt in 1 2 3 4; do
-    if gh api -X PUT "repos/$REPO/pulls/$pr/merge" -f merge_method=squash >/dev/null; then
-      merged=true; break
-    fi
-    echo "::notice::merge attempt $attempt of PR #$pr failed; GitHub may still be computing mergeability"
-    sleep "${FACTORY_MERGE_WAIT:-15}"
-  done
-  if ! $merged; then
+  # scripts/pr-merge.sh as the factory App: waits for ci.yml's required jobs to be green (#172).
+  if ! factory_merge "$pr"; then
     echo "::error::could not merge PR #$pr"
     return 1
   fi
@@ -290,13 +283,13 @@ pass() {
 
 $(cat "$report")" >/dev/null || true
   fi
-  # A GITHUB_TOKEN merge does not reliably close the ticket via `Closes #N`, and fires no
-  # `issues: closed` or push event: close it, run main's release (check + image → production) and move the chain on here.
+  # The App's merge is a push to main: release.yml (check + image → production) runs on it, so no
+  # dispatch here (#172). GitHub closes the ticket through `Closes #N`; close it here too in case the
+  # body lost that line, and move the chain on (the frontier job skips closes by the App).
   comment "$n" "Merged in PR #$pr$(run_link)" || true
   gh api -X PATCH "repos/$REPO/issues/$n" -f state=closed -f state_reason=completed >/dev/null \
     || echo "::warning::could not close #$n"
   remove_label "$n" in-progress
-  dispatch release.yml || echo "::warning::could not dispatch release.yml"
   next_ticket
 }
 

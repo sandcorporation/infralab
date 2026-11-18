@@ -44,6 +44,9 @@ permissions:
   issues: write
   actions: write
   id-token: write
+  # scripts/pr-merge.sh reads the PR's checks before the merge (#172)
+  checks: read
+  statuses: read
 
 env:
   # dispatch-next.sh (starting the chain with the approved tickets as --candidates) and ledger.sh read
@@ -129,8 +132,8 @@ jobs:
           PR: ${{ steps.state.outputs.pr }}
           MODE: ${{ inputs.mode }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "sandcorp-factory[bot]"
+          git config user.email "358343752+sandcorp-factory[bot]@users.noreply.github.com"
           git fetch origin "$BASE" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
           git switch -C "$BRANCH" "origin/$BRANCH"
           mkdir -p .factory
@@ -292,19 +295,45 @@ jobs:
 
       # Odin's fixes and the merge of main land on the factory branch with a plain push: main
       # was merged in above, so the push fast-forwards. A branch that moved meanwhile refuses it.
+      # The factory GitHub App's token (#172), only to push branches, open and merge PRs: those then
+      # wake ci.yml, which GITHUB_TOKEN's do not. Labels, comments and dispatches stay GITHUB_TOKEN:
+      # an App label would wake the issues-triggered factory runs again. No `workflows` permission, so
+      # the App cannot push workflow files either (workflow-guard.sh).
+      - name: Factory App token
+        id: app
+        if: steps.verdict.outputs.verdict == 'go' && (steps.check_first.outcome == 'success' || steps.check.outcome == 'success')
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Push Odin's fixes
         id: push
         if: >-
           steps.verdict.outputs.verdict == 'go' &&
           (steps.check_first.outcome == 'success' || steps.check.outcome == 'success')
         env:
+          FACTORY_APP_TOKEN: ${{ steps.app.outputs.token }}
           BRANCH: ${{ steps.state.outputs.branch }}
         run: |
           git add -A
           if ! git diff --cached --quiet; then
             git commit -q -m "스펙: Odin 검토 고침 (#$SPEC)"
           fi
-          git push origin "HEAD:refs/heads/$BRANCH"
+          bash .github/factory/app-push.sh origin "HEAD:refs/heads/$BRANCH"
+
+      # A new App token for the merge (#172): one lives an hour, and the merge waits for ci.yml.
+      - name: Factory App token (merge)
+        id: app_merge
+        if: always() && steps.push.outcome == 'success'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Merge, or ask, or hand to a human
         if: always() && steps.pr.outputs.go != ''
@@ -318,6 +347,8 @@ jobs:
           FIRST: ${{ steps.check_first.outcome }}
           SECOND: ${{ steps.check.outcome }}
           PUSH: ${{ steps.push.outcome }}
+          FACTORY_APP_TOKEN: ${{ steps.app_merge.outputs.token }}
+          PR_MERGE_TOTAL_WAIT: "1800"
         run: |
           if [ "$CANCELLED" = true ]; then
             echo "::warning::cancelled; spec PR #$PR stays open"
@@ -348,8 +379,19 @@ jobs:
             } > "$reason"
           elif [ "$PUSH" != success ]; then
             echo "### Odin의 고침을 push하지 못했다(그 사이 브랜치가 바뀌었을 수 있다)" > "$reason"
-          elif bash .github/factory/odin.sh pass "$SPEC" "$PR" "$report"; then
+          elif bash .github/factory/odin.sh pass "$SPEC" "$PR" "$report" 2>&1 | tee .factory/merge.log; rc=${PIPESTATUS[0]}; [ "$rc" -eq 0 ]; then
             exit 0
+          elif [ "$rc" -eq 2 ]; then
+            # scripts/pr-merge.sh: ci.yml on the spec PR is red, unfinished or unregistered (#172).
+            {
+              echo "### 스펙 PR 의 ci 검사가 초록이 아니라 병합하지 않았다"
+              echo
+              echo '```'
+              grep -E 'pr-merge|::error::|FAILURE|ERROR|TIMED_OUT|CANCELLED' .factory/merge.log 2>/dev/null | tail -n 30
+              echo '```'
+              echo
+              cat "$report" 2>/dev/null
+            } > "$reason"
           else
             # The checks passed but GitHub refused the merge: main most likely moved again.
             # Find what conflicts now and let a new run (mode=conflict) resolve it, within the limit.

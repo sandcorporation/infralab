@@ -20,7 +20,7 @@ g() { git -c user.name=t -c user.email=t@example.invalid -c core.autocrlf=false 
 setup() {
   current=$1
   tmp=$(mktemp -d "$root/t.XXXXXX")
-  export FAKE_GH="$tmp/gh" GITHUB_OUTPUT="$tmp/output" FACTORY_ROOT="$tmp/repo"
+  export FAKE_GH="$tmp/gh" GITHUB_OUTPUT="$tmp/output" FACTORY_ROOT="$tmp/repo" FACTORY_APP_TOKEN=app-token
   mkdir -p "$FAKE_GH"
   : > "$GITHUB_OUTPUT"
   # A checkout of main with one merged acceptance test (ticket #301) and a bare origin.

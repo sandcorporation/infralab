@@ -103,6 +103,22 @@ jobs:
       # A question (needs-decision) ends here with no PR. Otherwise commit the acceptance tests on
       # factory/spec-<S>, open the spec PR (label spec-pr) and dispatch Odin, who reviews it, merges
       # it and labels the tickets ready-for-agent. Decomposed mode takes ready-for-agent off first.
+      # The factory GitHub App's token (#172), only to push branches, open and merge PRs: those then
+      # wake ci.yml, which GITHUB_TOKEN's do not. Labels, comments and dispatches stay GITHUB_TOKEN:
+      # an App label would wake the issues-triggered factory runs again. No `workflows` permission, so
+      # the App cannot push workflow files either (workflow-guard.sh).
+      - name: Factory App token
+        id: app
+        if: steps.state.outputs.mode == 'new' || steps.state.outputs.mode == 'decomposed'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Open the spec PR and hand it to Odin
         if: steps.state.outputs.mode == 'new' || steps.state.outputs.mode == 'decomposed'
+        env:
+          FACTORY_APP_TOKEN: ${{ steps.app.outputs.token }}
         run: bash .github/factory/decompose.sh finish "$SPEC" "${{ steps.state.outputs.mode }}"
