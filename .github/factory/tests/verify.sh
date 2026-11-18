@@ -591,6 +591,17 @@ bash "$verify" pass 7 40 > /dev/null
 eq "exit" 0 "$?"
 eq "nothing to check, no check issue" "" "$(check_numbers)"
 
+# a parent without the `spec` label (an umbrella such as #45) gets no check issue: the gate only
+# holds labelled specs, so its items would hold nothing and nobody would read them (#173, #189)
+hc_setup human-check-umbrella "$HC_BODY"
+issue 62 ""
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+eq "no check issue for an umbrella" "" "$(check_numbers)"
+lacks "the umbrella is not marked" "factory-human-check-issue" "$(cat "$FAKE_GH/comments-62.json" 2>/dev/null)"
+eq "ticket closed" closed "$(state_of issue-7)"
+eq "umbrella open" open "$(state_of issue-62)"
+
 # #181's body as the Implementer opened it (#183): `- 없음` and the factory tail after it are no items
 hc_setup human-check-pr181-tail '## 판단
 - 스텁 자리를 지움.
