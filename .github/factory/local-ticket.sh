@@ -4,7 +4,10 @@
 #
 #   local-ticket.sh <issue>
 #
-# A ticket is local when it carries the `local` label or its title or body mentions `.github/workflows`.
+# A ticket is local when it carries the `local` label or its body carries the marker
+# `<!-- factory-touches-workflows -->` (Decompose writes it into a ticket that will change workflow files) or a
+# checked template line `- [x] workflow 파일을 바꾼다` (a hand-written ticket). Merely mentioning
+# `.github/workflows` ("건드리지 않는다") does not count (#66); `workflow-guard.sh` still stops a push.
 # A local ticket that is not yet marked gets `ready-for-human` and `local` (adding a label creates it when
 # missing), loses `ready-for-agent`, and gets one comment starting with `<!-- factory-local -->`.
 # Writes local=true|false to $GITHUB_OUTPUT (stdout when unset); exits 0 unless it cannot read the issue.
@@ -21,7 +24,7 @@ output() {
 }
 
 read -r mentions labels < <(gh api "repos/$REPO/issues/$n" --jq '[
-  ((.title // "") + "\n" + (.body // "") | contains(".github/workflows") | tostring),
+  ((.body // "") | test("<!--\\s*factory-touches-workflows\\s*-->|(^|\\n)\\s*[-*]\\s*\\[[xX]\\]\\s*workflow 파일을 바꾼") | tostring),
   ([.labels[].name] | join(","))] | @tsv' | tr -d '\r') \
   || { echo "::error::local-ticket: could not read #$n"; exit 1; }
 labels=",${labels:-},"

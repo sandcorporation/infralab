@@ -7,6 +7,8 @@ labels: needs-triage
 ## 무엇
 
 
+- [ ] workflow 파일을 바꾼다 (`.github/workflows/` 를 고쳐야 하면 체크 — 공장 밖, 로컬 작업자 몫)
+
 ## 받아들임 기준
 
 - [ ] 

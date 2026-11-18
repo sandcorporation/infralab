@@ -32,8 +32,9 @@ labels() { jq -r '[.labels[].name] | sort | join(",")' "$FAKE_GH/issue-$1.json";
 res() { sed -n 's/^local=//p' "$GITHUB_OUTPUT" | tail -n 1; }
 ncomments() { [ -f "$FAKE_GH/comments-$1.json" ] && jq length "$FAKE_GH/comments-$1.json" || echo 0; }
 
-setup "a ticket that names .github/workflows becomes ready-for-human + local"
-issue 80 ready-for-agent,model:sonnet "CI 단계 추가" "ci.yml 대신 .github/workflows/factory-x.yml 을 고친다"
+setup "a ticket with the marker becomes ready-for-human + local"
+issue 80 ready-for-agent,model:sonnet "CI 단계 추가" "ci.yml 대신 factory-x.yml 을 고친다
+<!-- factory-touches-workflows -->"
 bash "$script" 80 > /dev/null 2>&1; eq "exit" 0 $?
 eq "local" true "$(res)"
 eq "labels" "local,model:sonnet,ready-for-human" "$(labels 80)"
@@ -50,10 +51,23 @@ eq "local" false "$(res)"
 eq "labels" "ready-for-agent" "$(labels 81)"
 eq "no comment" 0 "$(ncomments 81)"
 
-setup "the title counts too, and the local label alone is enough"
-issue 82 ready-for-agent ".github/workflows 정리" "x"
-bash "$script" 82 > /dev/null 2>&1
-eq "title" true "$(res)"
+setup "a body that only says it leaves .github/workflows alone is not local"
+issue 84 ready-for-agent "로그인" "workflow 디렉터리(.github/workflows/)는 건드리지 않는다"
+bash "$script" 84 > /dev/null 2>&1
+eq "local" false "$(res)"
+eq "labels" "ready-for-agent" "$(labels 84)"
+eq "no comment" 0 "$(ncomments 84)"
+
+setup "a checked template line is local, an unchecked one is not; the local label alone is enough"
+issue 85 ready-for-agent "x" "## 무엇
+
+- [x] workflow 파일을 바꾼다 (체크하면 공장 밖)"
+bash "$script" 85 > /dev/null 2>&1
+eq "checked" true "$(res)"
+issue 86 ready-for-agent "x" "- [ ] workflow 파일을 바꾼다 (체크하면 공장 밖)"
+: > "$GITHUB_OUTPUT"
+bash "$script" 86 > /dev/null 2>&1
+eq "unchecked" false "$(res)"
 issue 83 local,ready-for-human "x" "y"
 : > "$GITHUB_OUTPUT"
 bash "$script" 83 > /dev/null 2>&1
