@@ -1,0 +1,15 @@
+id: e2e-untouched
+title: e2e 미제출
+description: |
+  e2e 시험 전용 시나리오. 연습 목록에서 「제출이 없는 시나리오」 행을 보이려고 둔다 — 시험은 이것을 제출하지 않는다.
+
+requires:
+  floci: false
+  kind: null
+
+checks:
+  - id: always-ok
+    name: 항상 통과한다
+    hint: 할 일이 없다
+    command: "true"
+    expect: exit_zero

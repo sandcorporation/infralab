@@ -1,7 +1,7 @@
 // 화면 흐름 손잡이 — 강사가 시험 회차를 만들고 응시 링크를 내는 길, 응시자가 링크로 들어와 시작하는 길.
 // 버튼·라벨은 화면 글자 그대로 찾는다(바뀌면 시험이 깨져 알려 준다).
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { agentTokenFor, baseOrigin, devLogin, makeInstructor, startAgent, stopAgent, uniqueId } from "./stack";
+import { agentTokenFor, baseOrigin, devLogin, makeInstructor, startAgent, stopAgent, uniqueId, writeInWorkstation } from "./stack";
 
 export const SCENARIO_ID = "e2e-prepare";
 export const SCENARIO_TITLE = "e2e 환경 준비";
@@ -164,4 +164,88 @@ export async function newInstructor(browser: Browser): Promise<Page> {
   await devLogin(page, uid, "강사");
   makeInstructor(uid);
   return page;
+}
+
+// ---- 연습 피드백·내 기록(#143·#144) ----
+
+/** 학생이 AI 도구로 남긴 Claude Code 세션 기록을 workstation 홈에 심는다. 환경 준비 뒤(표시 시각 이후)에 심어야 읽힌다. */
+export async function plantClaudeSession(turns: { role: "user" | "assistant"; text: string }[]): Promise<void> {
+  // 에이전트는 준비 표시보다 「나중에 바뀐」 파일만 읽는다(find -newer, 초 단위) — 표시와 같은 초에 심으면 빠진다.
+  await new Promise((r) => setTimeout(r, 1_200));
+  const base = Date.now();
+  const lines = turns.map((t, i) => {
+    const timestamp = new Date(base + i).toISOString();
+    const content = t.role === "user" ? t.text : [{ type: "text", text: t.text }];
+    return JSON.stringify({ type: t.role, timestamp, message: { role: t.role, content } });
+  });
+  writeInWorkstation(`/root/.claude/projects/e2e/${uniqueId("session")}.jsonl`, lines.join("\n") + "\n");
+}
+
+/** 가짜 채점기가 네 항목 모두 점수를 주는 대화(요청마다 단서가 든 문장). */
+export const GOOD_TURNS: { role: "user" | "assistant"; text: string }[] = [
+  { role: "user", text: "먼저 `aws s3 ls` 로 버킷 이름을 확인해 줘. rm -rf 는 쓰지 마." },
+  { role: "assistant", text: "그다음 결과를 검증하겠습니다." },
+];
+
+/** 연습 시나리오 화면에서 에이전트를 올리고(연습 묶음 토큰) 터미널이 연결될 때까지. */
+export async function openPracticeScenario(page: Page, title = SCENARIO_TITLE): Promise<number> {
+  await startPractice(page);
+  const row = page.getByRole("row").filter({ has: page.getByRole("link", { name: title }) });
+  const cohortId = Number(/cohorts\/(\d+)/.exec((await row.getByRole("link").getAttribute("href"))!)![1]);
+  await startAgent(page.request, await agentTokenFor(page, cohortId));
+  await page.reload();
+  await page.getByRole("link", { name: title }).click();
+  await page.waitForURL(/\/cohorts\/\d+\/scenarios\/[^/]+$/);
+  await expect(page.locator(".terminal").getByText("연결됨", { exact: true })).toBeVisible();
+  return cohortId;
+}
+
+/** 환경 준비를 확정하고 「준비됨」이 뜰 때까지(응시 아닌 화면용). */
+export async function prepareOnPage(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "환경 준비", exact: true }).click();
+  await page.getByRole("button", { name: "환경 준비 확정" }).click();
+  await expect(page.locator(".sc-badge--success", { hasText: "준비됨" })).toBeVisible({ timeout: 60_000 });
+}
+
+/** 「AI 대화 함께 제출」을 켜거나 끄고 「채점」 — 서버에 제출이 올라올 때까지. 올라온 제출을 준다. */
+export async function gradeAndSubmit(page: Page, opts: { attach: boolean }): Promise<{ id: number; has_transcript: boolean }> {
+  await page.getByRole("tab", { name: /^검사/ }).click();
+  const box = page.getByRole("checkbox", { name: "AI 대화 함께 제출" });
+  if (opts.attach) await box.check();
+  else await box.uncheck();
+  const posted = page.waitForResponse((r) => /\/submissions$/.test(r.url()) && r.request().method() === "POST", { timeout: 60_000 });
+  await page.getByRole("button", { name: "채점", exact: true }).click();
+  const res = await posted;
+  expect(res.status(), await res.text()).toBe(201);
+  const sub = (await res.json()) as { id: number; has_transcript: boolean };
+  await expect(page.getByText(/^제출됨/)).toBeVisible();
+  return sub;
+}
+
+/** 에이전트를 거치지 않고 API 로 제출 하나(대화 포함)를 올린다 — 하루 한도를 채우는 데 쓴다. */
+export async function apiSubmit(page: Page, cohortId: number, scenarioId: string, checkId: string): Promise<number> {
+  const at = new Date().toISOString();
+  const res = await page.request.post(`/api/cohorts/${cohortId}/scenarios/${scenarioId}/submissions`, {
+    data: {
+      agent_version: "e2e",
+      results: [{ id: checkId, name: checkId, hint: "", pass: true, output: "ready", truncated: false, exit_code: 0, error: "" }],
+      ai_transcript: [{ tool: "claude", since: at, truncated: false, entries: GOOD_TURNS.map((t) => ({ ...t, at })) }],
+    },
+    headers: { Origin: baseOrigin() },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  return ((await res.json()) as { id: number }).id;
+}
+
+/** 피드백을 API 로 받는다(횟수를 하나 쓴다). */
+export async function apiFeedback(page: Page, submissionId: number): Promise<void> {
+  const res = await page.request.post(`/api/practice/submissions/${submissionId}/feedback`, { headers: { Origin: baseOrigin() } });
+  expect(res.status(), await res.text()).toBe(200);
+}
+
+/** 오늘 남은 피드백 횟수. */
+export async function feedbackRemaining(page: Page): Promise<number> {
+  const res = await page.request.get("/api/practice/feedback-quota");
+  expect(res.status(), await res.text()).toBe(200);
+  return ((await res.json()) as { remaining: number }).remaining;
 }
