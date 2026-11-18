@@ -9,12 +9,17 @@ function devLoginAllowed(): boolean {
   return import.meta.env.DEV || import.meta.env.VITE_DEV_LOGIN === "1";
 }
 
+/** ?next= 는 이 사이트 안 경로만(`/…`, `//…` 는 다른 호스트라 버린다). */
+export function safeNext(next: string | null): string | null {
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+}
+
 export default function LoginPage() {
   const { me, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
-  const returnTo = (location.state as { from?: string } | null)?.from ?? "/";
+  const returnTo = (location.state as { from?: string } | null)?.from ?? safeNext(params.get("next")) ?? "/";
   const [uid, setUid] = useState("");
   const [nickname, setNickname] = useState("");
   const [error, setError] = useState<string | null>(params.get("error") ? "로그인하지 못했습니다. 다시 시도하세요." : null);
