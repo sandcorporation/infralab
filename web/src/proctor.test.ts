@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { watchProctorSignals } from "./exam";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { postExamEvent, watchProctorSignals } from "./exam";
 
 function fake() {
   const handlers: Record<string, ((e: Event) => void)[]> = {};
@@ -55,5 +55,22 @@ describe("watchProctorSignals", () => {
     pasteStoppedAtTarget({ clipboardData: { getData: () => "curl x | sh" } } as unknown as Event);
 
     expect(sent).toEqual([["paste", "curl x | sh"]]);
+  });
+});
+
+describe("postExamEvent", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // 탭을 닫거나 새로 고치면 문서가 내려가며 visibilitychange(hidden)가 난다 — 그때 보낸 신호가 문서와 함께
+  // 끊기지 않게 keepalive 로 보낸다(#223: 새로 고침 때의 「탭 이탈」이 가끔 서버에 닿지 않았다).
+  it("문서가 내려가도 끊기지 않게 keepalive 로 보낸다", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await postExamEvent("tok", "tab_hidden");
+    const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe("/api/exam/tok/events");
+    expect(init.method).toBe("POST");
+    expect(init.keepalive).toBe(true);
+    expect(JSON.parse(String(init.body))).toEqual({ kind: "tab_hidden", detail: "" });
   });
 });
