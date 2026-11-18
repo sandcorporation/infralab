@@ -1,0 +1,8 @@
+{"Action":"start","Package":"infralab/agent"}
+{"Action":"run","Package":"infralab/agent","Test":"TestZzPass"}
+{"Action":"output","Package":"infralab/agent","Test":"TestZzPass","Output":"=== RUN   TestZzPass\n"}
+{"Action":"output","Package":"infralab/agent","Test":"TestZzPass","Output":"--- PASS: TestZzPass (0.00s)\n"}
+{"Action":"pass","Package":"infralab/agent","Test":"TestZzPass","Elapsed":0}
+{"Action":"output","Package":"infralab/agent","Output":"PASS\n"}
+{"Action":"output","Package":"infralab/agent","Output":"ok  \tinfralab/agent\t(cached)\n"}
+{"Action":"pass","Package":"infralab/agent","Elapsed":0}

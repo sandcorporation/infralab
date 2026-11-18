@@ -269,6 +269,8 @@ jobs:
         env:
           MODE: ${{ steps.guard.outputs.mode }}
         run: |
+          # Comments the agent leaves from here on are this run's (record-failure.sh nocommit, #212).
+          echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           git config user.name "sandcorp-factory[bot]"
           git config user.email "358343752+sandcorp-factory[bot]@users.noreply.github.com"
           if [ "$MODE" = conflict ]; then
@@ -399,9 +401,11 @@ jobs:
         if: always() && steps.guard.outputs.go == 'true' && steps.rebase.outputs.conflict == 'true'
         run: bash .github/factory/ledger.sh record implementer-conflicts "$N"
 
-      # No commits means nothing to check: fail here instead of after the checks. Counts as an
-      # infrastructure failure.
+      # No commits means nothing to check: fail here instead of after the checks. An agent that stopped
+      # with a comment on the ticket (implementer.md §4: a wrong acceptance test, a missing decision) goes
+      # to a person at once; otherwise it counts as an infrastructure failure (record-failure.sh nocommit).
       - name: Require commits
+        id: commits
         if: steps.guard.outputs.go == 'true'
         run: |
           if [ "$(git rev-list --count origin/main..HEAD)" -eq 0 ]; then
@@ -544,13 +548,16 @@ jobs:
       # Any other failure (runner, network, installer, agent action crash) has nothing to do
       # with the code: retry on the same model, and hand the ticket to the managing session only
       # after three of them. A run whose agent left the `<!-- factory-implementer-blocked -->`
-      # comment goes to a person at once. Only failures after the last `<!-- factory-reset -->`
+      # comment, or made no commit and commented on the ticket during the run (#212: #194 counted a
+      # wrong acceptance test as three infrastructure failures), goes to a person at once. Only failures after the last `<!-- factory-reset -->`
       # comment count. record-failure.sh does it all and hands over through hand-to-human.sh, whose
       # `ready-for-human` the mail bridge sends (#192).
       - name: Record failure
         if: failure() && steps.guard.outputs.go == 'true'
         run: |
-          if [ "${{ steps.checks.outcome }}" = failure ]; then what=code; else what=infra; fi
+          if [ "${{ steps.checks.outcome }}" = failure ]; then what=code
+          elif [ "${{ steps.commits.outcome }}" = failure ]; then what=nocommit
+          else what=infra; fi
           bash .github/factory/record-failure.sh "$N" "$what" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       # Refill the tracks: this run's track is free once it ends (dispatch-next.sh does not

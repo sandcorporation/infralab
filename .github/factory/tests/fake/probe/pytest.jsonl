@@ -1,0 +1,8 @@
+{"test": "tests/test_spec_zz_import.py", "when": "collect", "outcome": "failed", "type": "CollectError", "message": "ModuleNotFoundError: No module named 'nowhere'"}
+{"test": "tests/test_spec_zz_probe.py::test_assert", "when": "call", "outcome": "failed", "type": "AssertionError", "message": "assert 1 == 2"}
+{"test": "tests/test_spec_zz_probe.py::test_stub", "when": "call", "outcome": "failed", "type": "NotImplementedError", "message": "#9"}
+{"test": "tests/test_spec_zz_probe.py::test_yaml", "when": "call", "outcome": "failed", "type": "ConstructorError", "message": "could not determine a constructor for the tag '!reset'\n  in \"<unicode string>\", line 1, column 4:\n    a: !reset []\n       ^"}
+{"test": "tests/test_spec_zz_probe.py::test_pass", "when": "call", "outcome": "passed", "type": "", "message": ""}
+{"test": "tests/test_spec_zz_probe.py::test_fail_call", "when": "call", "outcome": "failed", "type": "Failed", "message": "nope"}
+{"test": "tests/test_spec_zz_probe.py::test_other_not_implemented", "when": "call", "outcome": "failed", "type": "NotImplementedError", "message": "later"}
+{"test": "tests/test_spec_zz_probe.py::test_fixture", "when": "setup", "outcome": "failed", "type": "KeyError", "message": "'x'"}

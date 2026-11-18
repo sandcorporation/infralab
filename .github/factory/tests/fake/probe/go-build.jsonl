@@ -1,0 +1,6 @@
+{"ImportPath":"infralab/agent [infralab/agent.test]","Action":"build-output","Output":"# infralab/agent [infralab/agent.test]\n"}
+{"ImportPath":"infralab/agent [infralab/agent.test]","Action":"build-output","Output":"./spec_zz_b_test.go:6:2: undefined: undefinedThing\n"}
+{"ImportPath":"infralab/agent [infralab/agent.test]","Action":"build-fail"}
+{"Action":"start","Package":"infralab/agent"}
+{"Action":"output","Package":"infralab/agent","Output":"FAIL\tinfralab/agent [build failed]\n"}
+{"Action":"fail","Package":"infralab/agent","Elapsed":0,"FailedBuild":"infralab/agent [infralab/agent.test]"}

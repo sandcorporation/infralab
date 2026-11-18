@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Fake vitest runner of acceptance-probe.sh (PROBE_VITEST): writes $FAKE_VT (default vitest.json, a real
+# vitest JSON report with the web/ path as @ROOT@) to --outputFile, and keeps what the files it was given
+# held in $FAKE_SEEN/vitest.files.
+here=$(cd "$(dirname "$0")" && pwd)
+out=
+for a in "$@"; do
+  case "$a" in --outputFile=*) out=${a#--outputFile=} ;; *) [ -f "$a" ] && cat "$a" ;; esac
+done > "$FAKE_SEEN/vitest.files"
+sed "s#@ROOT@#$PWD/#g" "${FAKE_VT:-$here/vitest.json}" > "$out"
+exit 1

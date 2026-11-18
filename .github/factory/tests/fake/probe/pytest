@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Fake pytest runner of acceptance-probe.sh (PROBE_PYTEST): copies $FAKE_PY (default pytest.jsonl, rows
+# the real probe_pytest.py plugin wrote) to $PROBE_OUT and keeps its arguments and what the files it was
+# given held, in $FAKE_SEEN/pytest.args and $FAKE_SEEN/pytest.files.
+here=$(cd "$(dirname "$0")" && pwd)
+printf '%s\n' "$*" > "$FAKE_SEEN/pytest.args"
+for a in "$@"; do [ -f "$a" ] && cat "$a"; done > "$FAKE_SEEN/pytest.files"
+[ -n "${FAKE_PY_NONE:-}" ] && { echo "ImportError: probe_pytest" >&2; exit 4; }
+cat "${FAKE_PY:-$here/pytest.jsonl}" >> "$PROBE_OUT"
+exit 1

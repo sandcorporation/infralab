@@ -249,14 +249,18 @@ jobs:
 
       # The build check: the acceptance tests are switched off, so `scripts/ci.sh all` only imports and
       # compiles them (and runs every other test, which also covers a resolved conflict).
+      # Then the acceptance probe (#212) switches this PR's acceptance tests on once and fails on a test
+      # that is red for an error of its own (an import error, a yaml ConstructorError, a panic) instead
+      # of an assertion or its ticket's stub: no implementation could pass it (#194).
       - name: Checks (first)
         id: check_first
         if: steps.verdict.outputs.verdict == 'go'
         continue-on-error: true
         run: |
           set -o pipefail
-          echo "scripts/ci.sh all" > .factory/check-command
-          scripts/ci.sh all 2>&1 | tee .factory/check.log
+          echo "rc=0; scripts/ci.sh all || rc=1; bash .github/factory/acceptance-probe.sh origin/$BASE || rc=1; exit \$rc" \
+            > .factory/check-command
+          bash .factory/check-command 2>&1 | tee .factory/check.log
 
       - name: Fix the failed checks
         if: steps.verdict.outputs.verdict == 'go' && steps.check_first.outcome == 'failure'
@@ -271,8 +275,9 @@ jobs:
             (branch ${{ steps.state.outputs.branch }}, checked out). You reviewed and fixed it (and, if
             .factory/conflict-files exists, merged ${{ env.BASE }} in and resolved its conflicts). The workflow then ran
             the checks in .factory/check-command, and they failed.
-            Their output is in .factory/check.log (search it for "FAILED", "Error", "error" and "ci.sh:"
-            instead of reading it whole). Follow .github/factory/odin.md, section "Make it build".
+            Their output is in .factory/check.log (search it for "FAILED", "Error", "error", "ci.sh:" and
+            "acceptance-probe: error" instead of reading it whole). Follow .github/factory/odin.md, sections
+            "Make it build" and "Make the tests fail for the right reason".
             Fix the cause (format Go with `gofmt -w`; fix the test files, the `#<ticket>` stubs or a conflict you
             resolved wrongly; never weaken what a test asserts and never drop ${{ env.BASE }}'s changes), check with the
             failing command, and add what you fixed to .factory/odin-report.md.
@@ -291,7 +296,7 @@ jobs:
         if: steps.verdict.outputs.verdict == 'go' && steps.check_first.outcome == 'failure'
         run: |
           set -o pipefail
-          scripts/ci.sh all 2>&1 | tee .factory/check.log
+          bash .factory/check-command 2>&1 | tee .factory/check.log
 
       # Odin's fixes and the merge of main land on the factory branch with a plain push: main
       # was merged in above, so the push fast-forwards. A branch that moved meanwhile refuses it.
@@ -371,7 +376,8 @@ jobs:
               echo "### 고칠 기회를 한 번 준 뒤에도 검사 실패: \`$(cat .factory/check-command 2>/dev/null)\`"
               echo
               echo '```'
-              grep -E 'FAILED|Error|error|ci.sh:' .factory/check.log 2>/dev/null | head -n 60
+              grep -E '^acceptance-probe: [0-9]*.?error' .factory/check.log 2>/dev/null | head -n 30
+              grep -E 'FAILED|Error|error|ci.sh:' .factory/check.log 2>/dev/null | grep -v '^acceptance-probe:' | head -n 60
               echo '```'
               echo
               if [ "$CONFLICT" = true ]; then echo "$BASE와 충돌을 푼 파일:"; echo; files; echo; fi
