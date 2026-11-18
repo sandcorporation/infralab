@@ -321,11 +321,11 @@ def test_access_token_signed_by_an_unknown_key_is_rejected(fake):
 
 @pytest.mark.django_db
 def test_owner_token_without_acct_is_accepted(fake):
-    fake.access_overrides = {"acct": None, "sub": "owner-name"}
-    fake.id_overrides = {"sub": "owner-name"}
-    client, res = _login(fake, sub="owner-name")
+    fake.access_overrides = {"acct": None, "sub": "farrar142"}
+    fake.id_overrides = {"sub": "farrar142"}
+    client, res = _login(fake, sub="farrar142")
     assert res["Location"].endswith("/instructor")
-    assert _me(client).json()["username"] == "sandcorp:owner-name"
+    assert _me(client).json()["username"] == "sandcorp:farrar142"
 
 
 @pytest.mark.django_db

@@ -1,4 +1,4 @@
-"""인증·계정 API — sandcorp-auth 로그인(기밀 클라이언트·PKCE), 세션, 로그아웃, 탈퇴 웹훅, 개발용 로그인."""
+"""인증·계정 API — sandcorp-auth 로그인(기밀 클라이언트·PKCE), 세션, 로그아웃, 탈퇴·합치기 웹훅, 개발용 로그인."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from orgs.services import my_orgs
 
 from . import sandcorp_auth
 from .auth import check_origin, instructor_auth, jwt_auth
+from .merge import merge_users
 from .models import WebhookEvent
 from .schemas import MeOut, OrgOut
 
@@ -141,7 +142,7 @@ def dev_login(request: HttpRequest, payload: DevLoginIn):
 
 @router.post("/auth/webhook", auth=None, include_in_schema=False)
 def auth_webhook(request: HttpRequest):
-    """auth 의 탈퇴 웹훅(W1~W5). 본문은 받은 바이트 그대로 검증한다."""
+    """auth 의 웹훅(W1~W5) — 탈퇴 `user.deleted`, 계정 합치기 `user.merged`. 본문은 받은 바이트 그대로 검증한다."""
 
     secret = settings.INFRALAB_AUTH_WEBHOOK_SECRET
     if not secret:
@@ -155,6 +156,10 @@ def auth_webhook(request: HttpRequest):
         _, fresh = WebhookEvent.objects.get_or_create(id=event_id)
         if fresh and event["type"] == "user.deleted" and isinstance(event.get("sub"), str):
             _forget(str(event["sub"]))
+        elif fresh and event["type"] == "user.merged":
+            from_sub, to_sub = event.get("from_sub"), event.get("to_sub")
+            if isinstance(from_sub, str) and isinstance(to_sub, str) and from_sub and to_sub:
+                merge_users(from_sub, to_sub)
     WebhookEvent.objects.filter(received_at__lt=timezone.now() - WEBHOOK_MEMORY).delete()
     return HttpResponse(status=204)
 
