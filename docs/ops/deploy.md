@@ -61,16 +61,16 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 
 ## 서버 쪽에서 할 일
 
-- [ ] Jenkins 잡: multibranch 또는 파이프라인, 저장소 `sandcorporation/infralab`, 브랜치 지정자 `*/production`, `Jenkinsfile`, GitHub push 웹훅.
-- [ ] 운영 서버의 Jenkins 작업 디렉터리에 `.env`(위 필수 네 개 + 필요한 선택 값). 저장소에 넣지 않는다. **함정**: Jenkins 첫 클론이 작업 디렉터리를 비우므로 `.env` 는 첫 빌드(클론) 뒤에 넣고 다시 빌드한다(먼저 넣으면 지워진다).
-- [ ] 리버스 프록시 호스트 `infralab.sandcorp.co.kr` → web 컨테이너(`HTTP_BIND:HTTP_PORT`). TLS 는 프록시에서 끝내고 `X-Forwarded-Proto` 를 넘긴다.
-- [ ] DB 볼륨(`infralab_db18`, postgres 18) 백업 — 정기 `pg_dump` 또는 볼륨 스냅숏.
-- [ ] sandcorp-auth 에 기밀 클라이언트 등록(auth 조율자): redirect_uri `https://infralab.sandcorp.co.kr/api/auth/callback`, 리소스 `https://infralab.sandcorp.co.kr/api` 와 그 스코프 `infralab`(일반 사용자 허용), 클라이언트의 「일반 사용자 허용」, 웹훅 URL `https://infralab.sandcorp.co.kr/api/auth/webhook`. 나온 client id·secret·웹훅 비밀을 `.env` 에.
-- [ ] GitHub ruleset: `production` 브랜치 강제 push·삭제 금지(승격은 fast-forward 만).
-- [ ] ghcr 패키지 다섯(`infralab-backend`·`-web`·`-proxy`·`-agent`·`-workstation`)의 공개 범위 — 응시자 PC 가 로그인 없이 pull 하려면 agent·workstation 은 공개.
+- [x] Jenkins 잡: multibranch 또는 파이프라인, 저장소 `sandcorporation/infralab`, 브랜치 지정자 `*/production`, `Jenkinsfile`, GitHub push 웹훅.
+- [x] 운영 서버의 Jenkins 작업 디렉터리에 `.env`(위 필수 네 개 + 필요한 선택 값). 저장소에 넣지 않는다. **함정**: Jenkins 첫 클론이 작업 디렉터리를 비우므로 `.env` 는 첫 빌드(클론) 뒤에 넣고 다시 빌드한다(먼저 넣으면 지워진다).
+- [x] 리버스 프록시 호스트 `infralab.sandcorp.co.kr` → web 컨테이너(`HTTP_BIND:HTTP_PORT`). TLS 는 프록시에서 끝내고 `X-Forwarded-Proto` 를 넘긴다.
+- [x] DB 백업: sandcorp-backup 이 매일 04:30 컨테이너 `infralab-db-1` 안에서 `pg_dumpall` 로 뜬다(볼륨 스냅숏이 아니라 덤프라 postgres 판에 묶이지 않는다). 옛 볼륨 `infralab_db`(17, 되돌리기용)는 백업 대상이 아니다 — 백업 경고 1건은 이것이다.
+- [x] sandcorp-auth 에 기밀 클라이언트 등록(auth 조율자): redirect_uri `https://infralab.sandcorp.co.kr/api/auth/callback`, 리소스 `https://infralab.sandcorp.co.kr/api` 와 그 스코프 `infralab`(일반 사용자 허용), 클라이언트의 「일반 사용자 허용」, 웹훅 URL `https://infralab.sandcorp.co.kr/api/auth/webhook`. 나온 client id·secret·웹훅 비밀을 `.env` 에.
+- [x] GitHub ruleset: `production` 브랜치 강제 push·삭제 금지(승격은 fast-forward 만), `main` 필수 검사(#172).
+- [x] ghcr 패키지 다섯(`infralab-backend`·`-web`·`-proxy`·`-agent`·`-workstation`) 공개 — 응시자 PC 가 로그인 없이 agent·workstation 을 pull 한다.
 - [x] 시험 모드 Jenkins 배선(#82): proxy 이미지(`images`·`extraServices`), 문제은행 받기(`extraCheckouts` optional, 자격 `github-farrar142`, `problems.ref`), 공개 주소 `/exam-proxy/`(web nginx).
-- [ ] 시험 모드 서버 몫: `.env` 에 공급사 키 둘·채점 키, `INFRALAB_EXAM_PROXY_URL=https://infralab.sandcorp.co.kr/exam-proxy`. `problems.ref` 에 고정 sha(받기 자격은 infralab 잡이 이미 쓰는 `github-farrar142` — 새 키 없음) — 그 전에는 배포 로그에 「경고: 다른 저장소 받기 건너뜀(optional)」이 남고 숨은 검사만 건너뛴다.
-- [ ] 첫 강사 지정: `docker compose -f compose.prod.yml run --rm backend python manage.py set_instructor sandcorp:<sub>` — 「기본 조직」 owner 로 넣는다. Sandcorp 계정으로 한 번 로그인한 뒤에 한다(그 전에는 사용자가 없다). `sub` 는 `/api/accounts/me` 의 `username` 에서 본다.
+- [x] 시험 모드 서버 몫: `.env` 에 공급사 키 둘·채점 키·`INFRALAB_EXAM_PROXY_SECRET`, `INFRALAB_EXAM_PROXY_URL=https://infralab.sandcorp.co.kr/exam-proxy`. `problems.ref` 는 고정 sha(받기 자격은 infralab 잡이 이미 쓰는 `github-farrar142` — 새 키 없음). `problems.ref` 를 비우면 배포 로그에 「경고: 다른 저장소 받기 건너뜀(optional)」이 남고 숨은 검사만 건너뛴다.
+- [ ] 첫 강사 지정(아직 확인 못 함 — 운영 사용자 3명·is_staff 0명): `docker compose -f compose.prod.yml run --rm backend python manage.py set_instructor sandcorp:<sub>` — 「기본 조직」 owner 로 넣는다. Sandcorp 계정으로 한 번 로그인한 뒤에 한다(그 전에는 사용자가 없다). `sub` 는 `/api/accounts/me` 의 `username` 에서 본다.
 
 ## 시험 모드(AI 프록시·문제은행)
 
