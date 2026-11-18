@@ -1,0 +1,278 @@
+# Factory task: Verify (ADR-0001 "Verify", docs/adr/0001-software-factory.md)
+#
+# The Implementer opens a PR and dispatches this run; it never merges. Verify, a different run on
+# a different model, decides:
+#   1. machine checks (.github/factory/verify.sh mech): the ticket's acceptance tests are all switched
+#      on (no `#N` marker left), otherwise untouched, and no `#N` stub is left (spec-tests.sh);
+#   2. the branch on today's main passes `scripts/ci.sh all` (skipped when the PR head is the commit
+#      the Implementer checked, `<!-- factory-checked <sha> -->`, and already sits on main);
+#   3. an acceptance review on Sonnet (.github/factory/verify.md): every acceptance criterion met,
+#      nothing out of scope.
+# Pass: squash-merge, close the ticket, build main, dispatch the next ticket (verify.sh pass).
+# Otherwise: send the ticket back to the Implementer with the reason (verify.sh sendback): a branch
+# that conflicts with main (or fails or cannot be pushed once main is merged in) as kind=conflict,
+# keeping the PR for the Implementer to resolve; anything else as kind=acceptance, closing it. A
+# human gets the ticket on the second acceptance or the third conflict send-back.
+name: factory-verify
+run-name: 'verify #${{ inputs.issue }} (PR #${{ inputs.pr }})'
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Ticket number
+        required: true
+        type: number
+      pr:
+        description: The Implementer's PR for the ticket
+        required: true
+        type: number
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  id-token: write
+
+env:
+  # dispatch-next.sh (after a merge or a hand-over to a human) and ledger.sh read these.
+  FACTORY_SPEC_QUEUE: ${{ vars.FACTORY_SPEC_QUEUE }}
+  FACTORY_SPEC_BUDGET_USD: ${{ vars.FACTORY_SPEC_BUDGET_USD }}
+  FACTORY_DAILY_BUDGET_USD: ${{ vars.FACTORY_DAILY_BUDGET_USD }}
+  # Implementer tracks; unset means 2. 1 keeps one line for implementing and verifying.
+  FACTORY_TRACKS: ${{ vars.FACTORY_TRACKS }}
+
+jobs:
+  # Stop at once, before any runner minute goes to setup, while the secret is not registered.
+  token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require CLAUDE_OAUTH_TOKEN
+        env:
+          TOKEN: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::CLAUDE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
+            exit 1
+          fi
+
+  verify:
+    needs: token
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # One Verify at a time, so every verdict is checked against the main the one before merged
+    # into. With one track (FACTORY_TRACKS=1) the same group as the Implementer: implementing and
+    # verifying run in one line, as before . A group keeps one pending run and a newer one
+    # cancels it, so the last step starts Verify for any PR left waiting (verify.sh next-verify).
+    concurrency:
+      group: ${{ vars.FACTORY_TRACKS == '1' && 'factory-implementer' || 'factory-verify' }}
+      cancel-in-progress: false
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: infralab
+          POSTGRES_USER: infralab
+          POSTGRES_PASSWORD: infralab
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U infralab -d infralab"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      N: ${{ inputs.issue }}
+      PR: ${{ inputs.pr }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # scripts/ci.sh backend: the service above, as in ci.yml (test-only values).
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      DJANGO_SECRET_KEY: ci-only-insecure-key
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Budget guard
+        id: budget
+        run: bash .github/factory/ledger.sh guard "$N"
+
+      - name: Check out the PR
+        id: pr
+        if: steps.budget.outputs.go == 'true'
+        run: |
+          state=$(gh pr view "$PR" --repo "$REPO" --json state --jq .state)
+          if [ "$state" != OPEN ]; then
+            echo "::notice::PR #$PR is $state; nothing to verify"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          branch=$(gh pr view "$PR" --repo "$REPO" --json headRefName --jq .headRefName)
+          checked=$(gh pr view "$PR" --repo "$REPO" --json body --jq .body | tr -d '\r' \
+            | sed -n 's/.*<!-- factory-checked \([0-9a-f]*\) -->.*/\1/p' | tail -n 1)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main "+refs/heads/$branch:refs/remotes/origin/$branch"
+          git switch -C "$branch" "origin/$branch"
+          mkdir -p .factory
+          echo ".factory/" >> .git/info/exclude
+          echo "*.log" >> .git/info/exclude
+          echo "::notice::PR #$PR, branch $branch at $(git rev-parse HEAD), checked ${checked:-(none)}"
+          bash .github/factory/ledger.sh event verify-start "$N" "pr=#$PR"
+          {
+            echo "go=true"
+            echo "branch=$branch"
+            echo "checked=$checked"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Machine checks
+        id: mech
+        if: steps.pr.outputs.go == 'true'
+        run: |
+          if bash .github/factory/verify.sh mech "$N" origin/main > .factory/mech.md; then r=pass; else r=fail; fi
+          cat .factory/mech.md
+          echo "mech=$r" >> "$GITHUB_OUTPUT"
+
+      # `scripts/ci.sh all` already passed on the checked commit; run it again only when the head
+      # moved or main moved on. Main is merged in, not rebased onto: a branch whose
+      # conflicts the Implementer resolved carries a merge commit, and a rebase would replay its
+      # commits one by one into the same conflicts again (the PR is squashed anyway). A conflict
+      # sends the ticket back as kind=conflict; the Implementer then resolves it on this branch.
+      - name: Merge main in
+        id: base
+        if: steps.mech.outputs.mech == 'pass'
+        env:
+          CHECKED: ${{ steps.pr.outputs.checked }}
+        run: |
+          head=$(git rev-parse HEAD)
+          if git merge-base --is-ancestor origin/main HEAD && [ -n "$CHECKED" ] && [ "$head" = "$CHECKED" ]; then
+            echo "::notice::the head is the checked commit on today's main; not running scripts/ci.sh all again"
+            echo "ci=skip" >> "$GITHUB_OUTPUT"
+          elif git merge --no-edit origin/main; then
+            echo "ci=run" >> "$GITHUB_OUTPUT"
+          else
+            files=$(git diff --name-only --diff-filter=U)
+            git merge --abort
+            printf '### main을 merge하면 충돌한다\n\n%s\n' "$(printf '%s\n' "$files" | sed 's/^/- /')" > .factory/conflict.md
+            cat .factory/conflict.md
+            echo "ci=conflict" >> "$GITHUB_OUTPUT"
+            # for the ledger's per-file conflict counts (ledger.sh stats)
+            echo "files=$(printf '%s\n' "$files" | sed '/^$/d' | paste -sd, -)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up the checks' tools
+        if: steps.base.outputs.ci == 'run'
+        uses: ./.github/actions/factory-toolchain
+
+      - name: Automated checks
+        id: ci
+        if: steps.base.outputs.ci == 'run'
+        run: |
+          set -o pipefail
+          scripts/ci.sh all 2>&1 | tee .factory/ci.log
+
+      # The merge must land exactly what was checked.
+      - name: Push the merged branch
+        id: push
+        if: steps.ci.outcome == 'success'
+        env:
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: git push --force-with-lease="$BRANCH" origin "$BRANCH"
+
+      - name: Acceptance review
+        if: >-
+          steps.mech.outputs.mech == 'pass' &&
+          (steps.base.outputs.ci == 'skip' || steps.ci.outcome == 'success')
+        timeout-minutes: 40
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_bots: github-actions
+          prompt: |
+            You are the Verify run of this repo's software factory.
+            Ticket: #${{ inputs.issue }} in ${{ github.repository }}, PR #${{ inputs.pr }} (checked out as HEAD).
+            Read .github/factory/verify.md and follow it exactly.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 40
+            --allowedTools "Bash(gh:*),Bash(git diff:*),Bash(git log:*),Read,Write,Glob,Grep"
+
+      - name: Record cost (verify)
+        if: always() && steps.budget.outputs.go == 'true'
+        run: bash .github/factory/ledger.sh record verify "$N"
+
+      - name: Merge or send back
+        if: always() && steps.pr.outputs.go == 'true'
+        env:
+          CANCELLED: ${{ job.status == 'cancelled' }}
+          MECH: ${{ steps.mech.outputs.mech }}
+          BASE: ${{ steps.base.outputs.ci }}
+          CI_OUTCOME: ${{ steps.ci.outcome }}
+          PUSH_OUTCOME: ${{ steps.push.outcome }}
+          CONFLICT_FILES: ${{ steps.base.outputs.files }}
+        run: |
+          # the verdict and the conflicting files, for the ledger's conflict send-back ratio and
+          # per-file conflict counts (ledger.sh stats)
+          outcome=stopped
+          trap 'bash .github/factory/ledger.sh event verify-end "$N" "pr=#$PR" "outcome=$outcome" ${CONFLICT_FILES:+"files=$CONFLICT_FILES"}' EXIT
+          if [ "$CANCELLED" = true ]; then
+            echo "::warning::cancelled; PR #$PR stays open and #$N in progress"
+            outcome=cancelled
+            exit 0
+          fi
+          reason=.factory/sendback.md
+          # conflict, rebase-ci and push: the branch does not go onto today's main. The
+          # Implementer resolves that on this PR's branch instead of implementing again.
+          kind=acceptance
+          verdict=$(tr -d '[:space:]' < .factory/verify-verdict 2>/dev/null || true)
+          if [ "$MECH" != pass ]; then
+            outcome=mech
+            { echo "### 기계 검사 실패"; echo; cat .factory/mech.md 2>/dev/null; } > "$reason"
+          elif [ "$BASE" = conflict ]; then
+            outcome=conflict kind=conflict
+            cp .factory/conflict.md "$reason"
+          elif [ "$BASE" = run ] && [ "$CI_OUTCOME" != success ]; then
+            outcome=rebase-ci kind=conflict
+            {
+              echo "### main을 merge한 뒤 \`scripts/ci.sh all\` 실패"
+              echo
+              echo '```'
+              grep -E 'FAILED|Error|error|ci.sh:' .factory/ci.log 2>/dev/null | tail -n 60
+              echo '```'
+            } > "$reason"
+          elif [ "$BASE" = run ] && [ "$PUSH_OUTCOME" != success ]; then
+            outcome=push kind=conflict
+            echo "### main을 merge한 브랜치를 push하지 못했다(그 사이 브랜치가 바뀌었을 수 있다)" > "$reason"
+          elif [ "$verdict" != pass ]; then
+            outcome=review
+            {
+              if [ "$verdict" = fail ]; then echo "### 인수 판단: 실패"; else echo "### 인수 판단이 결론을 남기지 않았다"; fi
+              echo
+              cat .factory/verify-report.md 2>/dev/null
+            } > "$reason"
+          elif bash .github/factory/verify.sh pass "$N" "$PR" .factory/verify-report.md; then
+            outcome=merged
+            exit 0
+          else
+            outcome=merge-failed
+            { echo "### 판단은 통과였지만 PR을 병합하지 못했다"; echo; cat .factory/verify-report.md 2>/dev/null; } > "$reason"
+          fi
+          cat "$reason"
+          bash .github/factory/verify.sh sendback "$N" "$PR" "$reason" "$kind"
+
+      # Nothing to verify (the PR is no longer open) or the guard stopped the run: keep the chain
+      # going unless the daily budget is spent (the Implementer's schedule resumes after KST
+      # midnight). A ticket stopped here keeps `in-progress` and its open PR; dispatch this
+      # workflow again for it once its spec may run.
+      - name: Dispatch next ticket
+        if: always() && steps.pr.outputs.go != 'true' && steps.budget.outputs.reason != 'daily'
+        run: bash .github/factory/dispatch-next.sh
+
+      # Verify runs one at a time in its group, which keeps one pending run: a newer hand-over
+      # cancels an older pending one. Start Verify for a PR left waiting that way.
+      - name: Start Verify for a waiting PR
+        if: always() && vars.FACTORY_TRACKS != '1'
+        run: bash .github/factory/verify.sh next-verify "$PR"

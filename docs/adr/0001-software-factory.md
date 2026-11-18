@@ -1,0 +1,112 @@
+# 0001. 소프트웨어 공장: spec 에서 병합까지 GitHub Actions 안에서
+
+- 상태: 채택. secret `CLAUDE_OAUTH_TOKEN` 이 없으면 모든 공장 run 이 첫 job(`token`)에서 멈춘다. 첫 run 은 조율자가 켠다(아래 「켜는 순서」).
+- 날짜: 2026-11-18 (#47, 상위 spec #45)
+- 원본: 같은 조직의 다른 공개 저장소(Rust·Windows 데스크톱 앱)가 쓰던 공장과 그 ADR. 흐름·스크립트·장부·알림 다리를 그대로 들이고, 스택에 걸린 부분만 바꿨다(맨 아래 「원본에서 바꾼 것」).
+
+## 맥락
+
+infralab 은 backend(Django·pytest), web(React·vitest), agent(Go) 세 부분이다. spec(#45)이 크고 티켓이 많아, 사람이 티켓마다 구현·검토·병합하면 느리다. 공장은 spec 을 티켓과 **먼저 고정한 인수 시험**으로 쪼개고, 티켓마다 에이전트가 구현하고, 다른 run 이 검사해 병합한다. 자동 검사는 #46 의 `scripts/ci.sh all` 하나다.
+
+## 결정
+
+### 서비스
+
+| 서비스 | 제품 |
+| --- | --- |
+| Ticket tracker | GitHub Issues (라벨은 `docs/agents/triage-labels.md`) |
+| Orchestrator | GitHub Actions (`.github/workflows/factory-*.yml`) |
+| Runner | 모두 `ubuntu-latest` |
+| 에이전트 | `anthropics/claude-code-action@v1`, 인증은 구독 OAuth 토큰(secret `CLAUDE_OAUTH_TOKEN`) |
+| 자동 검사 | `scripts/ci.sh all` (backend pytest + Postgres 서비스, web typecheck·vitest·build, agent gofmt·vet·test, 공장 스크립트 시험) |
+| 장부·원장 | 이슈와 댓글. `specs/` 폴더는 두지 않는다 |
+
+### Task
+
+| Task | Trigger | 하는 일 | 다음 |
+| --- | --- | --- | --- |
+| Decompose (`factory-decompose.yml`, Opus) | `spec` 라벨, 수동 실행, 재개 | 새 spec 이면 하위 이슈(티켓)·blocked-by·`model:*` 라벨을 만들고 티켓별 인수 시험을 꺼 둔 채 쓴다(아래 「인수 시험」). 해법이 갈리면 `<!-- factory-question -->` 댓글과 `needs-decision` 을 남기고 멈춘다. 지시 `.github/factory/decompose.md` | `factory/spec-<S>` 에 시험만 커밋해 스펙 PR(`spec-pr`)을 열고 Odin 을 dispatch |
+| Odin (`factory-odin.yml`, Opus) | Decompose·재개의 dispatch | 스펙 PR 에 main 을 merge(충돌은 같은 run 의 에이전트가 양쪽을 남겨 푼다)하고, 티켓·시험을 코드·앞 spec 의 시험·ADR 과 대조해 고친다. 계약의 아직 없는 이름은 `#<티켓>` 스텁으로 둔다. `scripts/ci.sh all` 이 실패하면 한 번 더 고칠 기회. 지시 `.github/factory/odin.md` | 스펙 PR squash 병합, 열린 티켓에 `ready-for-agent`, 사슬 시작. 두 번 실패·충돌 한도(2) 초과면 spec 에 `ready-for-human` |
+| Implementer (`factory-implementer.yml`, 라벨대로 Sonnet/Opus) | `ready-for-agent` 라벨, 티켓 닫힘(`frontier`), 수동 실행, 매일 KST 00:05 | 열린 blocker 가 없을 때만. 자기 티켓의 시험을 켜고 스텁을 구현한다. workflow 가 `scripts/ci.sh all`(실패면 한 번 고칠 기회) 뒤 push·PR(`Closes #N`, `<!-- factory-checked <sha> -->`). **병합하지 않는다.** 충돌로 되돌아온 티켓은 열린 PR 에 main 을 merge 해 풀기만 한다(충돌 모드). 지시 `.github/factory/implementer.md` | Verify dispatch, 빈 트랙 채우기. 코드 실패 2번·인프라 실패 3번이면 `ready-for-human` |
+| Verify (`factory-verify.yml`, Sonnet) | Implementer·재개의 dispatch | 기계 검사(`verify.sh mech`), main 을 merge 한 뒤 `scripts/ci.sh all`(머리가 검사한 커밋 그대로면 건너뜀), 인수 판단. 지시 `.github/factory/verify.md` | 통과: squash 병합·티켓 닫기·main 에 `ci.yml` dispatch·다음 티켓. 실패: `<!-- factory-sendback kind=acceptance|conflict -->` 로 되돌림(인수 2번·충돌 3번이면 `ready-for-human`) |
+| 재개 (`factory-resume.yml`) | spec 에서 `needs-decision`·`factory-paused` 를 뗄 때, 수동 실행 | `resume.sh` 가 멈춘 단계를 정해 dispatch | 그 단계 |
+
+**사람이 손으로 만든 티켓**(spec 없이, 인수 시험 없이)도 `ready-for-agent` 를 붙이면 Implementer 가 받는다. 그때 인수 기준은 티켓 본문의 체크리스트이고, 시험은 구현 run 이 일반 시험 파일에 쓴다. 기계 검사는 표식·스텁이 없으므로 그냥 통과하고 Verify 의 인수 판단이 체크리스트를 본다.
+
+### 인수 시험
+
+티켓마다 시험 함수 하나하나가 **표식 한 줄로 꺼져** main 에 들어간다. 구현 run 은 그 표식만 걷어 시험을 켜고, 다른 줄은 고치지 못한다(`verify.sh mech` 가 기계로 막는다). 규칙의 원본은 `.github/factory/spec-tests.sh`.
+
+| 부분 | 파일 | 꺼 두는 표식 | 켤 때 | 스텁 |
+| --- | --- | --- | --- | --- |
+| backend | `backend/tests/test_spec_<slug>_<group>.py` | 시험 바로 위 `@pytest.mark.skip(reason="#N")` | 줄을 지운다 | `raise NotImplementedError("#N")` |
+| web | `web/src/spec/spec_<slug>_<group>.test.ts(x)` | `it.skip(…) => { // #N` (또는 `test.skip(`) | 같은 줄에서 `.skip` 과 끝의 `// #N` 만 지운다 | `throw new Error("#N")` |
+| agent | `agent/spec_<slug>_<group>_test.go` | 시험의 첫 줄 `t.Skip("#N")` | 줄을 지운다 | `panic("#N")` |
+
+- backend 파일 이름이 `test_` 로 시작하는 것은 pytest 수집 규칙(`python_files = ["test_*.py"]`) 때문이다.
+- 꺼 둔 시험도 import·컴파일은 되므로 Odin 의 스텁이 있어야 main 의 `scripts/ci.sh all` 이 초록이다. 이것이 원본의 「clippy 로 컴파일 확인」 자리다.
+- 공장 runner 는 Docker 시나리오를 실제로 돌리지 않는다. 인수 시험은 스키마·로직·HTTP 시험까지이고, 실제 실습 환경·화면은 티켓의 「손 확인」으로 간다.
+
+### 모델 배정
+
+Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:sonnet`(기본)·`model:opus` 라벨대로 쓴다. Opus 는 동시성·권한과 인증·데이터 이전·비밀과 토큰(AI 프록시, 에이전트 토큰)·에이전트의 Docker 제어처럼 어려운 티켓이나 뒤 티켓이 따라 할 첫 인터페이스에만 붙인다. 코드 실패나 되돌림 뒤 다시 돌 때는 Opus 로 올리고, 인프라 실패는 같은 모델로 다시 돈다. **Fable 은 쓰지 않는다.**
+
+### 트랙·사슬·장부·알림 (원본 그대로)
+
+- **트랙**: 저장소 변수 `FACTORY_TRACKS`(없으면 2)만큼 Implementer 가 나란히 돈다. run 제목 `implement #N (track T)` 로 바쁜 트랙을 세고 빈 트랙에만 dispatch 한다. Verify 는 직렬(group `factory-verify`)이고 끝날 때마다 기다리는 PR 의 Verify 를 띄운다(`verify.sh next-verify`). `1` 이면 Implementer 와 Verify 가 한 줄이다.
+- **spec 사슬**: 할 티켓이 없으면 하위 이슈가 다 닫힌 spec 을 닫고, 변수 `FACTORY_SPEC_QUEUE`(spec 번호를 순서대로, 비면 넘어가지 않음)의 다음 spec 에 `spec` 라벨을 붙여 Decompose 를 띄운다.
+- **되돌림 종류와 한도**: `kind=acceptance`(기계 검사·인수 판단·병합 실패: PR 을 닫고 main 부터 다시) 2번, `kind=conflict`(main 과 충돌·merge 뒤 검사 실패·push 실패: PR 을 두고 충돌 모드로 풀기) 3번이면 사람에게 넘긴다.
+- **비용 장부와 상한**(`ledger.sh`): Claude 단계마다 `factory-ledger` 라벨의 장부 이슈에 비용 댓글. 시작 전 가드가 spec 합계(spec 본문의 `예산: $N` 줄 → 변수 `FACTORY_SPEC_BUDGET_USD` → $60)와 KST 하루 합계(`FACTORY_DAILY_BUDGET_USD` → $150)를 본다. 넘으면 `factory-paused` 또는 하루 멈춤, KST 00:05 예약 실행이 다시 시작한다.
+- **알림 다리**(`bridge.sh`): 공장은 메일을 보내지 않는다. 공장 밖 크론(2분)이 `gh` 로 표식 댓글(질문·상한 멈춤·사람 넘김·큐 바닥남·idle)을 찾아 Agent Mail 로 보낸다. 기본값은 `FACTORY_REPO=sandcorporation/infralab`, 질문은 `BRIDGE_TO_BOSS`(기본 `sandcorp/boss`), 나머지는 `BRIDGE_TO_COORD`(기본 `<저장소 이름>/coordinator` = `infralab/coordinator`). 메일의 `--task`·idempotency 접두어는 `<저장소 이름>-factory`. 스크립트에 주소·토큰·호스트는 없고 메일 서버는 agent-mail 프로필이 안다. 첫 설치는 `--seed`.
+- **사람 넘김**(`ready-for-human`)은 「공장 밖에서 관리 세션이 처리」라는 뜻이다. 관리 세션이 원인을 고치거나 직접 구현하고, 대표에게는 제품 결정만 묻는다.
+
+### 공개 저장소 규칙 (2026-11-18 공개 전환)
+
+- **외부인은 공장을 움직이지 못한다.** 트리거는 라벨(`issues: labeled/unlabeled`, 라벨은 triage 이상 권한자만 붙인다), 이슈 닫힘(`frontier` 는 secret 없이 `ready-for-agent` 티켓만 dispatch), `workflow_dispatch`(쓰기 권한자), 예약 실행뿐이다. `pull_request_target`·`issue_comment` 트리거는 쓰지 않는다. 외부 PR 의 `ci.yml`(`pull_request`)은 secret 을 받지 않는다.
+- 공장은 댓글을 트리거로 쓰지 않는다. 표식 댓글을 읽는 것은 공장 밖 `bridge.sh` 뿐이고, 그것도 `github-actions[bot]` 과 쓰기 권한자(admin·maintain·write)의 댓글만 보낸다.
+- 공장 run 은 시험용 값(Postgres `infralab`/`infralab`, `DJANGO_SECRET_KEY=ci-only-insecure-key`) 말고 비밀을 쓰지 않는다. 실제 주소·호스트·토큰·내부 저장소 이름을 코드·이슈·PR·커밋에 넣지 않는다.
+- `implement` 단계의 「Agent commands」는 에이전트가 돌린 명령 줄만 찍고 도구 출력은 찍지 않는다(공개 로그).
+
+### 켜는 순서
+
+1. **지금(#47 병합)**: workflow 는 main 에 있지만 secret 이 없어 어느 run 이든 `token` job 에서 「CLAUDE_OAUTH_TOKEN 없음」으로 멈춘다(1분 안). `token` 이 실패하면 뒤 job 이 건너뛰어지므로 runner 를 더 쓰지 않고, 사슬(`dispatch-next.sh`)도 돌지 않는다.
+2. **대표가 등록한다**(Settings → Secrets and variables → Actions):
+   - secret `CLAUDE_OAUTH_TOKEN` (`claude setup-token`). workflow 는 이것을 action 입력 `claude_code_oauth_token` 으로 넘긴다.
+   - 변수 `FACTORY_TRACKS` — 처음엔 `1` 을 권한다(한 줄로 지켜본다).
+   - 변수 `FACTORY_DAILY_BUDGET_USD`, `FACTORY_SPEC_BUDGET_USD` — 없으면 $150·$60.
+   - 변수 `FACTORY_SPEC_QUEUE` — 처음엔 비워 둔다(라벨 붙인 spec 하나만 돈다).
+3. **등록 전에 정할 것**: `ready-for-agent` 가 붙은 열린 손 티켓은 토큰을 넣은 뒤 첫 사슬 호출(티켓 닫힘·매일 KST 00:05 예약·다른 `ready-for-agent` 라벨)에서 Implementer 가 받는다. 공장에 맡기지 않을 티켓은 등록 전에 라벨을 뗀다.
+4. **첫 시범**: 작은 spec 하나에 `spec` 라벨 → Decompose·Odin 을 지켜본 뒤 티켓 사슬. 그다음 `FACTORY_TRACKS`·`FACTORY_SPEC_QUEUE` 를 늘린다.
+5. 알림 다리는 공장 밖 크론에 `bridge.sh --seed` 한 번 뒤 2분 간격으로 건다.
+
+### 예상 runner 분
+
+`scripts/ci.sh all` 은 #46 의 CI 에서 job 마다 30초 안팎(합쳐 약 1.5분, 설치 포함 2~3분)이다. job 한도와 근거:
+
+| job | timeout | 근거 |
+| --- | --- | --- |
+| `token` (모든 공장 workflow) | 2분 | secret 하나 확인 |
+| Decompose | 45분 | 빌드 없음. 에이전트 120턴(Opus) |
+| Odin | 90분 | 충돌 풀기(40분 상한)·검토(60분 상한)·`ci.sh all` 최대 두 번(각 3분 안팎) |
+| Implementer `implement` | 90분 | 에이전트 200턴 + `ci.sh all` 최대 두 번. 원본(Windows·Rust 빌드)의 180분에서 줄였다 |
+| Implementer `frontier`·`approved`·`resume` | 기본 | `dispatch-next.sh` 만, 1~2분 |
+| Verify | 45분 | `ci.sh all` 한 번 + 인수 판단 40분 상한 |
+| 재개 | 10분 | 스크립트만 |
+
+한 티켓은 보통 Implementer 20~40분 + Verify 5~15분 + `token` 두 번(각 1분) ≈ 30~60분, 최악(두 job 모두 한도) 약 140분이다. spec 하나는 여기에 Decompose 10~30분 + Odin 15~40분이 더 든다. 저장소가 공개로 바뀌어 표준 runner 분은 무료다.
+
+## 결과
+
+- 관리할 서버가 없다(알림 다리 크론만 공장 밖).
+- 구독 OAuth 토큰을 쓰므로 공장 run 이 구독 사용량을 함께 쓴다.
+- 공장 스크립트는 가짜 `gh`·`agent-mail` 로 시험한다(`.github/factory/test.sh`, `scripts/ci.sh factory`, CI 의 `factory` job 이 actionlint 와 함께 돌린다). workflow 연결은 시범으로 확인한다.
+
+## 원본에서 바꾼 것
+
+- **러너**: Implementer·Odin·Verify 의 Windows 러너와 Claude Code 수동 설치(pwsh)를 `ubuntu-latest` 와 action 의 기본 설치로. Rust 빌드 캐시 대신 `.github/actions/factory-toolchain`(uv·Python·Node·Go, ci.yml 과 같은 판)과 job 의 Postgres 서비스.
+- **자동 검사**: Rust 의 xtask 검사·포매터 검사·clippy 를 모두 `scripts/ci.sh all` 로. Odin 의 「컴파일 확인」도 같은 명령이다(꺼 둔 시험은 import·컴파일만 된다).
+- **인수 시험·스텁**: Rust 시험 파일의 `#[ignore]` 표식·`todo!` 스텁을 위 「인수 시험」 표로. web 의 켜기는 줄 지우기가 아니라 줄 바꾸기라 `verify.sh mech` 가 「지운 표식 줄 → 같은 줄에서 `.skip`·`// #N` 만 뺀 줄」 짝을 허용한다.
+- **secret 없음 멈춤**: 원본에 없던 `token` job 을 Claude 를 쓰는 workflow 마다 맨 앞에 둔다.
+- **손 티켓**: 인수 시험 없는 티켓도 받는다(위).
+- **뺀 것**: 벤치(`bench.yml`, `bench-gate.sh`, `factory-bench-regression` 표식과 알림 종류), Windows 빌드·`release.yml`·nightly(Verify 의 병합 뒤 `release.yml` dispatch 도), `.gitattributes` 의 CRLF 시험(Windows 전용), Explore task(원본도 꺼져 있다).
+- **이름**: 봇 커밋 이름은 `github-actions[bot]`, 알림 다리 기본값(위), 원본 이슈 번호를 단 주석은 번호를 떼고 내용만 남겼다.

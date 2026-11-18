@@ -1,0 +1,338 @@
+#!/usr/bin/env bash
+# Fake `gh` for the factory script tests: put this folder first on PATH.
+#
+# `gh api` is supported, plus the `gh issue list` and `gh workflow run` calls of dispatch-next.sh (below).
+#   issue-<n>.json      the issue as the REST API returns it ({number, state, body, labels: [{name}]})
+#   comments-<n>.json   its comments ([{id, created_at, body, user: {login}}]); posting appends one by FAKE_GH_LOGIN (default github-actions[bot])
+#   fail-comments       if present, posting a comment fails
+#   sub-issues-<n>.json the sub-issues of issue <n> ([{number, state}]), default []
+#   pulls.json          pull requests ([{number, state, title, body, head: {ref}, base: {ref}}]); opening a
+#                       PR appends to it and writes issue-<pr>.json (with pull_request) for its labels
+#   fail-dispatch       if present, workflow dispatches fail
+#   list-empty          if present, `gh issue list` finds nothing (a lagging search index);
+#   list-empty-once     the same for the next `gh issue list` only
+#   runs-list.json      runs for `gh run list`; `gh workflow run` adds one (runs-hidden: it does not)
+#   events-<n>.json     the events of issue <n> (`…/issues/<n>/events`), default []
+#   calls.log           every call's arguments, one line each
+# New comments get created_at $FAKE_GH_NOW (default 2026-11-17T03:00:00Z).
+set -u
+d=${FAKE_GH:?FAKE_GH is not set}
+printf '%s\n' "$*" >> "$d/calls.log"
+fail() { echo "fake gh: $*" >&2; exit 1; }
+jqf() { jq "$@" | tr -d '\r'; }
+
+# Calls of dispatch-next.sh (odin.sh tests, #252):
+#   gh issue list … --label <l> --json number [--jq <expr>]   open issues (not PRs) with label <l>
+#   gh workflow run <file> …                                  only logged (calls.log)
+#   gh api … --jq <expr>                                      the same call, filtered through jq -r
+case "${1:-}" in
+  issue)
+    # gh issue view <n> … [--jq <expr>]: {state (upper case), labels}; gh issue edit <n> --add-label <l>;
+    # gh issue close <n> …: sets state closed (#280).
+    case "${2:-}" in
+      view|edit|close)
+        sub=$2 n=$3; shift 3
+        f="$d/issue-$n.json"
+        [ -f "$f" ] || fail "no issue #$n"
+        expr= add=
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --jq) expr=$2; shift 2 ;;
+            --add-label) add=$2; shift 2 ;;
+            --repo|--json|--reason|--comment) shift 2 ;;
+            *) fail "unsupported issue $sub argument $1" ;;
+          esac
+        done
+        case "$sub" in
+          view)
+            out=$(jqf '{state: (.state | ascii_upcase), labels}' "$f")
+            if [ -n "$expr" ]; then printf '%s' "$out" | jqf -r "$expr"; else printf '%s\n' "$out"; fi ;;
+          edit)
+            [ -n "$add" ] || fail "unsupported issue edit"
+            jqf --arg l "$add" 'if any(.labels[]; .name == $l) then . else .labels += [{name: $l}] end' "$f" \
+              > "$f.new" && mv "$f.new" "$f" ;;
+          close)
+            jqf '.state = "closed"' "$f" > "$f.new" && mv "$f.new" "$f" ;;
+        esac
+        exit 0 ;;
+    esac
+    [ "${2:-}" = list ] || fail "unsupported command: $*"
+    shift 2
+    label= expr=
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --label) label=$2; shift 2 ;;
+        --jq) expr=$2; shift 2 ;;
+        --repo|--state|--limit|--json) shift 2 ;;
+        *) fail "unsupported issue list argument $1" ;;
+      esac
+    done
+    shopt -s nullglob
+    files=("$d"/issue-*.json)
+    # list-empty: the search index lags and finds nothing; list-empty-once: only for the next list.
+    if [ -e "$d/list-empty-once" ]; then rm -f "$d/list-empty-once"; files=(); fi
+    [ -e "$d/list-empty" ] && files=()
+    if [ ${#files[@]} -eq 0 ]; then list='[]'; else
+      list=$(jqf -s --arg l "$label" \
+        '[.[] | select(.state == "open" and (has("pull_request") | not)
+          and ($l == "" or any(.labels[]; .name == $l))) | {number}]' "${files[@]}")
+    fi
+    if [ -n "$expr" ]; then printf '%s' "$list" | jqf -r "$expr"; else printf '%s\n' "$list"; fi
+    exit 0 ;;
+  run)
+    # gh run list --workflow <file> [--limit N] [--json …] [--jq <expr>]: the runs of runs-list.json
+    # ([{databaseId, workflow, status, event, displayTitle}], newest first, default []) of that
+    # workflow, at most N (#286).
+    [ "${2:-}" = list ] || fail "unsupported command: $*"
+    shift 2
+    expr= wf= limit=20
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --jq) expr=$2; shift 2 ;;
+        --workflow) wf=$2; shift 2 ;;
+        --limit) limit=$2; shift 2 ;;
+        --repo|--json) shift 2 ;;
+        *) fail "unsupported run list argument $1" ;;
+      esac
+    done
+    f="$d/runs-list.json"; [ -f "$f" ] || echo '[]' > "$f"
+    list=$(jqf --arg w "$wf" --argjson l "$limit" '[.[] | select($w == "" or .workflow == $w)] | .[:$l]' "$f")
+    if [ -n "$expr" ]; then printf '%s' "$list" | jqf -r "$expr"; else printf '%s\n' "$list"; fi
+    exit 0 ;;
+  workflow)
+    # gh workflow run <file> --repo R -f k=v …: adds a queued workflow_dispatch run to runs-list.json
+    # (title as the workflow's run-name; not while runs-hidden exists: a run not listed yet).
+    [ "${2:-}" = run ] || fail "unsupported command: $*"
+    [ -e "$d/fail-dispatch" ] && fail "dispatch is broken"
+    wf=$3; shift 3
+    issue= track= pr=
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -f) case "$2" in issue=*) issue=${2#issue=} ;; track=*) track=${2#track=} ;; pr=*) pr=${2#pr=} ;; esac; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    [ -e "$d/runs-hidden" ] && exit 0
+    case "$wf" in
+      factory-implementer.yml) title="implement #$issue (track ${track:-1})" ;;
+      factory-verify.yml) title="verify #$issue (PR #$pr)" ;;
+      *) title=${wf%.yml} ;;
+    esac
+    f="$d/runs-list.json"; [ -f "$f" ] || echo '[]' > "$f"
+    jqf --arg w "$wf" --arg t "$title" \
+      '[{databaseId: (([.[].databaseId] | max // 1000) + 1), workflow: $w, status: "queued",
+         event: "workflow_dispatch", displayTitle: $t}] + .' "$f" > "$f.new" && mv "$f.new" "$f"
+    exit 0 ;;
+  api)
+    for a in "$@"; do
+      if [ "$a" = --jq ]; then
+        args=() expr= skip=false
+        for a in "$@"; do
+          if $skip; then expr=$a; skip=false
+          elif [ "$a" = --jq ]; then skip=true
+          else args+=("$a"); fi
+        done
+        out=$("$0" "${args[@]}") || exit 1
+        printf '%s' "$out" | jqf -r "$expr"
+        exit 0
+      fi
+    done ;;
+esac
+
+[ "${1:-}" = api ] || fail "unsupported command: $*"
+shift
+method=GET path= fields=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X|--method) method=$2; shift 2 ;;
+    -f|-F|--field|--raw-field) fields+=("$2"); [ "$method" = GET ] && method=POST; shift 2 ;;
+    --paginate) shift ;;
+    -*) fail "unsupported flag $1" ;;
+    *) path=$1; shift ;;
+  esac
+done
+
+query=
+case "$path" in *\?*) query=${path#*\?}; path=${path%%\?*} ;; esac
+
+field() { # field <name>: value of -f/-F name=value, reading @file
+  local f
+  for f in "${fields[@]}"; do
+    case "$f" in "$1="*)
+      local v=${f#"$1="}
+      case "$v" in @*) cat "${v#@}" ;; *) printf '%s' "$v" ;; esac
+      return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# Calls of verify.sh (all recorded in calls.log):
+#   pull-<n>.json       a PR ({number, state, merged, body, head: {ref}}); PATCH sets state or body,
+#                       PUT …/merge marks it merged and closed (fails while fail-merge exists)
+#   DELETE …/issues/<n>/labels/<name> removes the label; PATCH …/issues/<n> sets state
+#   DELETE …/git/refs/heads/<b> and POST …/actions/workflows/<f>/dispatches only log
+case "$method $path" in
+  "PUT repos/"*/*/pulls/*/merge)
+    n=${path%/merge}; n=${n##*/}
+    f="$d/pull-$n.json"
+    [ -f "$f" ] || fail "no PR #$n"
+    [ -e "$d/fail-merge" ] && fail "merging is broken"
+    jqf '.merged = true | .state = "closed"' "$f" > "$f.new" && mv "$f.new" "$f"
+    echo '{"merged": true}'; exit 0 ;;
+  "GET repos/"*/*/pulls/* | "PATCH repos/"*/*/pulls/*)
+    n=${path##*/}
+    f="$d/pull-$n.json"
+    [ -f "$f" ] || fail "no PR #$n"
+    if [ "$method" = PATCH ]; then
+      if s=$(field state); then
+        jqf --arg s "$s" '.state = $s' "$f" > "$f.new" && mv "$f.new" "$f"
+      elif b=$(field body); then
+        jqf --arg b "$b" '.body = $b' "$f" > "$f.new" && mv "$f.new" "$f"
+      else
+        fail "no state or body"
+      fi
+    fi
+    cat "$f"; exit 0 ;;
+  "DELETE repos/"*/*/git/refs/heads/*) echo '{}'; exit 0 ;;
+  # prune-runs.sh: runs.json ([{id, event, head_branch, triggering_actor: {login}, jobs, cancelled}],
+  # default []; optional head_sha, status, conclusion). GET …/workflows/<f>/runs filters by the
+  # query's branch=, event= and status= (status or conclusion), newest first as written; …/runs/<id>/jobs
+  # gives {total_count: jobs}; DELETE …/runs/<id> removes the run (fails while fail-delete-run exists);
+  # POST …/runs/<id>/cancel sets cancelled (fails while fail-cancel-run exists).
+  "GET repos/"*/*/actions/workflows/*/runs)
+    f="$d/runs.json"; [ -f "$f" ] || echo '[]' > "$f"
+    b=$(printf '%s' "$query" | tr '&' '\n' | sed -n 's/^branch=//p')
+    e=$(printf '%s' "$query" | tr '&' '\n' | sed -n 's/^event=//p')
+    s=$(printf '%s' "$query" | tr '&' '\n' | sed -n 's/^status=//p')
+    jqf --arg b "$b" --arg e "$e" --arg s "$s" \
+      '{workflow_runs: [.[] | select(($b == "" or .head_branch == $b) and ($e == "" or .event == $e)
+        and ($s == "" or .status == $s or .conclusion == $s))]}' "$f"
+    exit 0 ;;
+  "GET repos/"*/*/actions/runs/*/jobs)
+    id=${path%/jobs}; id=${id##*/}
+    jqf --argjson id "$id" '[.[] | select(.id == $id)][0] // error("no run") | {total_count: .jobs}' "$d/runs.json" \
+      || fail "no run $id"
+    exit 0 ;;
+  "DELETE repos/"*/*/actions/runs/*)
+    id=${path##*/}
+    [ -e "$d/fail-delete-run" ] && fail "deleting runs is broken"
+    jqf --argjson id "$id" 'map(select(.id != $id))' "$d/runs.json" > "$d/runs.json.new" && mv "$d/runs.json.new" "$d/runs.json"
+    exit 0 ;;
+  "POST repos/"*/*/actions/runs/*/cancel)
+    id=${path%/cancel}; id=${id##*/}
+    [ -e "$d/fail-cancel-run" ] && fail "cancelling runs is broken"
+    jqf --argjson id "$id" 'map(if .id == $id then .cancelled = true else . end)' "$d/runs.json" > "$d/runs.json.new" \
+      && mv "$d/runs.json.new" "$d/runs.json"
+    echo '{}'; exit 0 ;;
+  "POST repos/"*/*/actions/workflows/*/dispatches)
+    [ -e "$d/fail-dispatch" ] && fail "dispatch is broken"
+    exit 0 ;;
+  "DELETE repos/"*/*/issues/*/labels/*)
+    l=${path##*/}; n=${path%/labels/*}; n=${n##*/}
+    f="$d/issue-$n.json"
+    [ -f "$f" ] || fail "no issue #$n"
+    jqf --arg l "$l" '.labels |= map(select(.name != $l))' "$f" > "$f.new" && mv "$f.new" "$f"
+    echo '[]'; exit 0 ;;
+  "PATCH repos/"*/*/issues/*)
+    n=${path##*/}
+    f="$d/issue-$n.json"
+    [ -f "$f" ] || fail "no issue #$n"
+    s=$(field state) || fail "no state"
+    jqf --arg s "$s" '.state = $s' "$f" > "$f.new" && mv "$f.new" "$f"
+    cat "$f"; exit 0 ;;
+esac
+
+case "$path" in
+  # bridge.sh: the repository's issue comments, repo-comments.json
+  # ([{id, html_url, issue_url, created_at, body}], default []); the query (since=…) is ignored.
+  repos/*/*/issues/comments)
+    if [ -f "$d/repo-comments.json" ]; then cat "$d/repo-comments.json"; else echo '[]'; fi
+    ;;
+  # bridge.sh: a commenter's permission, permission-<login>.json ({permission, role_name}),
+  # default read; fails while fail-permission exists.
+  repos/*/*/collaborators/*/permission)
+    [ -e "$d/fail-permission" ] && fail "permission lookup is broken"
+    login=${path%/permission}; login=${login##*/}
+    if [ -f "$d/permission-$login.json" ]; then cat "$d/permission-$login.json"
+    else echo '{"permission": "read", "role_name": "read"}'; fi
+    ;;
+  repos/*/*/issues)
+    # POST opens an issue (number 800 + the issue files) with title, body and labels[].
+    if [ "$method" = POST ]; then
+      shopt -s nullglob; all=("$d"/issue-*.json)
+      n=$((800 + ${#all[@]}))
+      jqf -n --argjson n "$n" --arg t "$(field title)" --arg b "$(field body)" --arg l "$(field 'labels[]')" \
+        '{number: $n, state: "open", title: $t, body: $b, html_url: "https://github.com/owner/repo/issues/\($n)",
+          labels: ($l | split(",") | map(select(. != "") | {name: .}))}' > "$d/issue-$n.json"
+      cat "$d/issue-$n.json"; exit 0
+    fi
+    label=$(printf '%s' "$query" | tr '&' '\n' | sed -n 's/^labels=//p')
+    shopt -s nullglob
+    files=("$d"/issue-*.json)
+    if [ ${#files[@]} -eq 0 ]; then echo '[]'; exit 0; fi
+    jqf -s --arg l "$label" '[.[] | select(.state == "open" and ($l == "" or any(.labels[]; .name == $l)))]' "${files[@]}"
+    ;;
+  # ledger.sh event: the issue's events, events-<n>.json ([{event, created_at, label: {name}}], default []).
+  repos/*/*/issues/*/events)
+    n=${path%/events}; n=${n##*/}
+    if [ -f "$d/events-$n.json" ]; then cat "$d/events-$n.json"; else echo '[]'; fi
+    ;;
+  repos/*/*/issues/*/comments)
+    n=${path%/comments}; n=${n##*/}
+    f="$d/comments-$n.json"
+    [ -f "$d/issue-$n.json" ] || fail "no issue #$n"
+    [ -f "$f" ] || echo '[]' > "$f"
+    if [ "$method" = GET ]; then cat "$f"; exit 0; fi
+    [ -e "$d/fail-comments" ] && fail "commenting is broken"
+    body=$(field body) || fail "no body"
+    jqf --arg b "$body" --arg t "${FAKE_GH_NOW:-2026-11-17T03:00:00Z}" \
+      --arg u "${FAKE_GH_LOGIN:-github-actions[bot]}" \
+      '. +[{id: (length + 1), created_at: $t, body: $b, user: {login: $u}}]' "$f" > "$f.new" && mv "$f.new" "$f"
+    echo '{}'
+    ;;
+  repos/*/*/issues/*/labels)
+    n=${path%/labels}; n=${n##*/}
+    f="$d/issue-$n.json"
+    [ -f "$f" ] || fail "no issue #$n"
+    l=$(field 'labels[]') || fail "no label"
+    jqf --arg l "$l" 'if any(.labels[]; .name == $l) then . else .labels += [{name: $l}] end' "$f" > "$f.new" && mv "$f.new" "$f"
+    echo '[]'
+    ;;
+  repos/*/*/issues/*/sub_issues)
+    n=${path%/sub_issues}; n=${n##*/}
+    [ -f "$d/issue-$n.json" ] || fail "no issue #$n"
+    if [ -f "$d/sub-issues-$n.json" ]; then cat "$d/sub-issues-$n.json"; else echo '[]'; fi
+    ;;
+  repos/*/*/issues/*/labels/*)
+    [ "$method" = DELETE ] || fail "unsupported $method $path"
+    l=${path##*/}; n=${path%/labels/*}; n=${n##*/}
+    f="$d/issue-$n.json"
+    [ -f "$f" ] || fail "no issue #$n"
+    jqf --arg l "$l" '.labels |= map(select(.name != $l))' "$f" > "$f.new" && mv "$f.new" "$f"
+    echo '[]'
+    ;;
+  repos/*/*/pulls)
+    f="$d/pulls.json"
+    [ -f "$f" ] || echo '[]' > "$f"
+    if [ "$method" = GET ]; then jqf '[.[] | select(.state == "open")]' "$f"; exit 0; fi
+    n=$(jqf '500 + length' "$f")
+    jqf --argjson n "$n" --arg t "$(field title)" --arg b "$(field body)" --arg h "$(field head)" \
+      --arg base "$(field base)" \
+      '. + [{number: $n, state: "open", title: $t, body: $b, head: {ref: $h}, base: {ref: $base}}]' \
+      "$f" > "$f.new" && mv "$f.new" "$f"
+    jqf -n --argjson n "$n" '{number: $n, state: "open", body: "", labels: [], pull_request: {}}' \
+      > "$d/issue-$n.json"
+    jqf -n --argjson n "$n" '{number: $n}'
+    ;;
+  repos/*/*/actions/workflows/*/dispatches)
+    [ -e "$d/fail-dispatch" ] && fail "dispatch is broken"
+    exit 0
+    ;;
+  repos/*/*/issues/*)
+    n=${path##*/}
+    [ -f "$d/issue-$n.json" ] || fail "no issue #$n"
+    cat "$d/issue-$n.json"
+    ;;
+  *) fail "unsupported path $path" ;;
+esac

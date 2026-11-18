@@ -1,0 +1,49 @@
+# Factory task: Resume (docs/adr/0001-software-factory.md "재개")
+# When a person removes `needs-decision` or `factory-paused` from a spec issue, decide the stage the
+# spec stopped at and dispatch it (Decompose, Odin, Verify or the next ticket; .github/factory/resume.sh).
+# Trigger: the label removal, or a manual run with the spec issue number.
+name: factory-resume
+
+on:
+  issues:
+    types: [unlabeled]
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: Spec issue number to resume
+        required: true
+        type: number
+
+concurrency:
+  group: factory-resume-${{ github.event.issue.number || inputs.spec }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  actions: write
+
+jobs:
+  resume:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      ((github.event.label.name == 'needs-decision' || github.event.label.name == 'factory-paused') &&
+       contains(github.event.issue.labels.*.name, 'spec'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SPEC: ${{ github.event.issue.number || inputs.spec }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      BASE: ${{ github.event.repository.default_branch }}
+      FACTORY_SPEC_BUDGET_USD: ${{ vars.FACTORY_SPEC_BUDGET_USD }}
+      FACTORY_DAILY_BUDGET_USD: ${{ vars.FACTORY_DAILY_BUDGET_USD }}
+      FACTORY_TRACKS: ${{ vars.FACTORY_TRACKS }}
+      FACTORY_SPEC_QUEUE: ${{ vars.FACTORY_SPEC_QUEUE }}
+    steps:
+      # decompose.sh state looks for the acceptance tests (`#N` markers) in the checkout of main.
+      - uses: actions/checkout@v4
+
+      - name: Resume the stopped stage
+        run: bash .github/factory/resume.sh "$SPEC"

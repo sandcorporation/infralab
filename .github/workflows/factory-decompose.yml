@@ -1,0 +1,108 @@
+# Factory task: Decompose (docs/adr/0001-software-factory.md "Decompose")
+# Splits a spec issue into tracer-bullet tickets and writes each ticket's acceptance tests
+# (switched off with a `#<ticket>` marker, .github/factory/spec-tests.sh) into a spec PR for Odin,
+# or asks a question (needs-decision).
+# Trigger: the `spec` label, or a manual run with the spec issue number.
+name: factory-decompose
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Spec issue number to decompose
+        required: true
+        type: number
+
+concurrency:
+  group: factory-decompose-${{ github.event.issue.number || inputs.issue }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  id-token: write
+
+jobs:
+  # Stop at once, before any runner minute goes to setup, while the secret is not registered.
+  token:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'spec'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require CLAUDE_OAUTH_TOKEN
+        env:
+          TOKEN: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::CLAUDE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
+            exit 1
+          fi
+
+  decompose:
+    needs: token
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SPEC: ${{ github.event.issue.number || inputs.issue }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      BASE: ${{ github.event.repository.default_branch }}
+      FACTORY_SPEC_BUDGET_USD: ${{ vars.FACTORY_SPEC_BUDGET_USD }}
+      FACTORY_DAILY_BUDGET_USD: ${{ vars.FACTORY_DAILY_BUDGET_USD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # "비용 장부와 상한" (ADR-0001): stop on needs-decision / factory-paused and on the
+      # spec and daily budgets (.github/factory/ledger.sh).
+      - name: Budget guard
+        id: budget
+        run: bash .github/factory/ledger.sh guard "$SPEC"
+
+      # new (no sub-issues) / decomposed (open tickets without a `#N` marker on main) /
+      # specpr (an open spec PR: Odin only) / done / question (.github/factory/decompose.sh).
+      - name: Decide the mode
+        id: state
+        if: steps.budget.outputs.go == 'true'
+        run: bash .github/factory/decompose.sh state "$SPEC"
+
+      - name: Hand the open spec PR to Odin
+        if: steps.state.outputs.mode == 'specpr'
+        run: bash .github/factory/decompose.sh dispatch-odin "$SPEC"
+
+      - name: Nothing to do
+        if: steps.state.outputs.mode == 'done' || steps.state.outputs.mode == 'question'
+        run: echo "::notice::#$SPEC is ${{ steps.state.outputs.mode }}; no Decompose run"
+
+      - name: Decompose
+        if: steps.state.outputs.mode == 'new' || steps.state.outputs.mode == 'decomposed'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # The Implementer chain and the resume job dispatch this run with GITHUB_TOKEN, so the actor is the github-actions bot.
+          allowed_bots: github-actions
+          prompt: |
+            You are the Decompose run of this repo's software factory.
+            Spec issue: #${{ env.SPEC }} in ${{ github.repository }}.
+            Mode: ${{ steps.state.outputs.mode }}
+            Open tickets without acceptance tests (decomposed mode): ${{ steps.state.outputs.tickets }}
+            Read .github/factory/decompose.md and follow it exactly.
+          claude_args: >-
+            --model claude-opus-5-5
+            --max-turns 120
+            --allowedTools "Bash(gh:*),Bash(gofmt:*),Bash(git status:*),Bash(git diff:*),Read,Write,Edit,Glob,Grep"
+
+      - name: Record cost
+        if: always() && (steps.state.outputs.mode == 'new' || steps.state.outputs.mode == 'decomposed')
+        run: bash .github/factory/ledger.sh record decompose "$SPEC"
+
+      # A question (needs-decision) ends here with no PR. Otherwise commit the acceptance tests on
+      # factory/spec-<S>, open the spec PR (label spec-pr) and dispatch Odin, who reviews it, merges
+      # it and labels the tickets ready-for-agent. Decomposed mode takes ready-for-agent off first.
+      - name: Open the spec PR and hand it to Odin
+        if: steps.state.outputs.mode == 'new' || steps.state.outputs.mode == 'decomposed'
+        run: bash .github/factory/decompose.sh finish "$SPEC" "${{ steps.state.outputs.mode }}"

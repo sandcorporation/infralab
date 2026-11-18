@@ -1,0 +1,520 @@
+# Factory task: Implementer (docs/adr/0001-software-factory.md)
+#
+# A human approves a ticket by labelling it `ready-for-agent`. A run starts only
+# when every blocker of the ticket is closed; otherwise the label stays and the
+# `frontier` job dispatches the ticket once its last blocker closes.
+#
+# The agent edits and commits (switching on only its own ticket's acceptance tests). The
+# workflow itself runs `scripts/ci.sh all`, pushes and opens the PR, and hands it to
+# factory-verify.yml (ADR-0001), which checks the PR and merges it or sends the ticket back.
+# This workflow never merges.
+#
+# Conflict mode (`mode` input, auto by default): when Verify sent the ticket back because its
+# branch conflicts with today's main, the run checks out the open PR's branch, merges main in, lets
+# the agent resolve the conflicts (the "Resolve conflicts" step), passes `scripts/ci.sh all`, pushes
+# and hands the same PR to Verify again. It does not implement the ticket again.
+name: factory-implementer
+# Dispatched runs carry the ticket and the track in their title: dispatch-next.sh reads it to find
+# the busy tracks and tickets.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('implement #{0} (track {1})', inputs.issue, inputs.track || '1')
+  || format('factory-implementer {0}', github.event_name) }}
+
+on:
+  issues:
+    types: [labeled, closed]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Ticket number to implement
+        required: true
+        type: number
+      track:
+        description: Implementer track (1..FACTORY_TRACKS); dispatch-next.sh picks an empty one
+        required: false
+        type: string
+        default: '1'
+      mode:
+        description: >-
+          auto (default): resolve conflicts only when Verify's last send-back of the ticket was a
+          conflict and its PR is still open (verify.sh conflict-pr), else implement;
+          implement: implement from main; conflict: resolve conflicts on the open PR only
+        required: false
+        type: choice
+        options: [auto, implement, conflict]
+        default: auto
+  # 00:05 KST: the daily budget (ADR-0001) starts over, so restart a chain that stopped on it.
+  schedule:
+    - cron: '5 15 * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  id-token: write
+
+env:
+  # Spec issues in roadmap order, from the repository variable (ADR-0001). Empty: the factory
+  # never moves on to another spec by itself (the trial runs only the spec labelled `spec`).
+  FACTORY_SPEC_QUEUE: ${{ vars.FACTORY_SPEC_QUEUE }}
+  # Implementer tracks: tickets implemented at once. Empty means 2; 1 is the serial chain.
+  FACTORY_TRACKS: ${{ vars.FACTORY_TRACKS }}
+  # Budgets of .github/factory/ledger.sh (ADR-0001 "비용 장부와 상한"); empty means its defaults.
+  FACTORY_SPEC_BUDGET_USD: ${{ vars.FACTORY_SPEC_BUDGET_USD }}
+  FACTORY_DAILY_BUDGET_USD: ${{ vars.FACTORY_DAILY_BUDGET_USD }}
+
+# One run per ticket: two dispatch-next.sh calls at the same moment can dispatch the same
+# ticket on two tracks. The second run then waits here until the first claimed the ticket, and its
+# guard finds the ticket no longer `ready-for-agent`. Other events get a group of their own.
+concurrency:
+  group: >-
+    ${{ github.event_name == 'workflow_dispatch'
+    && format('factory-ticket-{0}', inputs.issue)
+    || format('factory-implementer-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  # A ticket closed (usually by a merged PR): fill the empty tracks with approved tickets whose
+  # blockers are now all closed.
+  frontier:
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fill the empty tracks
+        run: bash .github/factory/dispatch-next.sh --tickets-only
+
+  # A ticket labelled `ready-for-agent`: start it on an empty track, if one is empty and nothing
+  # with a lower number goes first. A run does not implement on this event any more: a track's
+  # concurrency group would cancel a pending run silently.
+  approved:
+    if: github.event.action == 'labeled' && github.event.label.name == 'ready-for-agent'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fill the empty tracks
+        run: bash .github/factory/dispatch-next.sh --tickets-only --candidates "${{ github.event.issue.number }}"
+
+  # Daily after KST midnight: fill the empty tracks (dispatch-next.sh skips busy ones).
+  resume:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dispatch next ticket
+        run: bash .github/factory/dispatch-next.sh
+
+  # Stop at once, before any runner minute goes to setup, while the secret is not registered.
+  token:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require CLAUDE_OAUTH_TOKEN
+        env:
+          TOKEN: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::CLAUDE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
+            exit 1
+          fi
+
+  implement:
+    needs: token
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # One ticket per track: parallel runs on one track
+    # kept editing the same files. A group keeps at most one pending run and cancels older pending
+    # ones, so dispatch-next.sh dispatches only into a track with no run. A run hands its PR to
+    # Verify (factory-verify.yml, a serial group of its own) and then refills the tracks (the
+    # "Dispatch next ticket" step). A cancelled run leaves its ticket labelled `ready-for-agent`,
+    # so a later call picks it up. With FACTORY_TRACKS=1 the run shares the group with Verify as
+    # before the tracks.
+    concurrency:
+      group: >-
+        ${{ vars.FACTORY_TRACKS == '1' && 'factory-implementer'
+        || format('factory-impl-{0}', inputs.track || '1') }}
+      cancel-in-progress: false
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: infralab
+          POSTGRES_USER: infralab
+          POSTGRES_PASSWORD: infralab
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U infralab -d infralab"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      N: ${{ inputs.issue }}
+      TRACK: ${{ inputs.track || '1' }}
+      BRANCH: agent/issue-${{ inputs.issue }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      # scripts/ci.sh backend: the service above, as in ci.yml (test-only values).
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      DJANGO_SECRET_KEY: ci-only-insecure-key
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # "비용 장부와 상한" (ADR-0001): before claiming, stop on needs-decision / factory-paused and
+      # on the spec and daily budgets. A stopped ticket keeps `ready-for-agent`.
+      - name: Budget guard
+        id: budget
+        run: bash .github/factory/ledger.sh guard "$N"
+
+      - name: Guard and claim
+        id: guard
+        if: steps.budget.outputs.go == 'true'
+        env:
+          MODE_INPUT: ${{ inputs.mode }}
+        run: |
+          read -r state labels < <(gh issue view "$N" --repo "$REPO" --json state,labels --jq '[.state, ([.labels[].name] | join(","))] | @tsv')
+          go=true
+          if [ "$state" != "OPEN" ]; then echo "::notice::#$N is not open"; go=false; fi
+          case ",$labels," in *,ready-for-agent,*) ;; *) echo "::notice::#$N is not labelled ready-for-agent"; go=false;; esac
+          if $go; then
+            open=$(gh api "repos/$REPO/issues/$N" --jq '.issue_dependencies_summary.blocked_by // 0')
+            if [ "$open" -gt 0 ]; then
+              echo "::notice::#$N has $open open blocker(s); the frontier job will dispatch it later"
+              go=false
+            fi
+          fi
+          # Conflict mode: Verify sent the ticket back because its branch conflicts with
+          # main (or fails or cannot be pushed with main merged in) and kept the PR open. Then this
+          # run only merges main into that branch and resolves; it does not implement again.
+          mode=implement pr=
+          if $go && [ "${MODE_INPUT:-auto}" != implement ]; then
+            pr=$(bash .github/factory/verify.sh conflict-pr "$N")
+            if [ -n "$pr" ]; then
+              mode=conflict
+            elif [ "$MODE_INPUT" = conflict ]; then
+              echo "::error::#$N: mode=conflict, but its last send-back is no conflict or its PR is closed"
+              go=false
+            fi
+          fi
+          if $go; then
+            gh issue edit "$N" --repo "$REPO" --remove-label ready-for-agent --add-label in-progress
+            # Measurement: the wait from `ready-for-agent` to this start, per track.
+            if [ "$mode" = conflict ]; then
+              echo "::notice::#$N: resolving conflicts with main on PR #$pr"
+              bash .github/factory/ledger.sh event impl-start "$N" "track=$TRACK" mode=conflict "pr=#$pr"
+            else
+              bash .github/factory/ledger.sh event impl-start "$N" "track=$TRACK"
+            fi
+          fi
+          {
+            echo "go=$go"
+            echo "mode=$mode"
+            echo "pr=$pr"
+          } >> "$GITHUB_OUTPUT"
+          # Model: the ticket's model label (set by Decompose), Sonnet when there is none,
+          # and Opus for any retry after a code failure (the checks failed; an
+          # infrastructure failure retries on the same model, see "Record failure") or after
+          # Verify sent the ticket back (`<!-- factory-sendback` of any kind, ADR-0001).
+          # Opus only for hard tickets (decompose.md: concurrency, permissions, migrations, secrets); never Fable.
+          model=claude-sonnet-5-5
+          case ",$labels," in *,model:opus,*) model=claude-opus-5-5;; esac
+          fails=$(gh issue view "$N" --repo "$REPO" --json comments --jq '[.comments[].body | select(contains("<!-- factory-implementer-failed -->") or startswith("<!-- factory-sendback"))] | length')
+          if [ "$fails" -gt 0 ]; then model=claude-opus-5-5; fi
+          echo "::notice::#$N runs on $model (earlier code failures and send-backs: $fails)"
+          echo "model=$model" >> "$GITHUB_OUTPUT"
+
+      # Conflict mode goes on from the open PR's branch; otherwise a new branch from main.
+      - name: Prepare branch
+        if: steps.guard.outputs.go == 'true'
+        env:
+          MODE: ${{ steps.guard.outputs.mode }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$MODE" = conflict ]; then
+            git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git switch -C "$BRANCH" "origin/$BRANCH"
+          else
+            git switch -c "$BRANCH"
+          fi
+          mkdir -p .factory
+          echo ".factory/" >> .git/info/exclude
+          # Logs the agent writes while checking (ci.log) must not land in the PR.
+          echo "*.log" >> .git/info/exclude
+
+      - name: Set up the checks' tools
+        if: steps.guard.outputs.go == 'true'
+        uses: ./.github/actions/factory-toolchain
+
+      # Not in conflict mode: the ticket is implemented on the PR's branch already.
+      - name: Implement
+        if: steps.guard.outputs.go == 'true' && steps.guard.outputs.mode != 'conflict'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Runs dispatched by this workflow itself (frontier, next tickets) have the bot as actor.
+          allowed_bots: github-actions
+          prompt: |
+            You are the Implementer run of this repo's software factory.
+            Ticket: #${{ env.N }} in ${{ github.repository }}. You are on branch ${{ env.BRANCH }}.
+            Read .github/factory/implementer.md and follow it exactly.
+          claude_args: >-
+            --model ${{ steps.guard.outputs.model }}
+            --max-turns 200
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      # The action's log hides the agent's commands (show_full_output would also print tool
+      # output, which may carry secrets in a public repo). Print only the shell commands it ran,
+      # so slow or backgrounded commands show up in the run log.
+      - name: Agent commands
+        if: always() && steps.guard.outputs.go == 'true' && steps.guard.outputs.mode != 'conflict'
+        continue-on-error: true
+        run: |
+          f="$RUNNER_TEMP/claude-execution-output.json"
+          [ -f "$f" ] || { echo "no execution log"; exit 0; }
+          jq -r '(if type == "array" then .[] else . end)
+            | select(.type == "assistant") | .message.content[]?
+            | select(.type == "tool_use" and .name == "Bash")
+            | (if .input.run_in_background then "[background] " else "" end) + (.input.command | gsub("\n"; " ") | .[0:200])' "$f" || true
+
+      # Cost ledger (ADR-0001). After "Agent commands", which reads the same execution file:
+      # recording moves it away so a later stage does not count it again.
+      - name: Record cost (implement)
+        if: always() && steps.guard.outputs.go == 'true' && steps.guard.outputs.mode != 'conflict'
+        run: bash .github/factory/ledger.sh record implementer "$N"
+
+      # Put the agent's commits on top of today's main: sibling tickets or factory changes
+      # may have landed during the run. Pushing a branch based on an older main also
+      # counts as editing workflow files, which GITHUB_TOKEN may not do.
+      # On a conflict, fall back to a merge and let the agent resolve it (the PR is squashed anyway).
+      # Conflict mode: no agent ran yet and the branch already carries the PR's work: merge
+      # main into it (as Verify does), and let the agent resolve what conflicts.
+      - name: Rebase onto main
+        id: rebase
+        if: steps.guard.outputs.go == 'true'
+        env:
+          MODE: ${{ steps.guard.outputs.mode }}
+        run: |
+          if [ "$MODE" = conflict ]; then
+            git fetch origin main
+            if git merge --no-edit origin/main; then
+              echo "::notice::main merges into the PR's branch cleanly now"
+              echo "conflict=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::conflicts with main: $(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+              echo "conflict=true" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+          # The agent sometimes ends with staged or unstaged edits it never committed,
+          # which stops the rebase. If it committed work, add the leftovers on top (the automated checks below still judge the result). If it
+          # made no commits it may have stopped on purpose (implementer.md section 4),
+          # so drop them and let "the agent made no commits" fail the run.
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            if [ "$(git rev-list --count origin/main..HEAD)" -gt 0 ]; then
+              echo "::warning::the agent left uncommitted changes; committing them"
+              git add -A
+              git commit -q -m "에이전트가 커밋하지 않은 변경을 남긴다"
+              # Line-ending conversion can leave the just-committed files "modified" again,
+              # which stops the rebase ("You have unstaged changes").
+              git reset -q --hard
+            else
+              echo "::warning::the agent left uncommitted changes and made no commits; dropping them"
+              git reset -q --hard
+              git clean -fdq
+            fi
+          fi
+          git fetch origin main
+          if git rebase origin/main; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort
+            git merge --no-edit origin/main || true
+            echo "::warning::conflicts with main: $(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve conflicts
+        if: steps.guard.outputs.go == 'true' && steps.rebase.outputs.conflict == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_bots: github-actions
+          prompt: |
+            You are the Implementer run for ticket #${{ env.N }} in ${{ github.repository }}.
+            You already implemented the ticket on branch ${{ env.BRANCH }}. Other tickets merged into
+            main meanwhile, and merging origin/main left conflicts (see `git status`).
+            Resolve every conflict so that both your ticket's behaviour and main's changes survive.
+            Never drop main's changes to make yours fit. Then run `scripts/ci.sh all` until it passes,
+            and finish with `git commit --no-edit`. Do not push.
+          claude_args: >-
+            --model ${{ steps.guard.outputs.model }}
+            --max-turns 60
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Record cost (conflicts)
+        if: always() && steps.guard.outputs.go == 'true' && steps.rebase.outputs.conflict == 'true'
+        run: bash .github/factory/ledger.sh record implementer-conflicts "$N"
+
+      # No commits means nothing to check: fail here instead of after the checks. Counts as an
+      # infrastructure failure.
+      - name: Require commits
+        if: steps.guard.outputs.go == 'true'
+        run: |
+          if [ "$(git rev-list --count origin/main..HEAD)" -eq 0 ]; then
+            echo "::error::the agent made no commits"; exit 1
+          fi
+
+      # Deterministic gate: the agent's word is not enough.
+      # A first failure goes back to the agent in the same run with the log (below) instead of
+      # throwing the whole run away; only the second check decides the run.
+      - name: Automated checks (first)
+        id: checks_first
+        if: steps.guard.outputs.go == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          scripts/ci.sh all 2>&1 | tee .factory/ci.log
+
+      - name: Fix failed checks
+        if: steps.guard.outputs.go == 'true' && steps.checks_first.outcome == 'failure'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_bots: github-actions
+          prompt: |
+            You are the Implementer run for ticket #${{ env.N }} in ${{ github.repository }}, on branch ${{ env.BRANCH }}.
+            You implemented the ticket and committed. The workflow then ran `scripts/ci.sh all`, and it failed.
+            Its output is in .factory/ci.log (search it for "FAILED", "Error", "error" and the "ci.sh:"
+            lines instead of reading it whole). Follow .github/factory/implementer.md.
+            Find the cause and fix it. If a test failed because of timing on the shared runner rather than
+            your change, rerun just that test to confirm, and fix the test only if it is genuinely racy.
+            Check your fix with the failing stage or test only (the workflow runs the whole
+            `scripts/ci.sh all` again after you), commit, and do not push.
+          claude_args: >-
+            --model ${{ steps.guard.outputs.model }}
+            --max-turns 80
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      - name: Record cost (fix)
+        if: always() && steps.guard.outputs.go == 'true' && steps.checks_first.outcome == 'failure'
+        run: bash .github/factory/ledger.sh record implementer-fix "$N"
+
+      - name: Automated checks
+        id: checks
+        if: steps.guard.outputs.go == 'true' && steps.checks_first.outcome == 'failure'
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::warning::the agent left uncommitted changes after fixing; committing them"
+            git add -A
+            git commit -q -m "에이전트가 커밋하지 않은 변경을 남긴다"
+          fi
+          scripts/ci.sh all
+
+      # The PR body carries `Closes #N` and the commit `scripts/ci.sh all` passed on
+      # (`<!-- factory-checked <sha> -->`): Verify skips its own `scripts/ci.sh all` when the PR head is
+      # still that commit and sits on today's main.
+      - name: Push and open PR
+        id: pr
+        if: steps.guard.outputs.go == 'true'
+        env:
+          MODE: ${{ steps.guard.outputs.mode }}
+          CONFLICT_PR: ${{ steps.guard.outputs.pr }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          if [ "$MODE" = conflict ]; then
+            # Conflict mode merges main on top of the PR branch, so history is not rewritten: a plain
+            # push. If someone pushed to the branch meanwhile it is refused instead of dropping their
+            # commits.
+            git push origin "$BRANCH"
+          else
+            # A fresh implementation starts from main and replaces an earlier attempt's branch.
+            git push --force origin "$BRANCH"
+          fi
+          body=.factory/pr-body.md
+          run="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "$MODE" = conflict ]; then
+            # Keep the PR's body (its checked markers are stale since the send-back) and add the
+            # newly checked commit, which Verify reads as the last one.
+            gh pr view "$CONFLICT_PR" --repo "$REPO" --json body --jq .body | tr -d '\r' > "$body"
+            printf '\n\n_Conflicts with main resolved by the factory Implementer run: %s_\n\n<!-- factory-checked %s -->\n' \
+              "$run" "$sha" >> "$body"
+          else
+            [ -s "$body" ] || echo "(the agent wrote no PR body)" > "$body"
+            printf '\n\nCloses #%s\n\n_Opened by the factory Implementer run: %s_\n\n<!-- factory-checked %s -->\n' "$N" \
+              "$run" "$sha" >> "$body"
+          fi
+          title=$(gh issue view "$N" --repo "$REPO" --json title --jq .title)
+          url=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json url --jq '.[0].url')
+          if [ -n "$url" ]; then
+            gh pr edit "$url" --body-file "$body"
+          else
+            url=$(gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "$title" --body-file "$body")
+          fi
+          number=$(gh pr view "$url" --repo "$REPO" --json number --jq .number)
+          echo "PR: $url"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      # The Implementer does not merge (ADR-0001): Verify checks the PR (machine checks, acceptance
+      # review), then merges it and moves the chain on, or sends the ticket back. Verify is serial
+      # (one group, factory-verify.yml); with FACTORY_TRACKS=1 it shares this run's group, so it runs
+      # right after this run and before any next ticket.
+      - name: Hand over to Verify
+        id: handover
+        if: steps.guard.outputs.go == 'true'
+        run: |
+          gh workflow run factory-verify.yml --repo "$REPO" -f issue="$N" -f pr="${{ steps.pr.outputs.number }}"
+          bash .github/factory/ledger.sh event impl-end "$N" "track=$TRACK"
+
+      # A code failure (the automated checks failed) counts toward the model rule: one puts the
+      # ticket back in the queue and the retry runs on Opus, two leave it to the managing session
+      # (`ready-for-human`, ADR-0001).
+      # Any other failure (runner, network, installer, agent action crash) has nothing to do
+      # with the code: retry on the same model , and hand the ticket
+      # to the managing session only after three of them.
+      - name: Record failure
+        if: failure() && steps.guard.outputs.go == 'true'
+        run: |
+          if [ "${{ steps.checks.outcome }}" = failure ]; then
+            marker='<!-- factory-implementer-failed -->'; limit=2; what="code"
+          else
+            marker='<!-- factory-implementer-infra-failed -->'; limit=3; what="infrastructure"
+          fi
+          gh issue comment "$N" --repo "$REPO" --body "$marker
+          Implementer run failed ($what): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fails=$(gh issue view "$N" --repo "$REPO" --json comments --jq "[.comments[].body | select(contains(\"$marker\"))] | length")
+          gh issue edit "$N" --repo "$REPO" --remove-label in-progress
+          if [ "$fails" -ge "$limit" ]; then
+            gh issue edit "$N" --repo "$REPO" --add-label ready-for-human
+            gh issue comment "$N" --repo "$REPO" --body "Implementer failed $fails times ($what). The managing session takes this ticket out of the factory."
+          else
+            gh issue edit "$N" --repo "$REPO" --add-label ready-for-agent
+          fi
+
+      # Refill the tracks: this run's track is free once it ends (dispatch-next.sh does not
+      # count the run calling it), so the next ticket waits in the track's group for this run only.
+      # With FACTORY_TRACKS=1 a run that handed its PR over leaves this to Verify, as before the
+      # tracks: Verify shares the group, and a second pending run would cancel it.
+      - name: Dispatch next ticket
+        if: always() && (steps.handover.outcome != 'success' || vars.FACTORY_TRACKS != '1')
+        run: |
+          sleep 10
+          # A run stopped by the daily budget does not look for another ticket: none may start.
+          if [ "${{ steps.budget.outputs.reason }}" = daily ]; then exit 0; fi
+          bash .github/factory/dispatch-next.sh

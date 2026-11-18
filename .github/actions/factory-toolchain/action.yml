@@ -1,0 +1,25 @@
+# The tools `scripts/ci.sh all` needs, the same versions as ci.yml: uv and Python 3.13 (backend),
+# Node 22 (web), Go from agent/go.mod (agent). The factory jobs that run the checks use it; the
+# Postgres the backend tests need is a service of each job (a composite action cannot hold one).
+name: factory-toolchain
+description: uv, Python, Node and Go for scripts/ci.sh all
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: backend/uv.lock
+    - name: Install Python
+      shell: bash
+      working-directory: backend
+      run: uv python install 3.13
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: agent/go.mod
+        cache-dependency-path: agent/go.sum
