@@ -176,8 +176,12 @@ def join(request: HttpRequest, token: str):
 
 @student_router.get("/cohorts", response=list[MyCohortOut])
 def my_cohorts(request: HttpRequest):
-    memberships = Membership.objects.filter(user=request.auth).select_related("cohort").order_by(
-        "cohort__archived", "-joined_at"
+    # 연습 묶음은 「내 기수」가 아니다 — 연습 화면에서 따로 연다.
+    memberships = (
+        Membership.objects.filter(user=request.auth)
+        .exclude(cohort__kind=Cohort.Kind.PRACTICE)
+        .select_related("cohort")
+        .order_by("cohort__archived", "-joined_at")
     )
     return [
         MyCohortOut(id=m.cohort.id, name=m.cohort.name, archived=m.cohort.archived, joined_at=m.joined_at)
@@ -189,6 +193,7 @@ def _my_cohort_detail(m: Membership) -> MyCohortDetailOut:
     return MyCohortDetailOut(
         id=m.cohort.id,
         name=m.cohort.name,
+        kind=m.cohort.kind,
         archived=m.cohort.archived,
         joined_at=m.joined_at,
         agent_token=m.agent_token,

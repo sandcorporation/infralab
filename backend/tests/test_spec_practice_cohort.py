@@ -60,7 +60,6 @@ def _submit(api, session, cohort_id, passing):
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.skip(reason="#132")
 def test_migration_makes_one_practice_cohort_in_an_org_without_staff():
     executor = MigrationExecutor(connection)
     executor.migrate([("cohorts", "0005_cohort_kind_exam_settings")])
@@ -81,7 +80,6 @@ def test_migration_makes_one_practice_cohort_in_an_org_without_staff():
     assert Organization.objects.filter(name=PRACTICE_ORG).count() == 1
 
 
-@pytest.mark.skip(reason="#132")
 def test_practice_kind_is_a_cohort_kind():
     assert Cohort.Kind.PRACTICE == "practice"
 
@@ -90,7 +88,6 @@ def test_practice_kind_is_a_cohort_kind():
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_practice_status_names_the_single_practice_cohort(api):
     u = api.login("p1")
 
@@ -106,7 +103,6 @@ def test_practice_status_names_the_single_practice_cohort(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_start_practice_joins_once_and_again_is_the_same_membership(api):
     u = api.login("p1")
     pid = _practice(api, u)["cohort_id"]
@@ -123,14 +119,12 @@ def test_start_practice_joins_once_and_again_is_the_same_membership(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_start_practice_needs_login(api):
     assert api.get("/api/practice").status_code == 401
     assert api.post("/api/practice/join").status_code == 401
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_exam_only_hidden_user_cannot_join_practice(api):
     teacher = api.login_instructor()
     res = api.post("/api/instructor/cohorts", {"name": "1회차", "kind": "exam"}, teacher)
@@ -151,7 +145,6 @@ def test_exam_only_hidden_user_cannot_join_practice(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_practice_cohort_shows_every_scenario_in_the_repository(api):
     u = api.login("p1")
     pid = _start(api, u)["cohort_id"]
@@ -165,7 +158,6 @@ def test_practice_cohort_shows_every_scenario_in_the_repository(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_practice_member_uses_the_existing_scenario_paths(api):
     u = api.login("p1")
     pid = _start(api, u)["cohort_id"]
@@ -187,7 +179,6 @@ def test_practice_member_uses_the_existing_scenario_paths(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_practice_paths_are_404_before_joining(api):
     u = api.login("p1")
     pid = _practice(api, u)["cohort_id"]
@@ -204,7 +195,6 @@ def test_practice_paths_are_404_before_joining(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_practice_users_do_not_see_each_others_submissions(api):
     a, b = api.login("pa"), api.login("pb")
     pid = _start(api, a)["cohort_id"]
@@ -222,7 +212,6 @@ def test_practice_users_do_not_see_each_others_submissions(api):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_practice_cohort_is_not_on_the_instructor_surface_even_for_its_org_staff(api):
     student = api.login("p1")
     pid = _start(api, student)["cohort_id"]
@@ -244,7 +233,6 @@ def test_practice_cohort_is_not_on_the_instructor_surface_even_for_its_org_staff
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="#132")
 def test_my_cohorts_leaves_out_practice_but_detail_gives_kind(api):
     teacher = api.login_instructor()
     klass = api.create_cohort(teacher, "1기")

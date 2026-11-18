@@ -16,9 +16,10 @@ from .models import Cohort, Membership
 
 
 def managed_cohorts(user) -> QuerySet[Cohort]:
-    """내가 담당자인 조직들의 기수. 강사 표면은 기수를 언제나 여기서 찾는다 — 남의 조직 기수는 404."""
+    """내가 담당자인 조직들의 기수. 강사 표면은 기수를 언제나 여기서 찾는다 — 남의 조직 기수는 404.
+    연습 묶음은 강사 표면에 나오지 않는다 — 「개인 연습」 조직의 담당자여도 404."""
 
-    return Cohort.objects.filter(org_id__in=my_org_ids(user))
+    return Cohort.objects.filter(org_id__in=my_org_ids(user)).exclude(kind=Cohort.Kind.PRACTICE)
 
 
 def managed_cohort(request: HttpRequest, cohort_id: int) -> Cohort:
@@ -36,9 +37,12 @@ def my_membership(request: HttpRequest, cohort_id: int) -> Membership:
 
 def open_scenario_ids(cohort: Cohort) -> list[str]:
     """기수에 열어 둔 시나리오 id 중 저장소에 실제로 있는 것만, 저장한 순서로. 강사·학생 표면이 같은 목록을 본다
-    — 저장소에서 사라진 id 가 한쪽에만 보이면 강사가 정리할 길이 없다."""
+    — 저장소에서 사라진 id 가 한쪽에만 보이면 강사가 정리할 길이 없다. 연습 묶음은 저장소의 모든 시나리오다
+    (새 시나리오도 자동으로)."""
 
     known = registry.all_scenarios()
+    if cohort.kind == Cohort.Kind.PRACTICE:
+        return list(known)
     return [sid for sid in (cohort.open_scenario_ids or []) if sid in known]
 
 

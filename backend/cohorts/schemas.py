@@ -89,4 +89,5 @@ class MyCohortDetailOut(MyCohortOut):
 
     agent_token: str
     agent_url: str
-    kind: str = ""  # #132
+    #: 묶음 종류(`class`·`exam`·`practice`).
+    kind: str
