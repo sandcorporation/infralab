@@ -47,11 +47,15 @@ function render(path: string, pattern: string, page: JSX.Element): string {
 }
 
 // renderToString 은 따옴표를 &#x27; 로 바꾼다 — 따옴표 없는 핵심 구절로 본다.
-const KEY = ["Windows의 PC 보호", "추가 정보", "실행", "서명 인증서가 없는 설치 파일"];
+const KEY = [
+  "Windows 설치 파일 내려받기",
+  "href=\"https://github.com/sandcorporation/infralab/releases/latest\"",
+  "Windows의 PC 보호", "추가 정보", "실행", "서명 인증서가 없는 설치 파일"];
 
-describe("SmartScreen 안내", () => {
-  it("설치 안내 화면(compose.yml·설치 파일 받는 자리)에 있다", () => {
+describe("Windows 설치 파일 링크와 SmartScreen 안내", () => {
+  it("설치 안내 화면에 설치 파일 링크와 안내가 있고 compose.yml 길도 남는다", () => {
     const html = render("/cohorts/1/setup", "/cohorts/:id/setup", <SetupPage />);
+    expect(html).toContain("compose.yml 내려받기");
     for (const k of KEY) expect(html).toContain(k);
   });
 

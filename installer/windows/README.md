@@ -39,4 +39,4 @@ iscc /DAppVersion=1.0.0 infralab.iss
 코드 서명 인증서 없이 배포한다(대표 결정 2026-11-18). 그래서 받은 `.exe` 를 실행하면 Inno Setup 화면보다 먼저
 Windows SmartScreen 「Windows의 PC 보호」 창이 뜬다. 지원자는 「추가 정보」 → 「실행」을 누르면 된다.
 설치 프로그램은 그 뒤에야 뜨므로 이 안내는 설치 마법사가 아니라 웹의 설치 안내(`SetupPage`)와 응시 안내(`ExamPage`)에
-있다(`web/src/components/SmartScreenNotice.tsx`). 설치 파일 링크를 따로 전할 때도 같은 문구를 붙인다.
+있다(`web/src/components/SmartScreenNotice.tsx`, 설치 파일 링크 `releases/latest` 와 함께). 설치 파일 링크를 따로 전할 때도 같은 문구를 붙인다.
