@@ -105,6 +105,14 @@ bash "$ledger" record decompose 249 > /dev/null
 line=$(jq -r '.[-1].body' "$FAKE_GH/comments-900.json" | tr -d '\r' | sed -n 2p)
 eq "spec of a spec" "spec=#249 node=decompose issue=#249" "${line%% run=*}"
 
+setup "record: extra pairs go at the end of the line"
+with_ledger
+issue 249 spec "no parent here"
+execution_file
+bash "$ledger" record decompose 249 tickets=4 > /dev/null
+line=$(jq -r '.[-1].body' "$FAKE_GH/comments-900.json" | tr -d '\r' | sed -n 2p)
+eq "extra" "cache_write=4000 tickets=4" "${line##*cache_read=30000 }"
+
 setup "record: no result in the execution file still leaves a zero line"
 with_ledger
 issue 5 "" "x"

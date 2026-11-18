@@ -245,11 +245,139 @@ bash "$script" dispatch-odin 249 > "$tmp/log" 2>&1
 eq code 0 "$?"
 eq dispatches 1 "$(dispatches)"
 
+# --- create-tickets (#185) -----------------------------------------------------------------
+
+create() { bash "$script" create-tickets "$@" > "$tmp/stdout" 2> "$tmp/log"; echo $? > "$tmp/code"; }
+body_of() { jq -r '.body' "$FAKE_GH/issue-$1.json" | tr -d '\r'; }
+subs_of() { jq -r '[.[].number] | join(" ")' "$FAKE_GH/sub-issues-$1.json" | tr -d '\r'; }
+blockers_of() { [ -f "$FAKE_GH/blocked-by-$1.json" ] && jq -r '[.[].number] | join(" ")' "$FAKE_GH/blocked-by-$1.json" | tr -d '\r'; }
+issue_count() { ls "$FAKE_GH"/issue-*.json | wc -l | tr -d ' '; }
+tickets_json() { # three tickets: a (opus), b blocked by a, c (workflow file) blocked by a, b and #250
+  echo '## What to build
+
+B 를 만든다.' > "$tmp/b.md"
+  jq -n --arg bf "$tmp/b.md" '[
+    {key: "a", title: "A 를 깐다", body: "## What to build\n\nA.", model: "opus"},
+    {key: "b", title: "B 를 얹는다", body_file: $bf, blocked_by: ["a"]},
+    {key: "c", title: "CI 단계", body: "## What to build\n\nCI.", local: "workflows", blocked_by: ["a", "b", 250]}
+  ]' > "$tmp/tickets.json"
+}
+
+setup "create-tickets: creates, links and labels every ticket, blockers first"
+issue 249 spec "공장 개선"
+issue 250 "" "앞 티켓"
+tickets_json
+create 249 "$tmp/tickets.json"
+eq code 0 "$(cat "$tmp/code")"
+eq stdout "#802 a A 를 깐다|#803 b B 를 얹는다|#804 c CI 단계" "$(tr '\n' '|' < "$tmp/stdout" | sed 's/|$//')"
+eq "sub-issues" "802 803 804" "$(subs_of 249)"
+eq "#802 blockers" "" "$(blockers_of 802)"
+eq "#803 blockers" "802" "$(blockers_of 803)"
+eq "#804 blockers" "802 803 250" "$(blockers_of 804)"
+eq "#802 labels" "model:opus" "$(labels_of 802)"
+eq "#803 labels" "model:sonnet" "$(labels_of 803)"
+eq "#804 labels" "local,ready-for-human" "$(labels_of 804)"
+has "#804 local comment" "<!-- factory-local -->" "$(cat "$FAKE_GH/comments-804.json")"
+b=$(body_of 803)
+has "#803 parent" "## Parent
+
+#249" "$b"
+has "#803 body" "B 를 만든다." "$b"
+has "#803 blocked by" "## Blocked by
+
+#802" "$b"
+has "#803 marker" "<!-- factory-ticket spec=249 -->" "$b"
+has "#802 no blockers" "None (can start immediately)" "$(body_of 802)"
+b=$(body_of 804)
+has "#804 blocked by" "#802, #803, #250" "$b"
+has "#804 local line" "workflow 파일 — 로컬 작업자 몫" "$b"
+has "#804 local marker" "<!-- factory-touches-workflows -->" "$b"
+eq "no ready-for-agent" 0 "$(grep -c 'ready-for-agent' "$FAKE_GH/calls.log" || true)"
+
+setup "create-tickets: running again creates no duplicates"
+issue 249 spec
+issue 250 ""
+tickets_json
+create 249 "$tmp/tickets.json"
+before=$(issue_count)
+create 249 "$tmp/tickets.json"
+eq code 0 "$(cat "$tmp/code")"
+eq "issues" "$before" "$(issue_count)"
+eq stdout "#802 a A 를 깐다|#803 b B 를 얹는다|#804 c CI 단계" "$(tr '\n' '|' < "$tmp/stdout" | sed 's/|$//')"
+eq "sub-issues" "802 803 804" "$(subs_of 249)"
+eq "#804 blockers" "802 803 250" "$(blockers_of 804)"
+
+setup "create-tickets: a partial failure names what exists, and a rerun finishes it"
+issue 249 spec
+issue 250 ""
+tickets_json
+touch "$FAKE_GH/fail-blocked-by"
+create 249 "$tmp/tickets.json"
+eq code 1 "$(cat "$tmp/code")"
+eq stdout "#802 a A 를 깐다" "$(cat "$tmp/stdout" | tr -d '\r')"
+has "error" "#802(a) #803(b, incomplete)" "$(cat "$tmp/log")"
+has "rerun hint" "Run the same command again" "$(cat "$tmp/log")"
+eq "no third issue" no "$([ -f "$FAKE_GH/issue-804.json" ] && echo yes || echo no)"
+rm "$FAKE_GH/fail-blocked-by"
+create 249 "$tmp/tickets.json"
+eq code 0 "$(cat "$tmp/code")"
+eq "issues" 5 "$(issue_count)"
+eq "#803 blockers" "802" "$(blockers_of 803)"
+eq "sub-issues" "802 803 804" "$(subs_of 249)"
+
+setup "create-tickets: a ticket of another spec with the same title is not reused"
+issue 249 spec
+issue 700 "" "A 를 깐다" "<!-- factory-ticket spec=248 -->"
+jq -n '[{title: "A 를 깐다", body: "x"}]' > "$tmp/t.json"
+create 249 "$tmp/t.json"
+eq code 0 "$(cat "$tmp/code")"
+eq stdout "#802 1 A 를 깐다" "$(cat "$tmp/stdout" | tr -d '\r')"
+
+setup "create-tickets: a bad file creates nothing"
+issue 249 spec
+jq -n '[{key: "a", title: "A", body: "x", model: "fable"},
+  {key: "b", title: "B", body: "x", blocked_by: ["z"]},
+  {key: "c", title: "", body: "x"}, {key: "d", title: "D", body: "x", local: "docs"}]' > "$tmp/t.json"
+create 249 "$tmp/t.json"
+eq code 2 "$(cat "$tmp/code")"
+log=$(cat "$tmp/log")
+has "model" "ticket a: model must be sonnet or opus" "$log"
+has "blocker" "ticket b: blocker z" "$log"
+has "title" "ticket c: no title" "$log"
+has "local" "ticket d: local must be workflows or claude" "$log"
+eq "issues" 1 "$(issue_count)"
+
+setup "create-ticket: one ticket, prints only its number"
+issue 249 spec
+issue 250 ""
+echo "## What to build" > "$tmp/one.md"
+bash "$script" create-ticket 249 --title "하나" --body-file "$tmp/one.md" --model opus --blocked-by "#250" \
+  > "$tmp/stdout" 2> "$tmp/log"
+eq code 0 "$?"
+eq stdout 802 "$(cat "$tmp/stdout" | tr -d '\r')"
+eq "#802 labels" "model:opus" "$(labels_of 802)"
+eq "#802 blockers" "250" "$(blockers_of 802)"
+eq "sub-issues" "802" "$(subs_of 249)"
+
+setup "create-ticket: a .claude/ ticket gets the claude marker"
+issue 249 spec
+echo "x" > "$tmp/one.md"
+bash "$script" create-ticket 249 --title "훅" --body-file "$tmp/one.md" --local claude > "$tmp/stdout" 2> "$tmp/log"
+eq stdout 801 "$(cat "$tmp/stdout" | tr -d '\r')"
+has "marker" "<!-- factory-touches-claude -->" "$(body_of 801)"
+eq "#801 labels" "local,ready-for-human" "$(labels_of 801)"
+
 # --- workflow wiring -----------------------------------------------------------------------
 
 current="workflow: the agent runs only in new and decomposed mode"
 cond=$(awk '/- name: Decompose$/ { f = 1 } f && /if:/ { print; exit }' "$workflow")
 has "agent condition" "steps.state.outputs.mode == 'new' || steps.state.outputs.mode == 'decomposed'" "$cond"
+current="workflow: the agent may run create-tickets and create-ticket (#185)"
+tools=$(grep -- '--allowedTools' "$workflow")
+has "allowedTools" "Bash(bash .github/factory/decompose.sh create-tickets:*)" "$tools"
+has "allowedTools" "Bash(bash .github/factory/decompose.sh create-ticket:*)" "$tools"
+current="workflow: the ledger line of a run carries the ticket count"
+has "record" 'record decompose "$SPEC" ${tickets:+"tickets=$tickets"}' "$(cat "$workflow")"
 current="workflow: the old approve-and-start step is gone"
 eq "approve step" 0 "$(grep -c 'Approve tickets and start the chain' "$workflow" || true)"
 

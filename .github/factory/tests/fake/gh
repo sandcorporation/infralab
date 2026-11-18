@@ -175,7 +175,37 @@ field() { # field <name>: value of -f/-F name=value, reading @file
 #                       PUT …/merge marks it merged and closed (fails while fail-merge exists)
 #   DELETE …/issues/<n>/labels/<name> removes the label; PATCH …/issues/<n> sets state or body
 #   DELETE …/git/refs/heads/<b> and POST …/actions/workflows/<f>/dispatches only log
+# Calls of decompose.sh create-tickets (#185):
+#   POST …/issues/<s>/sub_issues -F sub_issue_id=<id>   appends the issue with that id to sub-issues-<s>.json
+#                                                       (fails while fail-sub-issues exists)
+#   GET  …/issues/<n>/dependencies/blocked_by           blocked-by-<n>.json ([{number, id}]), default []
+#   POST …/issues/<n>/dependencies/blocked_by -F issue_id=<id>   appends that issue (fails while fail-blocked-by exists)
+# An issue's database id is its "id", else 100000 + its number.
+by_id() { # the issue file whose id is $1
+  local f
+  for f in "$d"/issue-*.json; do
+    [ "$(jqf '.id // (100000 + .number)' "$f")" = "$1" ] && { echo "$f"; return 0; }
+  done
+  return 1
+}
 case "$method $path" in
+  "POST repos/"*/*/issues/*/sub_issues)
+    s=${path%/sub_issues}; s=${s##*/}
+    [ -e "$d/fail-sub-issues" ] && fail "sub-issues are broken"
+    src=$(by_id "$(field sub_issue_id)") || fail "no issue with id $(field sub_issue_id)"
+    f="$d/sub-issues-$s.json"; [ -f "$f" ] || echo '[]' > "$f"
+    jqf --slurpfile i "$src" '. + [{number: $i[0].number, state: $i[0].state}]' "$f" > "$f.new" && mv "$f.new" "$f"
+    echo '{}'; exit 0 ;;
+  "GET repos/"*/*/issues/*/dependencies/blocked_by | "POST repos/"*/*/issues/*/dependencies/blocked_by)
+    n=${path%/dependencies/blocked_by}; n=${n##*/}
+    [ -f "$d/issue-$n.json" ] || fail "no issue #$n"
+    f="$d/blocked-by-$n.json"; [ -f "$f" ] || echo '[]' > "$f"
+    if [ "$method" = GET ]; then cat "$f"; exit 0; fi
+    [ -e "$d/fail-blocked-by" ] && fail "dependencies are broken"
+    src=$(by_id "$(field issue_id)") || fail "no issue with id $(field issue_id)"
+    jqf --slurpfile i "$src" '. + [{number: $i[0].number, id: ($i[0].id // (100000 + $i[0].number))}]' "$f" \
+      > "$f.new" && mv "$f.new" "$f"
+    echo '{}'; exit 0 ;;
   "PUT repos/"*/*/pulls/*/merge)
     n=${path%/merge}; n=${n##*/}
     f="$d/pull-$n.json"
@@ -349,7 +379,7 @@ case "$path" in
   repos/*/*/issues/*)
     n=${path##*/}
     [ -f "$d/issue-$n.json" ] || fail "no issue #$n"
-    cat "$d/issue-$n.json"
+    jqf '.id //= (100000 + .number)' "$d/issue-$n.json"
     ;;
   *) fail "unsupported path $path" ;;
 esac

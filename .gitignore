@@ -8,3 +8,5 @@ __pycache__/
 /problems/
 web/test-results/
 web/playwright-report/
+# Decompose 가 create-tickets 에 넘길 티켓 목록 (.github/factory/decompose.md)
+/.factory-tmp/

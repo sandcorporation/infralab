@@ -94,11 +94,15 @@ jobs:
           claude_args: >-
             --model claude-opus-5-5
             --max-turns 250
-            --allowedTools "Bash(gh:*),Bash(gofmt:*),Bash(git status:*),Bash(git diff:*),Read,Write,Edit,Glob,Grep"
+            --allowedTools "Bash(bash .github/factory/decompose.sh create-tickets:*),Bash(bash .github/factory/decompose.sh create-ticket:*),Bash(gh:*),Bash(gofmt:*),Bash(git status:*),Bash(git diff:*),Read,Write,Edit,Glob,Grep"
 
       - name: Record cost
         if: always() && (steps.state.outputs.mode == 'new' || steps.state.outputs.mode == 'decomposed')
-        run: bash .github/factory/ledger.sh record decompose "$SPEC"
+        # tickets=N: the spec's sub-issues after the run, so turns per ticket compare across runs (#185).
+        run: |
+          tickets=$(gh api "repos/$REPO/issues/$SPEC/sub_issues?per_page=100" --paginate --jq '.[].number') \
+            && tickets=$(printf '%s\n' "$tickets" | grep -c .) || tickets=
+          bash .github/factory/ledger.sh record decompose "$SPEC" ${tickets:+"tickets=$tickets"}
 
       # A question (needs-decision) ends here with no PR. Otherwise commit the acceptance tests on
       # factory/spec-<S>, open the spec PR (label spec-pr) and dispatch Odin, who reviews it, merges
