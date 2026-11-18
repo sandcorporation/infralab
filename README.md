@@ -145,6 +145,8 @@ checks:
 
 ## 🧪 시험
 
+PR 검사(GitHub Actions `ci`)와 같은 검사: `scripts/ci.sh <backend|web|agent|all>` (uv·node·go 필요, backend 는 Postgres 도).
+
 | 대상 | 명령 |
 | --- | --- |
 | backend | `docker compose -f docker/compose.dev.yaml run --rm backend pytest` |
