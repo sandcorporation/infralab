@@ -25,14 +25,12 @@ def _env(services: dict, name: str) -> dict:
     return (services.get(name) or {}).get("environment") or {}
 
 
-@pytest.mark.skip(reason="#195")
 def test_e2e_compose_runs_the_proxy_in_fake_provider_mode():
     services = _services(REPO / "docker" / "compose.e2e.yaml")
     assert "proxy" in services
     assert str(_env(services, "proxy").get(FAKE)) == "1"
 
 
-@pytest.mark.skip(reason="#195")
 def test_e2e_backend_talks_to_the_e2e_proxy_with_its_shared_secret():
     services = _services(REPO / "docker" / "compose.e2e.yaml")
     backend = _env(services, "backend")
@@ -43,7 +41,6 @@ def test_e2e_backend_talks_to_the_e2e_proxy_with_its_shared_secret():
     assert str(proxy.get("INFRALAB_EXAM_PROXY_SECRET")) == secret
 
 
-@pytest.mark.skip(reason="#195")
 def test_dev_and_production_compose_never_turn_the_fake_provider_on():
     for compose_file in (REPO / "docker" / "compose.dev.yaml", REPO / "compose.prod.yml"):
         for name, service in _services(compose_file).items():

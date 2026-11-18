@@ -4,6 +4,7 @@
 # `--profile agent up -d --force-recreate agent` 로 올린다(web/e2e/stack.ts). 에이전트 주소는 서버가 정한
 # 127.0.0.1:7777 이다 — 이 포트를 쓰는 다른 에이전트가 떠 있으면 e2e 를 돌릴 수 없다.
 # workstation 은 운영 이미지 대신 bash 만 든 작은 이미지다(터미널·환경 준비·준비 표시만 본다).
+# AI 프록시(proxy)는 가짜 공급사 모드로 올린다(#195) — 「AI 키 설정」·임시 토큰 회수 401 을 본다.
 
 services:
   # db·backend 는 호스트에 열지 않는다 — web(Vite)이 compose 망 안에서 backend 로 넘긴다. 고정 포트는 CI 실행기의
@@ -19,9 +20,28 @@ services:
       SCENARIOS_DIR: /e2e-scenarios
       # 숨은 검사 견본 문제은행(#193) — e2e 시나리오에 붙는 검사는 여기에만 둔다.
       INFRALAB_PROBLEMS_DIR: /e2e-problems
+      # AI 프록시(아래 proxy, 가짜 공급사 모드, #195). 공유 비밀은 e2e 전용 값이다. 지원자에게 주는 공개 주소도
+      # compose 안 주소다 — workstation 이 같은 compose 망에 있어 proxy 로 바로 닿는다.
+      INFRALAB_EXAM_PROXY_SECRET: e2e-only-proxy-secret
+      INFRALAB_EXAM_PROXY_URL: http://proxy:58090
+      INFRALAB_EXAM_PROXY_INTERNAL_URL: http://proxy:58090
     volumes:
       - ../web/e2e/fixtures/scenarios:/e2e-scenarios:ro
       - ../web/e2e/fixtures/problems:/e2e-problems:ro
+
+  # AI 프록시 — 가짜 공급사 모드라 진짜 키·외부 네트워크 없이 결정적 대답을 준다. 가짜 공급사 키가 둘 다 있는 셈이라
+  # 회차 설정에서 Claude Code·Codex 를 고를 수 있다. 개발·운영 compose 에는 이 모드가 없다(backend 시험이 본다).
+  proxy:
+    build:
+      context: ../proxy
+    image: infralab-e2e/proxy:local
+    depends_on:
+      - backend
+    environment:
+      INFRALAB_EXAM_PROXY_SECRET: e2e-only-proxy-secret
+      INFRALAB_PROXY_FAKE_PROVIDER: "1"
+      INFRALAB_PROXY_BACKEND_URL: http://backend:8000
+      INFRALAB_PROXY_ADDR: ":58090"
 
   agent:
     profiles: [agent]
