@@ -1,0 +1,9 @@
+{"Action":"start","Package":"infralab/agent"}
+{"Action":"run","Package":"infralab/agent","Test":"TestZzAssert"}
+{"Action":"output","Package":"infralab/agent","Test":"TestZzAssert","Output":"=== RUN   TestZzAssert\n"}
+{"Action":"output","Package":"infralab/agent","Test":"TestZzAssert","Output":"    spec_zz_a_test.go:9: want 2\n"}
+{"Action":"output","Package":"infralab/agent","Test":"TestZzAssert","Output":"--- FAIL: TestZzAssert (0.00s)\n"}
+{"Action":"fail","Package":"infralab/agent","Test":"TestZzAssert","Elapsed":0}
+{"Action":"output","Package":"infralab/agent","Output":"FAIL\n"}
+{"Action":"output","Package":"infralab/agent","Output":"FAIL\tinfralab/agent\t0.003s\n"}
+{"Action":"fail","Package":"infralab/agent","Elapsed":0.004}
