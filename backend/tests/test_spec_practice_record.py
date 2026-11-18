@@ -59,7 +59,6 @@ def _rows(api, s):
     return {r["id"]: r for r in res.json()}
 
 
-@pytest.mark.skip(reason="#136")
 def test_scenario_list_has_every_scenario_with_no_record_yet(api):
     s, _ = _practice_user(api)
 
@@ -75,7 +74,6 @@ def test_scenario_list_has_every_scenario_with_no_record_yet(api):
         assert (r["best_passed"], r["submission_count"], r["last_submitted_at"]) == (None, 0, None)
 
 
-@pytest.mark.skip(reason="#136")
 def test_scenario_list_shows_best_score_count_and_last_time(api):
     s, pid = _practice_user(api)
     _submit(api, s, pid, {"bucket-exists"})
@@ -88,7 +86,6 @@ def test_scenario_list_shows_best_score_count_and_last_time(api):
     assert row["last_submitted_at"] == last["submitted_at"]
 
 
-@pytest.mark.skip(reason="#136")
 def test_best_score_is_recounted_against_the_current_checks(api):
     s, pid = _practice_user(api)
     sub = _submit(api, s, pid, set(S3_CHECK_IDS))
@@ -100,7 +97,6 @@ def test_best_score_is_recounted_against_the_current_checks(api):
     assert _rows(api, s)[S3]["best_passed"] == 2
 
 
-@pytest.mark.skip(reason="#136")
 def test_scenario_list_needs_joining(api):
     s = api.login("stranger")
 
@@ -108,7 +104,6 @@ def test_scenario_list_needs_joining(api):
     assert api.get("/api/practice/scenarios").status_code == 401
 
 
-@pytest.mark.skip(reason="#136")
 def test_history_lists_my_submissions_newest_first_with_feedback_flags(api):
     s, pid = _practice_user(api)
     first = _submit(api, s, pid, {"bucket-exists"}, TRANSCRIPT)
@@ -128,14 +123,12 @@ def test_history_lists_my_submissions_newest_first_with_feedback_flags(api):
     ]
 
 
-@pytest.mark.skip(reason="#136")
 def test_history_of_an_unknown_scenario_is_404(api):
     s, _ = _practice_user(api)
 
     assert api.get("/api/practice/scenarios/no-such-scenario/submissions", s).status_code == 404
 
 
-@pytest.mark.skip(reason="#136")
 def test_submission_detail_has_check_results_and_feedback(api):
     s, pid = _practice_user(api)
     sub = _submit(api, s, pid, {"bucket-exists"}, TRANSCRIPT)
@@ -159,7 +152,6 @@ def test_submission_detail_has_check_results_and_feedback(api):
     ]
 
 
-@pytest.mark.skip(reason="#136")
 def test_other_practice_users_records_do_not_mix(api):
     a, pid = _practice_user(api, "pa")
     b, _ = _practice_user(api, "pb")
@@ -173,7 +165,6 @@ def test_other_practice_users_records_do_not_mix(api):
     assert _rows(api, a)[S3]["best_passed"] == 4
 
 
-@pytest.mark.skip(reason="#136")
 def test_class_cohort_submission_is_not_a_practice_record(api):
     teacher = api.login_instructor()
     cohort = api.create_cohort(teacher, "1기")

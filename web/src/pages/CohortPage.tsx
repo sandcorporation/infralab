@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError, getCohortScenarios, parseId, type StudentScenarioSummary } from "../api";
+import {
+  ApiError,
+  formatTime,
+  getCohortScenarios,
+  getPracticeScenarios,
+  parseId,
+  type PracticeScenarioRow,
+  type StudentScenarioSummary,
+} from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
 import { PreflightPanel, usePreflight } from "../components/PreflightPanel";
 import { RequiresTags } from "../components/ScenarioPicker";
@@ -13,13 +21,38 @@ export default function CohortPage() {
 }
 
 // 기수 화면의 몸통 — 연습 화면도 같은 것을 쓴다(연습 묶음은 기수와 같은 학생 경로를 쓴다).
-export function CohortView({ cohortId, backTo, backLabel }: { cohortId: number | null; backTo: string; backLabel: string }) {
+export function CohortView({
+  cohortId,
+  backTo,
+  backLabel,
+  practice = false,
+}: {
+  cohortId: number | null;
+  backTo: string;
+  backLabel: string;
+  practice?: boolean;
+}) {
   const { cohort, error } = useMyCohort(cohortId);
   const probe = useAgentProbe(cohort?.agent_url, cohort?.agent_token);
   // 이 화면에서는 응시 전 점검을 경고로만 보인다(연습). 시험의 「시작」은 응시 화면이 점검으로 막는다.
   const preflight = usePreflight(cohort?.agent_url, cohort?.agent_token);
   const [scenarios, setScenarios] = useState<StudentScenarioSummary[] | null>(null);
   const [scenarioError, setScenarioError] = useState<string | null>(null);
+
+  // 연습이면 시나리오마다 내 기록(최고 점수·제출 수·마지막 제출 시각).
+  const [records, setRecords] = useState<Record<string, PracticeScenarioRow>>({});
+  useEffect(() => {
+    if (!practice) return;
+    let cancelled = false;
+    getPracticeScenarios()
+      .then((rows) => !cancelled && setRecords(Object.fromEntries(rows.map((r) => [r.id, r]))))
+      .catch(() => {
+        /* 기록을 못 읽어도 목록은 보인다 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [practice, cohortId]);
 
   useEffect(() => {
     setScenarios(null);
@@ -106,9 +139,21 @@ export function CohortView({ cohortId, backTo, backLabel }: { cohortId: number |
                 </Link>
                 <RequiresTags requires={s.requires} />
                 <span className="grow" />
-                <span className={s.passed === s.total ? "score done" : "score"}>
-                  {s.passed === null ? "—" : s.passed}/{s.total}
-                </span>
+                {practice ? (
+                  <>
+                    <span className="muted small">
+                      제출 {records[s.id]?.submission_count ?? 0}
+                      {records[s.id]?.last_submitted_at && ` · ${formatTime(records[s.id].last_submitted_at as string)}`}
+                    </span>
+                    <span className={records[s.id]?.best_passed === s.total ? "score done" : "score"}>
+                      {records[s.id]?.best_passed ?? "—"}/{s.total}
+                    </span>
+                  </>
+                ) : (
+                  <span className={s.passed === s.total ? "score done" : "score"}>
+                    {s.passed === null ? "—" : s.passed}/{s.total}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
