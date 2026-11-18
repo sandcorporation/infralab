@@ -1,0 +1,18 @@
+id: e2e-prepare
+title: e2e 환경 준비
+description: |
+  e2e 시험 전용 시나리오. 환경 준비가 `/work/app/ready.txt` 를 만든다.
+
+requires:
+  floci: false
+  kind: null
+
+setup: setup.sh
+setup_timeout_seconds: 30
+
+checks:
+  - id: ready-file
+    name: ready.txt 가 있다
+    hint: 환경 준비를 다시 한다
+    command: cat /work/app/ready.txt
+    expect: { regex: "^ready" }

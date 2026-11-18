@@ -6,3 +6,5 @@ __pycache__/
 .playwright-mcp/
 # 운영 배포에서 Jenkins 가 받는 비공개 문제은행(Jenkinsfile extraCheckouts)
 /problems/
+web/test-results/
+web/playwright-report/

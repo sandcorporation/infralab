@@ -34,7 +34,7 @@ cr() {  # 이름 status conclusion → CheckRun 하나(workflow ci)
 }
 all() {  # status conclusion [바꿀 잡 status conclusion] → 필수 다섯 잡
   local out="" j
-  for j in backend web agent exam-proxy-route factory; do
+  for j in backend web agent exam-proxy-route e2e factory; do
     if [ "${3:-}" = "$j" ]; then out+="$(cr "$j" "$4" "$5"),"; else out+="$(cr "$j" "$1" "$2"),"; fi
   done
   echo "[${out%,}]"
@@ -75,9 +75,9 @@ run required-skipped "$(all COMPLETED SUCCESS web COMPLETED SKIPPED)"
 check required-skipped 1 no "web  SKIPPED"
 
 # 필수 아닌 검사의 실패도 막는다. SKIPPED 인 필수 아닌 검사는 괜찮다.
-run other-failure "[$(cr backend COMPLETED SUCCESS),$(cr web COMPLETED SUCCESS),$(cr agent COMPLETED SUCCESS),$(cr exam-proxy-route COMPLETED SUCCESS),$(cr factory COMPLETED SUCCESS),{\"__typename\":\"StatusContext\",\"context\":\"jenkins\",\"state\":\"ERROR\",\"targetUrl\":\"https://example.test/j\"}]"
+run other-failure "[$(cr backend COMPLETED SUCCESS),$(cr web COMPLETED SUCCESS),$(cr agent COMPLETED SUCCESS),$(cr exam-proxy-route COMPLETED SUCCESS),$(cr e2e COMPLETED SUCCESS),$(cr factory COMPLETED SUCCESS),{\"__typename\":\"StatusContext\",\"context\":\"jenkins\",\"state\":\"ERROR\",\"targetUrl\":\"https://example.test/j\"}]"
 check other-failure 1 no "jenkins  ERROR"
-run other-skipped "[$(cr backend COMPLETED SUCCESS),$(cr web COMPLETED SUCCESS),$(cr agent COMPLETED SUCCESS),$(cr exam-proxy-route COMPLETED SUCCESS),$(cr factory COMPLETED SUCCESS),{\"__typename\":\"CheckRun\",\"name\":\"label\",\"workflowName\":\"other\",\"status\":\"COMPLETED\",\"conclusion\":\"SKIPPED\"}]"
+run other-skipped "[$(cr backend COMPLETED SUCCESS),$(cr web COMPLETED SUCCESS),$(cr agent COMPLETED SUCCESS),$(cr exam-proxy-route COMPLETED SUCCESS),$(cr e2e COMPLETED SUCCESS),$(cr factory COMPLETED SUCCESS),{\"__typename\":\"CheckRun\",\"name\":\"label\",\"workflowName\":\"other\",\"status\":\"COMPLETED\",\"conclusion\":\"SKIPPED\"}]"
 check other-skipped 0 yes "검사 모두 초록"
 
 # 같은 이름이라도 다른 workflow 의 잡은 필수 잡으로 치지 않는다 → 끝내 미등록.
