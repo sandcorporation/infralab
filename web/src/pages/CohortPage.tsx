@@ -140,7 +140,7 @@ export function CohortView({
       {scenarios && scenarios.length === 0 && <p className="muted">열린 시나리오가 없습니다.</p>}
       {scenarios && scenarios.length > 0 && (
         <div className="sc-table-scroll">
-          <table className="sc-table">
+          <table className={practice ? "sc-table" : "sc-table app-table-fit"}>
             <thead>
               <tr>
                 <th>시나리오</th>

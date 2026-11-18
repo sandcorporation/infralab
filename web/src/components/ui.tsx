@@ -86,6 +86,41 @@ export function LinkTabs({ label, items }: { label: string; items: TabItem[] }) 
   );
 }
 
+/** 버튼 탭(한 화면 안의 칸 바꾸기). 패널은 id `${idPrefix}-panel-${key}`, aria-labelledby `${idPrefix}-tab-${key}`. */
+export function ButtonTabs<K extends string>({
+  label,
+  idPrefix,
+  items,
+  value,
+  onChange,
+}: {
+  label: string;
+  idPrefix: string;
+  items: { key: K; label: string; count?: number }[];
+  value: K;
+  onChange: (key: K) => void;
+}) {
+  const ref = useScrollFade<HTMLDivElement>();
+  return (
+    <div className="sc-tabs" role="tablist" aria-label={label} ref={ref}>
+      {items.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          role="tab"
+          id={`${idPrefix}-tab-${t.key}`}
+          aria-selected={value === t.key}
+          aria-controls={`${idPrefix}-panel-${t.key}`}
+          onClick={() => onChange(t.key)}
+        >
+          {t.label}
+          {t.count !== undefined && <span className="sc-tabs-count">{t.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** 네이티브 <dialog> 를 open 값에 맞춰 showModal()/close() 한다. Esc·배경 누름은 onClose. */
 function useModal(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDialogElement>(null);
