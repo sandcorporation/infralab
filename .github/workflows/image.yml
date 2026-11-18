@@ -117,6 +117,10 @@ jobs:
           build-args: ${{ matrix.build_args }}
           cache-from: type=registry,ref=${{ env.IMAGE_REPO }}:buildcache${{ matrix.suffix }}
           cache-to: type=registry,ref=${{ env.IMAGE_REPO }}:buildcache${{ matrix.suffix }},mode=max
+      # 올린 workstation 이미지를 이 아키텍처에서 실제로 띄워 본다(#125·#168) — 실패하면 manifest·승격으로 가지 않는다.
+      - name: workstation 실행 시험
+        if: matrix.name == 'infralab-workstation'
+        run: bash scripts/check_workstation_image.sh "${IMAGE_REPO}:${GITHUB_SHA}${{ matrix.suffix }}"
 
   manifest:
     name: manifest (${{ matrix.name }})

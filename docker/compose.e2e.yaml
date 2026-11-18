@@ -1,0 +1,51 @@
+# e2e 스택 — compose.dev.yaml 위에 겹친다. scripts/ci.sh e2e 가 프로젝트 이름·포트를 정해 올리고 내린다.
+#   docker compose -p infralab-e2e -f docker/compose.dev.yaml -f docker/compose.e2e.yaml up -d
+# 학생 PC 쪽(에이전트·workstation)도 함께 올린다. 에이전트는 사용자마다 토큰이 달라 시험이 토큰을 안 뒤
+# `--profile agent up -d --force-recreate agent` 로 올린다(web/e2e/stack.ts). 에이전트 주소는 서버가 정한
+# 127.0.0.1:7777 이다 — 이 포트를 쓰는 다른 에이전트가 떠 있으면 e2e 를 돌릴 수 없다.
+# workstation 은 운영 이미지 대신 bash 만 든 작은 이미지다(터미널·환경 준비·준비 표시만 본다).
+
+services:
+  # db·backend 는 호스트에 열지 않는다 — web(Vite)이 compose 망 안에서 backend 로 넘긴다. 고정 포트는 CI 실행기의
+  # 임시 포트 대역(32768~60999)과 부딪혀 「address already in use」 로 깨진 적이 있다.
+  db:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+    environment:
+      SCENARIOS_DIR: /e2e-scenarios
+    volumes:
+      - ../web/e2e/fixtures/scenarios:/e2e-scenarios:ro
+
+  agent:
+    profiles: [agent]
+    build:
+      context: ..
+      dockerfile: docker/agent.e2e.Dockerfile
+    image: infralab-e2e/agent:local
+    ports:
+      - "127.0.0.1:7777:7777"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      AGENT_TOKEN: ${E2E_AGENT_TOKEN:-unset}
+      AGENT_ALLOWED_ORIGINS: http://127.0.0.1:${INFRALAB_WEB_PORT:-53040}
+      WORKSTATION_CONTAINER: ${E2E_WORKSTATION:-infralab-e2e-workstation}
+      FLOCI_CONTAINER: infralab-e2e-floci
+
+  workstation:
+    image: bash:5.2-alpine3.21@sha256:64defcbc5126c2d81122b4fb78a629a6d27068f0842c4a8302b8273415b12e30
+    container_name: ${E2E_WORKSTATION:-infralab-e2e-workstation}
+    command: ["sleep", "infinity"]
+    working_dir: /work
+    environment:
+      TERM: xterm-256color
+    volumes:
+      # 학생 compose 와 같은 꼴 — /work 는 기수 폴더, /root 는 홈 볼륨(#124: 준비 표시는 /work 에 있어야 한다).
+      - e2e-work:/work
+      - e2e-home:/root
+
+volumes:
+  e2e-work:
+  e2e-home:
