@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { isPasteShortcut } from "../terminalKeys";
 
 type Conn = "connecting" | "open" | "closed" | "failed";
 
@@ -57,6 +58,9 @@ export function Terminal({ agentUrl, token }: { agentUrl: string; token: string 
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    // Ctrl+V 는 xterm 이 ^V 로 보내지 않고 브라우저 붙여넣기로 넘긴다 — paste 이벤트가 생겨 감독 신호가 되고,
+    // bash 가 ^V(quoted-insert) 뒤 Enter 를 `\r` 로 받는 일이 없다(#126).
+    term.attachCustomKeyEventHandler((ev) => !isPasteShortcut(ev));
     fit.fit();
     termRef.current = term;
     const onData = term.onData((d) => send({ t: "i", d }));

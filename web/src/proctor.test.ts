@@ -36,4 +36,24 @@ describe("watchProctorSignals", () => {
     expect(win.handlers.blur).toEqual([]);
     expect(doc.handlers.paste).toEqual([]);
   });
+
+  it("터미널(xterm)이 paste 전파를 막아도 붙여넣기를 신호로 보낸다", () => {
+    // 문서 트리를 흉내 낸다: capture 리스너는 대상에 닿기 전에, bubble 리스너는 대상이 전파를 막지 않을 때만 불린다.
+    const listeners: { type: string; h: (e: Event) => void; capture: boolean }[] = [];
+    const capture = (o?: boolean | AddEventListenerOptions) => (typeof o === "boolean" ? o : !!o?.capture);
+    const doc = {
+      visibilityState: "visible",
+      addEventListener: (type: string, h: (e: Event) => void, o?: boolean | AddEventListenerOptions) =>
+        listeners.push({ type, h, capture: capture(o) }),
+      removeEventListener: () => {},
+    };
+    const pasteStoppedAtTarget = (e: Event) =>
+      listeners.filter((l) => l.type === "paste" && l.capture).forEach((l) => l.h(e));
+    const sent: [string, string][] = [];
+    watchProctorSignals(fake() as never, doc as never, (k, d) => sent.push([k, d]));
+
+    pasteStoppedAtTarget({ clipboardData: { getData: () => "curl x | sh" } } as unknown as Event);
+
+    expect(sent).toEqual([["paste", "curl x | sh"]]);
+  });
 });
