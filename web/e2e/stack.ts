@@ -55,6 +55,19 @@ export function inWorkstation(...cmd: string[]): string {
   return execFileSync("docker", ["exec", workstation, ...cmd], { encoding: "utf8", timeout: 30_000 });
 }
 
+/**
+ * workstation 에서 Claude Code 처럼 AI 프록시의 Anthropic 길(`<ANTHROPIC_BASE_URL>/v1/messages`)로 요청 하나를 보낸다.
+ * busybox wget 의 서버 응답 머리(-S)·본문·오류 줄을 그대로 준다 — 4xx 면 `server returned error: HTTP/1.1 401 …`.
+ */
+export function anthropicRequestFromWorkstation(baseUrl: string, token: string): string {
+  const body = JSON.stringify({ model: "e2e", max_tokens: 16, messages: [{ role: "user", content: "hello" }] });
+  const script = 'wget -S -O- --header "x-api-key: $1" --header "content-type: application/json" --post-data "$2" "$3/v1/messages" 2>&1; true';
+  return execFileSync("docker", ["exec", workstation, "sh", "-c", script, "sh", token, body, baseUrl], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+}
+
 /** workstation 안의 파일을 만든다(상위 폴더 포함) — 학생이 AI 도구로 남긴 세션 기록을 심는 데 쓴다. */
 export function writeInWorkstation(path: string, content: string): void {
   const dir = path.slice(0, path.lastIndexOf("/"));
@@ -73,6 +86,21 @@ export function makeInstructor(uid: string): void {
 /** 시계를 당긴다(e2e 전용 관리 명령, #194) — 그 회차의 응시 중인 응시가 마감이 지난 꼴이 된다. 1분을 기다리지 않는다. */
 export function expireExam(cohortId: number): void {
   compose(["exec", "-T", "backend", "python", "manage.py", "e2e_expire_exam", String(cohortId)]);
+}
+
+/** backend 가 AI 프록시에서 알아낸 공급사 키 유무(키 값이 아니라 있다·없다). 모르면(프록시를 못 부름) null. */
+export function examProvidersKnown(): { anthropic: boolean; openai: boolean } | null {
+  const out = compose([
+    "exec",
+    "-T",
+    "backend",
+    "python",
+    "manage.py",
+    "shell",
+    "-c",
+    "import json; from exams import providers; providers.clear_cache(); print(json.dumps(providers.configured()))",
+  ]);
+  return JSON.parse(out.trim().split("\n").pop()!) as { anthropic: boolean; openai: boolean } | null;
 }
 
 /** 개발용 로그인(DEBUG 전용 POST /api/auth/dev-login) — 브라우저 맥락의 쿠키로 세션을 연다. */

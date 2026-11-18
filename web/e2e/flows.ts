@@ -6,10 +6,19 @@ import { agentTokenFor, baseOrigin, devLogin, makeInstructor, startAgent, stopAg
 export const SCENARIO_ID = "e2e-prepare";
 export const SCENARIO_TITLE = "e2e 환경 준비";
 
+/** AI 도구를 켠 회차의 도구(화면 이름)와 고정 모델. */
+export const AI_TOOL_MODELS: [string, string][] = [
+  ["Claude Code", "e2e-claude-model"],
+  ["Codex", "e2e-codex-model"],
+];
+
 export type ExamCohort = { instructor: Page; cohortId: number; name: string };
 
 /** 강사로 로그인해 감독을 켠 시험 회차를 만들고 e2e 시나리오를 연다(설정 탭까지 화면으로). */
-export async function createExamCohort(browser: Browser, opts: { hiddenChecks?: boolean } = {}): Promise<ExamCohort> {
+export async function createExamCohort(
+  browser: Browser,
+  opts: { hiddenChecks?: boolean; aiTools?: boolean } = {},
+): Promise<ExamCohort> {
   const ctx = await browser.newContext();
   const instructor = await ctx.newPage();
   const uid = uniqueId("instructor");
@@ -34,6 +43,13 @@ export async function createExamCohort(browser: Browser, opts: { hiddenChecks?: 
   await instructor.getByLabel("시간 제한(분)").fill("30");
   await instructor.getByRole("checkbox", { name: "감독" }).check();
   if (opts.hiddenChecks) await instructor.getByRole("checkbox", { name: "숨은 검사 사용" }).check();
+  if (opts.aiTools) {
+    // e2e 스택의 AI 프록시는 가짜 공급사 모드라 두 공급사 키가 다 있는 셈이다(#195) — 둘 다 고를 수 있다.
+    for (const [tool, model] of AI_TOOL_MODELS) {
+      await instructor.getByRole("checkbox", { name: tool, exact: true }).check();
+      await instructor.getByRole("textbox", { name: `${tool} 모델` }).fill(model);
+    }
+  }
   await instructor.getByRole("button", { name: "설정 저장" }).click();
   await expect(instructor.getByRole("status").filter({ hasText: "저장됨" })).toBeVisible();
   return { instructor, cohortId, name };
