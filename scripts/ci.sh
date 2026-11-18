@@ -16,6 +16,9 @@ backend() {
 
 web() {
   need npm "web 검사 (node 필요)"
+  # 디자인시스템(sandcorp-design) 의존성·색 리터럴 검사(#135)와 그 시험.
+  node scripts/check_design.mjs
+  bash scripts/check_design_test.sh
   (cd web && npm ci && npm run typecheck && npm run test --if-present && npm run build)
 }
 

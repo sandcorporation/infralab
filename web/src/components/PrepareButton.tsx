@@ -107,7 +107,7 @@ export function PrepareButton({
             {running ? `${label} 중… ${elapsed}s` : prepared ? `${label} 다시` : label}
           </button>
         )}
-        {prepared && !running && <span className="badge ok">준비됨</span>}
+        {prepared && !running && <span className="sc-badge sc-badge--success">준비됨</span>}
       </div>
       {running && (
         <ol className="muted planned">

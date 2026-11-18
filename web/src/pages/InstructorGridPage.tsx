@@ -80,8 +80,8 @@ export default function InstructorGridPage() {
       {grid.scenarios.length === 0 && <p className="muted">열린 시나리오가 없습니다.</p>}
       {grid.rows.length === 0 && <p className="muted">참여자가 없습니다.</p>}
       {grid.scenarios.length > 0 && grid.rows.length > 0 && (
-        <div className="card grid-wrap">
-          <table className="grid">
+        <div className="card sc-table-scroll">
+          <table className="sc-table grid">
             <thead>
               <tr>
                 <th>학생</th>

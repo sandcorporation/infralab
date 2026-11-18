@@ -68,7 +68,7 @@ export default function InstructorExamReportPage() {
           <section className="card">
             <h2>결과 점수</h2>
             <p>
-              <span className="tag">{STATUS_LABEL[report.status]}</span>{" "}
+              <span className="sc-badge sc-badge--neutral">{STATUS_LABEL[report.status]}</span>{" "}
               최종 {report.score.final_percent === null ? "—" : `${report.score.final_percent}%`} · 공개 검사{" "}
               {report.score.public_passed}/{report.score.public_total} · 숨은 검사{" "}
               {report.score.hidden_status === "skipped"
@@ -93,9 +93,10 @@ export default function InstructorExamReportPage() {
                 </span>
               )}
             </div>
-            {!report.rubric && <p className="muted">아직 채점하지 않았습니다. 채점 재료는 이 응시의 AI 프록시 기록입니다.</p>}
+            {!report.rubric && <p className="muted">아직 채점하지 않았습니다.</p>}
             {report.rubric && (
-              <table>
+              <div className="sc-table-scroll">
+                <table className="sc-table">
                 <thead>
                   <tr>
                     <th>항목</th>
@@ -110,7 +111,7 @@ export default function InstructorExamReportPage() {
                     <tr key={item.key}>
                       <td>{item.label}</td>
                       <td>
-                        {item.score}/5 {item.edited && <span className="tag">수정됨</span>}
+                        {item.score}/5 {item.edited && <span className="sc-badge sc-badge--neutral">수정됨</span>}
                       </td>
                       <td>{item.llm_score}/5</td>
                       <td>
@@ -164,7 +165,8 @@ export default function InstructorExamReportPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             )}
           </section>
 

@@ -87,9 +87,9 @@ export function ScenarioPicker({
 export function RequiresTags({ requires }: { requires: ScenarioSummary["requires"] }) {
   return (
     <>
-      {requires.floci && <span className="tag">Floci</span>}{" "}
+      {requires.floci && <span className="sc-badge sc-badge--neutral">Floci</span>}{" "}
       {requires.kind && (
-        <span className="tag">
+        <span className="sc-badge sc-badge--neutral">
           kind {requires.kind.control_planes}cp+{requires.kind.workers}w
         </span>
       )}

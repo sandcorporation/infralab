@@ -235,7 +235,8 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
         </div>
         {invites && invites.length === 0 && <p className="muted">발급한 링크 없음</p>}
         {invites && invites.length > 0 && (
-          <table>
+          <div className="sc-table-scroll">
+            <table className="sc-table">
             <thead>
               <tr>
                 <th>지원자</th>
@@ -253,7 +254,7 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
                     <Link to={`/instructor/cohorts/${cohort.id}/exam-invites/${i.id}/report`}>{i.label}</Link>
                   </td>
                   <td>
-                    <span className="tag">{STATUS_LABEL[i.status]}</span>
+                    <span className="sc-badge sc-badge--neutral">{STATUS_LABEL[i.status]}</span>
                   </td>
                   <td>{formatTime(i.created_at)}</td>
                   <td>
@@ -310,7 +311,8 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         )}
       </section>
     </>

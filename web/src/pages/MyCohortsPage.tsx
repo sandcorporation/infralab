@@ -39,7 +39,7 @@ export default function MyCohortsPage() {
               <Link to={`/cohorts/${c.id}`}>
                 <strong>{c.name}</strong>
               </Link>
-              {c.archived && <span className="tag">보관됨</span>}
+              {c.archived && <span className="sc-badge sc-badge--neutral">보관됨</span>}
             </div>
             <div className="muted">가입 {formatTime(c.joined_at)}</div>
           </li>

@@ -16,6 +16,8 @@ import InstructorExamReportPage from "./pages/InstructorExamReportPage";
 import ExamPage from "./pages/ExamPage";
 import { isExamUser, rememberedExamToken } from "./exam";
 import { ExamBar, ExamClockProvider } from "./examAttempt";
+import mark from "sandcorp-design/assets/mark.svg";
+import markDark from "sandcorp-design/assets/mark-dark.svg";
 
 function Layout() {
   const { me, logout } = useAuth();
@@ -25,23 +27,29 @@ function Layout() {
     matchPath("/exam/:token", location.pathname)?.params.token ?? (isExamUser(me?.username) ? rememberedExamToken() : null);
   return (
     <ExamClockProvider token={examToken}>
-      <header className="topbar">
-        <Link to="/" className="brand">
-          infralab
-        </Link>
-        <nav>
-          {me?.is_instructor && <Link to="/instructor">강사</Link>}
-          {me ? (
-            <>
-              <span className="muted">{me.display_name || me.username}</span>
-              <button className="link" onClick={logout}>
-                로그아웃
-              </button>
-            </>
-          ) : (
-            <Link to="/login">로그인</Link>
-          )}
-        </nav>
+      <header className="sc-masthead masthead">
+        <div className="sc-masthead-row">
+          <Link to="/" className="sc-brand brand">
+            <picture>
+              <source srcSet={markDark} media="(prefers-color-scheme: dark)" />
+              <img src={mark} alt="" />
+            </picture>
+            Sandcorp <span className="brand-product">infralab</span>
+          </Link>
+          <nav className="masthead-nav">
+            {me?.is_instructor && <Link to="/instructor">강사</Link>}
+            {me ? (
+              <>
+                <span className="masthead-user">{me.display_name || me.username}</span>
+                <button className="link" onClick={logout}>
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <Link to="/login">로그인</Link>
+            )}
+          </nav>
+        </div>
       </header>
       <ExamBar />
       <main className="page">

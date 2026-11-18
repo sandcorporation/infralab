@@ -39,20 +39,20 @@ export function useAgentProbe(agentUrl: string | undefined, token: string | unde
 export function AgentStatusBadge({ probe }: { probe: AgentProbe }) {
   switch (probe.state) {
     case "checking":
-      return <span className="badge muted">에이전트 확인 중…</span>;
+      return <span className="sc-badge sc-badge--neutral">에이전트 확인 중…</span>;
     case "connected":
       return (
-        <span className="badge ok" title={`docker ${probe.status.docker_server}`}>
+        <span className="sc-badge sc-badge--success" title={`docker ${probe.status.docker_server}`}>
           에이전트 연결됨 · v{probe.status.version}
         </span>
       );
     case "unreachable":
-      return <span className="badge bad">에이전트 없음</span>;
+      return <span className="sc-badge sc-badge--danger">에이전트 없음</span>;
     case "token-mismatch":
-      return <span className="badge bad">토큰 불일치 — compose.yml 다시 받기</span>;
+      return <span className="sc-badge sc-badge--danger">토큰 불일치 — compose.yml 다시 받기</span>;
     case "error":
       return (
-        <span className="badge bad" title={probe.reason}>
+        <span className="sc-badge sc-badge--danger" title={probe.reason}>
           에이전트 오류: {probe.reason}
         </span>
       );

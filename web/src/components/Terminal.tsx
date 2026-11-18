@@ -54,7 +54,7 @@ export function Terminal({ agentUrl, token }: { agentUrl: string; token: string 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const term = new XTerm({ cursorBlink: true, fontSize: 13, convertEol: false, theme: { background: "#111827" } });
+    const term = new XTerm({ cursorBlink: true, fontSize: 13, convertEol: false, theme: terminalTheme() });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
@@ -87,7 +87,7 @@ export function Terminal({ agentUrl, token }: { agentUrl: string; token: string 
   return (
     <div className="terminal">
       <div className="row terminal-bar">
-        <span className={`badge ${conn === "open" ? "ok" : conn === "connecting" ? "muted" : "bad"}`}>{label}</span>
+        <span className={`sc-badge ${conn === "open" ? "sc-badge--success" : conn === "connecting" ? "sc-badge--neutral" : "sc-badge--danger"}`}>{label}</span>
         {(conn === "closed" || conn === "failed") && (
           <button className="secondary" onClick={connect}>
             재연결
@@ -98,4 +98,12 @@ export function Terminal({ agentUrl, token }: { agentUrl: string; token: string 
       <div ref={hostRef} className="terminal-host" />
     </div>
   );
+}
+
+// xterm 은 CSS 변수를 못 읽는다 — 디자인 토큰(브랜드 잉크·모래, 다크 모드에서도 같은 값)의 계산값을 넘긴다.
+function terminalTheme() {
+  const css = getComputedStyle(document.documentElement);
+  const background = css.getPropertyValue("--color-brand-ink").trim();
+  const foreground = css.getPropertyValue("--color-brand-sand").trim();
+  return background && foreground ? { background, foreground, cursor: foreground } : undefined;
 }

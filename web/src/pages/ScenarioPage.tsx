@@ -119,7 +119,7 @@ export default function ScenarioPage() {
               {scenario.requires.floci && (
                 <p className="muted">Floci{probe.state === "connected" && ` · ${probe.status.floci}`}</p>
               )}
-              {env?.ready && <p className="badge ok">환경 있음</p>}
+              {env?.ready && <p className="sc-badge sc-badge--success">환경 있음</p>}
               <PrepareButton
                 cohortId={cohort.id}
                 scenarioId={scenario.id}

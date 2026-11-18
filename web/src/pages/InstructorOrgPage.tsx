@@ -127,7 +127,7 @@ export default function InstructorOrgPage() {
               {invites.map((i) => (
                 <li key={i.id} className="card">
                   <div className="row">
-                    <span className="tag">{i.role}</span>
+                    <span className="sc-badge sc-badge--neutral">{i.role}</span>
                     <code>{orgInviteUrl(i.token)}</code>
                     <button onClick={() => copy(i)}>{copied === i.id ? "복사됨" : "링크 복사"}</button>
                     <button
@@ -147,7 +147,8 @@ export default function InstructorOrgPage() {
           {!members ? (
             <p className="muted">불러오는 중…</p>
           ) : (
-            <table>
+            <div className="sc-table-scroll">
+              <table className="sc-table">
               <thead>
                 <tr>
                   <th>이름</th>
@@ -199,7 +200,8 @@ export default function InstructorOrgPage() {
                   );
                 })}
               </tbody>
-            </table>
+              </table>
+            </div>
           )}
         </>
       )}

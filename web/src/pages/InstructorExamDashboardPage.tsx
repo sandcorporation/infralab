@@ -22,7 +22,8 @@ export default function InstructorExamDashboardPage() {
       {rows === null && !error && <p className="muted">불러오는 중…</p>}
       {rows?.length === 0 && <p className="muted">시험 회차가 없습니다.</p>}
       {rows && rows.length > 0 && (
-        <table>
+        <div className="sc-table-scroll">
+          <table className="sc-table">
           <thead>
             <tr>
               <th>회차</th>
@@ -55,7 +56,8 @@ export default function InstructorExamDashboardPage() {
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
     </section>
   );

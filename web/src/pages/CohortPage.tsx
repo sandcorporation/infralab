@@ -49,7 +49,7 @@ export default function CohortPage() {
       </p>
       <div className="row">
         <h1>{cohort.name}</h1>
-        {cohort.archived && <span className="tag">보관됨</span>}
+        {cohort.archived && <span className="sc-badge sc-badge--neutral">보관됨</span>}
         <AgentStatusBadge probe={probe} />
       </div>
 
