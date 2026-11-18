@@ -491,3 +491,7 @@ blockquote.evidence {
   background: var(--accent);
   border-radius: 2px 2px 0 0;
 }
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}

@@ -45,7 +45,7 @@ production push → Jenkins(Jenkinsfile → jenkins-shared sandcorpDeploy)
 | `POSTGRES_DB`, `POSTGRES_USER` | 아니오 | 기본 `infralab` |
 | `FLOCI_IMAGE` | 아니오 | 학생 compose 의 Floci 이미지. 비면 backend 기본값 |
 | `GUNICORN_WORKERS` | 아니오 | 기본 2 |
-| `INFRALAB_ANTHROPIC_EXAM_KEY`, `INFRALAB_OPENAI_EXAM_KEY` | 시험 | 시험용 공급사 키. **`proxy` 서비스만** 받는다(backend 는 받지 않는다) |
+| `INFRALAB_ANTHROPIC_EXAM_KEY`, `INFRALAB_OPENAI_EXAM_KEY` | 시험 | 시험용 공급사 키. **`proxy` 서비스만** 받는다(backend 는 받지 않는다). 하나만 넣어도 된다 — 빈 쪽 공급사 경로는 proxy 가 공급사로 보내지 않고 503 `provider_not_configured` 로 답하며, 강사 시험 설정에서 그 도구(Anthropic→`claude_code`, OpenAI→`codex`)는 「공급사 키 없음」으로 고를 수 없다 |
 | `INFRALAB_EXAM_PROXY_SECRET` | 시험 | proxy 와 backend 가 나누는 공유 비밀. 둘 다 같은 값을 받는다 |
 | `INFRALAB_EXAM_PROXY_URL` | 시험 | backend 가 지원자에게 알려 줄 프록시 주소. 운영은 `https://infralab.sandcorp.co.kr/exam-proxy`(web 의 `/exam-proxy/` 가 proxy 로 넘긴다). backend 가 `/anthropic`·`/openai/v1` 을 붙인다. 기본 `http://proxy:58090` 은 지원자 PC 가 닿지 못한다 |
 | `INFRALAB_GRADER_ANTHROPIC_KEY` | 시험 | 루브릭 채점 키(backend 만). 비면 가짜 채점기 |

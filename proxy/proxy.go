@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"log"
@@ -102,6 +103,10 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"status":"ok"}`)
 		return
 	}
+	if r.URL.Path == "/providers" {
+		p.serveProviders(w, r)
+		return
+	}
 	rt, ok := routes[r.URL.Path]
 	if !ok {
 		provider := "openai"
@@ -113,6 +118,12 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		writeError(w, rt.provider, http.StatusMethodNotAllowed, "method_not_allowed", "infralab: POST only")
+		return
+	}
+	// 키가 빈 공급사로는 보내지 않는다 — 빈 키로 보내면 공급사 401 이 지원자에게 그대로 간다. backend 도 부르지 않는다(사용량에 세지 않음).
+	if !p.cfg.configured(rt.provider) {
+		p.log.Printf("%s %s tool=%s denied reason=provider_not_configured status=503", r.Method, r.URL.Path, rt.tool)
+		writeError(w, rt.provider, http.StatusServiceUnavailable, "provider_not_configured", "infralab: this AI provider is not configured for exams")
 		return
 	}
 	clientID := p.clientID(r)
@@ -204,6 +215,35 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := p.backend.recordExchange(ctx, ex); err != nil {
 		p.log.Printf("%s %s tool=%s client=%s record exchange failed: %v", r.Method, r.URL.Path, rt.tool, clientID, err)
 	}
+}
+
+// configured 는 그 공급사의 키가 들어 있는지.
+func (c config) configured(provider string) bool {
+	if provider == "anthropic" {
+		return c.AnthropicKey != ""
+	}
+	return c.OpenAIKey != ""
+}
+
+// serveProviders 는 backend 전용 — 공급사마다 키가 설정됐는지만 준다(키 값은 주지 않는다).
+// backend 와 나누는 공유 비밀(Authorization: Bearer)이 맞아야 한다.
+func (p *proxy) serveProviders(w http.ResponseWriter, r *http.Request) {
+	got := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	if p.cfg.ProxySecret == "" || subtle.ConstantTimeCompare([]byte(got), []byte(p.cfg.ProxySecret)) != 1 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"detail":"unauthorized"}`)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{
+		"anthropic": p.cfg.configured("anthropic"),
+		"openai":    p.cfg.configured("openai"),
+	})
 }
 
 func (p *proxy) deny(w http.ResponseWriter, r *http.Request, rt route, clientID, reason string) {

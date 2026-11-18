@@ -24,6 +24,7 @@
 | `POST /openai/v1/responses` | `codex` | OpenAI `/v1/responses` | `Authorization: Bearer <토큰>` |
 | `POST /openai/v1/chat/completions` | `codex` | OpenAI `/v1/chat/completions` | `Authorization: Bearer <토큰>` |
 | `GET /healthz` | — | — | — (`{"status":"ok"}`) |
+| `GET /providers` | — | — | backend 전용, `Authorization: Bearer <공유 비밀>`. 공급사마다 키가 들어 있는지만 준다: `{"anthropic":true,"openai":false}`. 비밀이 틀리면 401 |
 
 운영에서는 공개 포트 없이 web(nginx)의 `<도메인>/exam-proxy/` 가 접두어를 떼고 이 서비스로 넘긴다
 (`web/nginx.conf`, 경로 시험 `scripts/check_exam_proxy_route.sh`). 그래서 `<프록시>` 는 `https://<도메인>/exam-proxy` 다.
@@ -50,6 +51,9 @@ Claude Code 는 `ANTHROPIC_BASE_URL=<프록시>/anthropic`, Codex 는 `base_url 
 본문은 공급사 꼴이다. Anthropic: `{"type":"error","error":{"type":"authentication_error|permission_error|rate_limit_error","message":…,"code":"<reason>"}}`,
 OpenAI: `{"error":{"message":…,"type":…,"code":"<reason>","param":null}}`. backend 에 닿지 못하거나 backend 가 200 이
 아니면 502(공급사도 부르지 않는다), 공급사에 닿지 못하면 502.
+
+공급사 키는 하나만 있어도(둘 다 없어도) 뜬다. 키가 빈 공급사의 경로는 임시 토큰·backend 를 보기 전에
+503 `provider_not_configured` 로 막는다 — 공급사도 backend 도 부르지 않고 사용량에 세지 않는다.
 
 ## `client_id` 규칙
 

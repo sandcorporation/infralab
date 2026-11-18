@@ -138,6 +138,12 @@ func (s *syncBuffer) String() string {
 
 func newHarness(t *testing.T, provider http.Handler) *harness {
 	t.Helper()
+	return newHarnessWith(t, provider, func(*config) {})
+}
+
+// newHarnessWith 는 설정을 고쳐 띄운다(빈 공급사 키 등).
+func newHarnessWith(t *testing.T, provider http.Handler, edit func(*config)) *harness {
+	t.Helper()
 	fb, bsrv := newFakeBackend(t)
 	up, usrv := newUpstream(t, provider)
 	logs := &syncBuffer{}
@@ -149,6 +155,7 @@ func newHarness(t *testing.T, provider http.Handler) *harness {
 		AnthropicURL: usrv.URL,
 		OpenAIURL:    usrv.URL,
 	}
+	edit(&cfg)
 	psrv := httptest.NewServer(newProxy(cfg, log.New(logs, "", 0)))
 	t.Cleanup(psrv.Close)
 	return &harness{backend: fb, upstream: up, proxy: psrv, logs: logs}

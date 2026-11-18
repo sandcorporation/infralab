@@ -269,6 +269,8 @@ export const instructor = {
       method: "PUT",
       body: JSON.stringify({ scenario_ids: scenarioIds }),
     }),
+  /** 공급사 키가 AI 프록시에 없어 고를 수 없는 도구. 프록시를 못 부르면 빈 목록. */
+  examProviders: () => api<{ unavailable_tools: ExamTool[] }>("/api/instructor/exam-providers"),
   setExamSettings: (cohortId: number, settings: ExamSettings) =>
     api<Cohort>(`/api/instructor/cohorts/${cohortId}/exam-settings`, {
       method: "PUT",

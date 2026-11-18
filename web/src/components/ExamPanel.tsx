@@ -39,6 +39,48 @@ const DEFAULTS: ExamSettings = {
   ai_token_limit: 0,
 };
 
+/**
+ * 허용 도구 체크박스. 공급사 키가 없는 도구는 고를 수 없다(이미 골라 둔 것은 풀 수만 있다).
+ */
+export function ToolOptions({
+  form,
+  unavailable,
+  onToggle,
+  onModel,
+}: {
+  form: ExamSettings;
+  unavailable: readonly ExamTool[];
+  onToggle: (tool: ExamTool) => void;
+  onModel: (tool: ExamTool, model: string) => void;
+}) {
+  return (
+    <fieldset>
+      <legend>허용 도구 (비워 두면 AI 없는 시험)</legend>
+      {TOOLS.map((t) => {
+        const checked = form.tools.includes(t.key);
+        const missing = unavailable.includes(t.key);
+        return (
+          <div className="row" key={t.key}>
+            <label>
+              <input type="checkbox" checked={checked} disabled={missing && !checked} onChange={() => onToggle(t.key)} />{" "}
+              {t.label}
+            </label>
+            {missing && <span className="muted">공급사 키 없음</span>}
+            {(t.key === "claude_code" || t.key === "codex") && checked && (
+              <input
+                placeholder="고정 모델"
+                aria-label={`${t.label} 모델`}
+                value={form.models[t.key] ?? ""}
+                onChange={(e) => onModel(t.key, e.target.value)}
+              />
+            )}
+          </div>
+        );
+      })}
+    </fieldset>
+  );
+}
+
 function initial(raw: Cohort["exam_settings"]): ExamSettings {
   return { ...DEFAULTS, ...(raw as Partial<ExamSettings>) };
 }
@@ -53,6 +95,19 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
   const [eventsOf, setEventsOf] = useState<{ id: number; events: ExamEvent[] } | null>(null);
+  const [unavailable, setUnavailable] = useState<ExamTool[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // 못 받으면 아무 도구도 막지 않는다 — 저장할 때 backend 가 다시 본다.
+    instructor
+      .examProviders()
+      .then((r) => !cancelled && setUnavailable(r.unavailable_tools))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,25 +175,12 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
             />
           </label>
         </div>
-        <fieldset>
-          <legend>허용 도구 (비워 두면 AI 없는 시험)</legend>
-          {TOOLS.map((t) => (
-            <div className="row" key={t.key}>
-              <label>
-                <input type="checkbox" checked={form.tools.includes(t.key)} onChange={() => toggleTool(t.key)} />{" "}
-                {t.label}
-              </label>
-              {(t.key === "claude_code" || t.key === "codex") && form.tools.includes(t.key) && (
-                <input
-                  placeholder="고정 모델"
-                  aria-label={`${t.label} 모델`}
-                  value={form.models[t.key] ?? ""}
-                  onChange={(e) => setForm({ ...form, models: { ...form.models, [t.key]: e.target.value } })}
-                />
-              )}
-            </div>
-          ))}
-        </fieldset>
+        <ToolOptions
+          form={form}
+          unavailable={unavailable}
+          onToggle={toggleTool}
+          onModel={(tool, model) => setForm({ ...form, models: { ...form.models, [tool]: model } })}
+        />
         <div className="row">
           <label>
             <input

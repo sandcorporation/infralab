@@ -29,7 +29,7 @@ from cohorts.models import Cohort, Membership
 from cohorts.services import managed_cohorts
 from cohorts.schemas import CohortOut
 
-from . import ai, grading, services
+from . import ai, grading, providers, services
 from submissions.models import MAX_OUTPUT_CHARS, Submission
 
 from .models import AIExchange, ExamEvent, ExamInvite, ExamRubric, RubricEdit
@@ -37,6 +37,7 @@ from .schemas import (
     AiConfigOut,
     ExamEventIn,
     ExamEventOut,
+    ExamProvidersOut,
     ExamInviteIn,
     ExamInviteOut,
     ExamReportOut,
@@ -104,9 +105,17 @@ def _invite_out(invite: ExamInvite, event_count: int = 0) -> ExamInviteOut:
     )
 
 
+@instructor_router.get("/exam-providers", response=ExamProvidersOut)
+def exam_providers(request: HttpRequest):
+    return ExamProvidersOut(unavailable_tools=providers.unavailable_tools())
+
+
 @instructor_router.put("/cohorts/{cohort_id}/exam-settings", response=CohortOut)
 def put_exam_settings(request: HttpRequest, cohort_id: int, payload: ExamSettingsIn):
     cohort = _exam_cohort(request, cohort_id)
+    missing = [t for t in providers.unavailable_tools() if t in payload.tools]
+    if missing:
+        raise HttpError(400, " ".join(providers.missing_message(t) for t in missing))
     cohort.exam_settings = payload.normalized()
     cohort.save(update_fields=["exam_settings"])
     return cohort_out(get_object_or_404(cohorts_with_counts(request.auth), pk=cohort_id))

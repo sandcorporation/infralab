@@ -97,6 +97,12 @@ class ExamStartIn(Schema):
     consent: bool
 
 
+class ExamProvidersOut(Schema):
+    """시험 설정에서 고를 수 없는 도구 — 그 도구의 공급사 키가 AI 프록시에 없다. 프록시를 못 부르면 빈 목록."""
+
+    unavailable_tools: list[Tool]
+
+
 class AiToolConfigOut(Schema):
     tool: str
     model: str
