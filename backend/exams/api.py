@@ -13,6 +13,7 @@ import hmac
 from django.conf import settings as django_settings
 from django.contrib.auth import get_user, get_user_model, login
 from django.db import transaction
+from django.db.models import Count
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -30,9 +31,11 @@ from cohorts.schemas import CohortOut
 from . import ai, services
 from submissions.models import MAX_OUTPUT_CHARS
 
-from .models import ExamInvite
+from .models import ExamEvent, ExamInvite
 from .schemas import (
     AiConfigOut,
+    ExamEventIn,
+    ExamEventOut,
     ExamInviteIn,
     ExamInviteOut,
     ExamScoreOut,
@@ -85,7 +88,7 @@ def _status(invite: ExamInvite) -> str:
     return services.attempt_status(invite)
 
 
-def _invite_out(invite: ExamInvite) -> ExamInviteOut:
+def _invite_out(invite: ExamInvite, event_count: int = 0) -> ExamInviteOut:
     return ExamInviteOut(
         id=invite.id,
         label=invite.label,
@@ -94,6 +97,7 @@ def _invite_out(invite: ExamInvite) -> ExamInviteOut:
         created_at=invite.created_at,
         started_at=invite.started_at,
         finished_at=services.ended_at(invite),
+        event_count=event_count,
     )
 
 
@@ -116,7 +120,8 @@ def create_exam_invite(request: HttpRequest, cohort_id: int, payload: ExamInvite
 @instructor_router.get("/cohorts/{cohort_id}/exam-invites", response=list[ExamInviteOut])
 def list_exam_invites(request: HttpRequest, cohort_id: int):
     cohort = _exam_cohort(request, cohort_id)
-    return [_invite_out(i) for i in cohort.exam_invites.all()]
+    invites = cohort.exam_invites.annotate(event_count=Count("events"))
+    return [_invite_out(i, i.event_count) for i in invites]
 
 
 @instructor_router.delete("/cohorts/{cohort_id}/exam-invites/{invite_id}", response={204: None})
@@ -148,9 +153,13 @@ def exam_score(request: HttpRequest, cohort_id: int, invite_id: int):
     return services.score(invite)
 
 
-@instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/events")
+@instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/events", response=list[ExamEventOut])
 def exam_events(request: HttpRequest, cohort_id: int, invite_id: int):
-    raise NotImplementedError("#75")
+    """지원자의 감독 기록을 시각순으로."""
+
+    cohort = _exam_cohort(request, cohort_id)
+    invite = get_object_or_404(cohort.exam_invites, pk=invite_id)
+    return list(invite.events.all())
 
 
 @instructor_router.get("/cohorts/{cohort_id}/exam-invites/{invite_id}/report")
@@ -345,9 +354,16 @@ def exam_final_results(request: HttpRequest, token: str, payload: FinalResultsIn
     return HttpResponse(status=204)
 
 
-@exam_router.post("/exam/{token}/events", auth=None)
-def exam_event(request: HttpRequest, token: str):
-    raise NotImplementedError("#75")
+@exam_router.post("/exam/{token}/events", auth=None, response={204: None})
+def exam_event(request: HttpRequest, token: str, payload: ExamEventIn):
+    """응시 중 감독 신호를 남긴다. 시작 전·마감 뒤는 409, 감독을 끈 회차는 204 지만 남기지 않는다."""
+
+    invite = _candidate_invite(request, token)
+    if services.attempt_status(invite) != "in_progress":
+        raise HttpError(409, "응시 중에만 감독 신호를 보낼 수 있습니다.")
+    if (invite.cohort.exam_settings or {}).get("proctoring"):
+        ExamEvent.objects.create(invite=invite, kind=payload.kind, detail=payload.detail)
+    return HttpResponse(status=204)
 
 
 # ---------- AI 프록시 전용 ----------

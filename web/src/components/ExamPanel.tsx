@@ -5,10 +5,18 @@ import {
   formatTime,
   instructor,
   type Cohort,
+  type ExamEvent,
   type ExamInvite,
   type ExamSettings,
   type ExamTool,
 } from "../api";
+
+const SIGNAL_LABEL: Record<string, string> = {
+  tab_hidden: "탭 이탈",
+  focus_lost: "포커스 잃음",
+  paste: "붙여넣기",
+  ai_outside_proxy: "프록시 밖 AI 사용",
+};
 
 const TOOLS: { key: ExamTool; label: string }[] = [
   { key: "claude_code", label: "Claude Code" },
@@ -43,6 +51,7 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const [eventsOf, setEventsOf] = useState<{ id: number; events: ExamEvent[] } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +198,7 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
                 <th>지원자</th>
                 <th>상태</th>
                 <th>발급</th>
+                <th>감독 신호</th>
                 <th>링크</th>
                 <th></th>
               </tr>
@@ -201,6 +211,32 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
                     <span className="tag">{STATUS_LABEL[i.status]}</span>
                   </td>
                   <td>{formatTime(i.created_at)}</td>
+                  <td>
+                    {(i.event_count ?? 0) > 0 ? (
+                      <button
+                        className="link"
+                        onClick={() =>
+                          eventsOf?.id === i.id
+                            ? setEventsOf(null)
+                            : run(async () => setEventsOf({ id: i.id, events: await instructor.examEvents(cohort.id, i.id) }), "감독 기록")
+                        }
+                      >
+                        {i.event_count}건
+                      </button>
+                    ) : (
+                      0
+                    )}
+                    {eventsOf?.id === i.id && (
+                      <ol className="muted">
+                        {eventsOf.events.map((e, n) => (
+                          <li key={n}>
+                            {formatTime(e.at)} {SIGNAL_LABEL[e.kind] ?? e.kind}
+                            {e.detail && ` — ${e.detail}`}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </td>
                   <td>
                     {i.status !== "revoked" && (
                       <>
