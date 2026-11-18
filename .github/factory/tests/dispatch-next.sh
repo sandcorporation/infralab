@@ -49,7 +49,7 @@ run() { bash "$script" "$@" > "$tmp/log" 2>&1; echo $? > "$tmp/code"; }
 code() { cat "$tmp/code"; }
 log() { cat "$tmp/log"; }
 dispatched() { grep '^workflow run factory-implementer.yml' "$FAKE_GH/calls.log" | sed 's/.*issue=//' | tr '\n' ' ' | sed 's/ $//'; }
-searches() { grep -c '^issue list .*--label ready-for-agent' "$FAKE_GH/calls.log" || true; }
+searches() { grep -c '^issue list .*--label ready-for-agent --limit' "$FAKE_GH/calls.log" || true; }
 
 # --- candidates ----------------------------------------------------------------------------
 
@@ -444,6 +444,55 @@ issue 61 ready-for-agent; issue 62 ready-for-agent
 FACTORY_TRACKS=1 run --tickets-only
 eq "one" 61 "$(dispatched)"
 eq "track 1" 1 "$(tracks_of)"
+
+# --- idle after the last spec (#189) ---------------------------------------------------------
+# spec #178 closed at 15:51:22 but the in-progress search still listed its ticket #179 (closed at
+# 15:50:55, label removed 15:51:01): the ticket counted as a spec of its own and no idle marker came.
+
+setup "a ticket the lagging search still lists as in-progress holds nothing: idle once (#189)"
+done_spec; ledger; spec 60 spec closed
+jq -n '{number: 61, state: "closed", body: "## Parent\n\n#50\n", labels: []}' | tr -d '\r' > "$FAKE_GH/issue-61.json"
+issue 61 in-progress; mv "$FAKE_GH/issue-61.json" "$FAKE_GH/listed-61.json"
+jq -n '{number: 61, state: "closed", body: "## Parent\n\n#50\n", labels: []}' | tr -d '\r' > "$FAKE_GH/issue-61.json"
+FACTORY_SPEC_QUEUE="60 50" run
+eq code 0 "$(code)"
+eq "spec closed" closed "$(spec_state)"
+lacks "not running" "spec(s) running" "$(log)"
+eq "idle" "<!-- factory-idle 60-50 -->" "$(marked '<!-- factory-')"
+
+setup "a ticket outside every spec holds idle; its close tells idle once (#189)"
+done_spec; ledger; spec 60 spec closed
+jq -n '{number: 70, state: "open", body: "", labels: [{name: "in-progress"}]}' | tr -d '\r' > "$FAKE_GH/issue-70.json"
+FACTORY_SPEC_QUEUE="60 50" run
+eq "spec closed" closed "$(spec_state)"
+has "running" "1 spec(s) running" "$(log)"
+eq "no idle yet" "" "$(marked '<!-- factory-')"
+# #70 closes: the frontier run (--tickets-only) tells idle
+jq '.state = "closed" | .labels = []' "$FAKE_GH/issue-70.json" | tr -d '\r' > "$FAKE_GH/x" && mv "$FAKE_GH/x" "$FAKE_GH/issue-70.json"
+FACTORY_SPEC_QUEUE="60 50" run --tickets-only
+eq code 0 "$(code)"
+eq "idle" "<!-- factory-idle 60-50 -->" "$(marked '<!-- factory-')"
+FACTORY_SPEC_QUEUE="60 50" run --tickets-only
+FACTORY_SPEC_QUEUE="60 50" run
+eq "once" "<!-- factory-idle 60-50 -->" "$(marked '<!-- factory-')"
+eq "no decompose" "" "$(decomposed)"
+
+setup "--tickets-only: an open spec or a pending queue spec is not idle (#189)"
+open_spec 50 61; issue 61 in-progress; ledger
+implementing 61 1
+FACTORY_SPEC_QUEUE="50" run --tickets-only
+eq "open spec" "" "$(marked '<!-- factory-')"
+setup "--tickets-only: a queue spec not yet labelled is not idle and does not start (#189)"
+ledger; spec 60 ""
+FACTORY_SPEC_QUEUE="60" run --tickets-only
+eq "pending" "" "$(marked '<!-- factory-')"
+eq "no decompose" "" "$(decomposed)"
+
+setup "a local ticket outside every spec holds nothing (#189)"
+done_spec; ledger; spec 60 spec closed
+jq -n '{number: 71, state: "open", body: "", labels: [{name: "ready-for-agent"}, {name: "local"}]}' | tr -d '\r' > "$FAKE_GH/issue-71.json"
+FACTORY_SPEC_QUEUE="60" run
+eq "idle" "<!-- factory-idle 60 -->" "$(marked '<!-- factory-')"
 
 echo "dispatch-next.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]

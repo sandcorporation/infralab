@@ -212,13 +212,48 @@ if [ $# -eq 0 ]; then
   exit 0
 fi
 echo "::notice::no unblocked approved ticket may start for track(s) $*"
-$tickets_only && exit 0
+
+# active: open tickets labelled `in-progress` or `ready-for-agent`, not `local`. The label search may
+# still list a ticket closed a moment ago (a merge's `Closes #N`), so each one is read again (#189).
+active() {
+  local n
+  { gh issue list --repo "$REPO" --state open --label in-progress --json number --jq '.[].number'
+    gh issue list --repo "$REPO" --state open --label ready-for-agent --json number --jq '.[].number'; } \
+    | tr -d '\r' | sort -n -u | while read -r n; do
+      [ -n "$n" ] || continue
+      [ "$(gh api "repos/$REPO/issues/$n" --jq '.state == "open"
+        and any(.labels[]; .name == "in-progress" or .name == "ready-for-agent")
+        and (any(.labels[]; .name == "local") | not)' | tr -d '\r')" = true ] && echo "$n"
+    done
+}
+# pending: the queue's open specs without the `spec` label, in queue order.
+pending() {
+  local s state labels
+  for s in ${FACTORY_SPEC_QUEUE:-}; do
+    read -r state labels < <(gh issue view "$s" --repo "$REPO" --json state,labels --jq '[.state, ([.labels[].name] | join(","))] | @tsv')
+    [ "$state" = OPEN ] || continue
+    case ",$labels," in *,spec,*) continue;; esac
+    printf ' %s' "$s"
+  done
+}
+idle() {
+  echo "::notice::every spec in the queue is labelled; the factory is idle"
+  local q
+  q=$(printf '%s' "${FACTORY_SPEC_QUEUE:-}" | tr -s ' \t\r\n,' '-' | sed 's/^-//; s/-$//')
+  notify "<!-- factory-idle ${q:-none} -->" "공장 idle: FACTORY_SPEC_QUEUE(${FACTORY_SPEC_QUEUE:-비어 있음})의 spec이 모두 라벨을 받아 띄울 spec이 없다. FACTORY_SPEC_QUEUE에 spec을 넣고 dispatch-next를 다시 돌린다."
+}
+
+if $tickets_only; then
+  # It moves no spec, but a close that ends the last work tells idle: a full run that saw this ticket
+  # still open said `running` and nothing ran it again (#189). Only with no open spec at all.
+  [ -z "$(gh issue list --repo "$REPO" --state open --label spec --json number --jq '.[].number' | tr -d '\r')" ] \
+    && [ -z "$(active)" ] && [ -z "$(pending)" ] && idle
+  exit 0
+fi
 
 # Specs. Count the running ones (see 2. above); close finished ones; resume a stopped decompose.
 specs=$(gh issue list --repo "$REPO" --state open --label spec --json number --jq '.[].number' | tr -d '\r')
-active=$( { gh issue list --repo "$REPO" --state open --label in-progress --json number --jq '.[].number'
-  gh issue list --repo "$REPO" --state open --label ready-for-agent --json number --jq '.[].number'; } \
-  | tr -d '\r' | sort -n -u)
+active=$(active)
 running=0
 covered=" "
 for s in $specs; do
@@ -263,15 +298,7 @@ if [ "$running" -ge "$tracks" ]; then
   echo "::notice::$running spec(s) running on $tracks track(s); not moving to the next spec yet"
   exit 0
 fi
-# The queue's open specs without the `spec` label, in queue order.
-pending=
-for s in ${FACTORY_SPEC_QUEUE:-}; do
-  read -r state labels < <(gh issue view "$s" --repo "$REPO" --json state,labels --jq '[.state, ([.labels[].name] | join(","))] | @tsv')
-  [ "$state" = OPEN ] || continue
-  case ",$labels," in *,spec,*) continue;; esac
-  pending="$pending $s"
-done
-set -- $pending
+set -- $(pending)
 if [ $# -gt 0 ]; then
   s=$1
   if ! reason=$(go "$s"); then
@@ -287,7 +314,5 @@ if [ $# -gt 0 ]; then
   exit 0
 fi
 [ "$running" -gt 0 ] && exit 0
-echo "::notice::every spec in the queue is labelled; the factory is idle"
-q=$(printf '%s' "${FACTORY_SPEC_QUEUE:-}" | tr -s ' \t\r\n,' '-' | sed 's/^-//; s/-$//')
-notify "<!-- factory-idle ${q:-none} -->" "공장 idle: FACTORY_SPEC_QUEUE(${FACTORY_SPEC_QUEUE:-비어 있음})의 spec이 모두 라벨을 받아 띄울 spec이 없다. FACTORY_SPEC_QUEUE에 spec을 넣고 dispatch-next를 다시 돌린다."
+idle
 exit 0

@@ -10,7 +10,8 @@
 #                                        `<!-- factory-human-check-of <spec> -->` (title
 #                                        「사람 확인: spec #<spec>」); made when there is none. A PR already
 #                                        on it (`(PR #<PR>)`) is not stacked again. No items, or a ticket
-#                                        without a parent spec (ledger.sh parent-of): nothing.
+#                                        without a parent spec (ledger.sh parent-of), or whose parent has no
+#                                        `spec` label (an umbrella, #189): nothing.
 #                                        The check issue is never a sub-issue of the spec and has no
 #                                        `## Parent` section, so dispatch-next.sh and the ledger never take it
 #                                        for a ticket.
@@ -99,6 +100,12 @@ stack() {
   spec=$(REPO=$REPO bash "$here/ledger.sh" parent-of "$n" 2>/dev/null | tr -d '\r')
   if [ -z "$spec" ] || [ "$spec" = "$n" ]; then
     echo "::notice::#$n has no parent spec; its 사람 확인 items are not stacked"
+    return 0
+  fi
+  # Only a labelled spec: dispatch-next.sh closes and gates `spec` issues only, so a check issue of
+  # an umbrella (no `spec` label, #45) would hold nothing and nobody would read it (#173, #189).
+  if [ "$(gh api "repos/$REPO/issues/$spec" --jq 'any(.labels[]; .name == "spec")' 2>/dev/null | tr -d '\r')" != true ]; then
+    echo "::notice::#$n's parent #$spec is not a spec (no \`spec\` label); its 사람 확인 items are not stacked"
     return 0
   fi
   lines=$(printf '%s\n' "$list" | sed "s/^/- [ ] /; s/\$/ (PR #$pr)/")

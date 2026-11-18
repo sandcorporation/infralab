@@ -12,6 +12,8 @@
 #   fail-dispatch       if present, workflow dispatches fail
 #   list-empty          if present, `gh issue list` finds nothing (a lagging search index);
 #   list-empty-once     the same for the next `gh issue list` only
+#   listed-<n>.json     issue <n> as the lagging search index still sees it: `gh issue list` reads it
+#                       instead of issue-<n>.json (a ticket closed a moment ago still open there, #189)
 #   labels-lag          if present, `gh api …/issues?labels=<l>` misses the issues (a label not yet
 #                       showing in the list, #183); …/issues/<n> still reads them
 #   runs-list.json      runs for `gh run list`; `gh workflow run` adds one (runs-hidden: it does not)
@@ -75,6 +77,10 @@ case "${1:-}" in
     # list-empty: the search index lags and finds nothing; list-empty-once: only for the next list.
     if [ -e "$d/list-empty-once" ]; then rm -f "$d/list-empty-once"; files=(); fi
     [ -e "$d/list-empty" ] && files=()
+    for i in "${!files[@]}"; do
+      stale="$d/listed-${files[$i]##*/issue-}"
+      [ -e "$stale" ] && files[$i]=$stale
+    done
     if [ ${#files[@]} -eq 0 ]; then list='[]'; else
       list=$(jqf -s --arg l "$label" \
         '[.[] | select(.state == "open" and (has("pull_request") | not)
