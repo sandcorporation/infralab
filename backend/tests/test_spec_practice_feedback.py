@@ -87,7 +87,6 @@ def _at(monkeypatch, year, month, day, hour, minute):
     monkeypatch.setattr("django.utils.timezone.now", lambda: fixed)
 
 
-@pytest.mark.skip(reason="#134")
 def test_feedback_grades_the_submission_transcript_and_stores_it(api):
     s, pid = _practice_user(api)
     sub = _submit(api, s, pid)
@@ -112,7 +111,6 @@ def test_feedback_grades_the_submission_transcript_and_stores_it(api):
     assert stored.json() == body
 
 
-@pytest.mark.skip(reason="#134")
 def test_get_feedback_is_404_before_asking(api):
     s, pid = _practice_user(api)
     sub = _submit(api, s, pid)
@@ -120,7 +118,6 @@ def test_get_feedback_is_404_before_asking(api):
     assert api.get(f"/api/practice/submissions/{sub['id']}/feedback", s).status_code == 404
 
 
-@pytest.mark.skip(reason="#134")
 def test_same_submission_again_returns_the_existing_feedback_without_using_the_quota(api):
     s, pid = _practice_user(api)
     sub = _submit(api, s, pid)
@@ -134,7 +131,6 @@ def test_same_submission_again_returns_the_existing_feedback_without_using_the_q
     assert _quota(api, s) == {"limit": 5, "used": 1, "remaining": 4}
 
 
-@pytest.mark.skip(reason="#134")
 def test_submission_without_a_transcript_is_refused_and_not_counted(api):
     s, pid = _practice_user(api)
     plain = _submit(api, s, pid, transcript=None)
@@ -146,7 +142,6 @@ def test_submission_without_a_transcript_is_refused_and_not_counted(api):
     assert api.get(f"/api/practice/submissions/{plain['id']}/feedback", s).status_code == 404
 
 
-@pytest.mark.skip(reason="#134")
 def test_sixth_feedback_of_the_day_is_429(api, monkeypatch):
     s, pid = _practice_user(api)
     _at(monkeypatch, 2026, 1, 10, 3, 0)  # 한국 2026-01-10 12:00
@@ -166,7 +161,6 @@ def test_sixth_feedback_of_the_day_is_429(api, monkeypatch):
     assert _feedback(api, s, subs[0]["id"]).status_code == 200
 
 
-@pytest.mark.skip(reason="#134")
 def test_the_day_turns_at_midnight_in_seoul_not_utc(api, monkeypatch):
     s, pid = _practice_user(api)
     _at(monkeypatch, 2026, 1, 10, 15, 0)  # 한국 2026-01-11 00:00
@@ -186,7 +180,6 @@ def test_the_day_turns_at_midnight_in_seoul_not_utc(api, monkeypatch):
     assert _quota(api, s)["remaining"] == 4
 
 
-@pytest.mark.skip(reason="#134")
 def test_quota_is_per_user(api):
     a, pid = _practice_user(api, "pa")
     b, _ = _practice_user(api, "pb")
@@ -197,7 +190,6 @@ def test_quota_is_per_user(api):
     assert _quota(api, b) == {"limit": 5, "used": 0, "remaining": 5}
 
 
-@pytest.mark.skip(reason="#134")
 def test_failed_grading_is_502_and_not_counted(api, monkeypatch):
     s, pid = _practice_user(api)
     sub = _submit(api, s, pid)
@@ -217,7 +209,6 @@ def test_failed_grading_is_502_and_not_counted(api, monkeypatch):
     assert _quota(api, s)["remaining"] == 4
 
 
-@pytest.mark.skip(reason="#134")
 def test_other_users_submission_is_404(api):
     a, pid = _practice_user(api, "pa")
     b, _ = _practice_user(api, "pb")
@@ -229,7 +220,6 @@ def test_other_users_submission_is_404(api):
     assert _quota(api, b)["used"] == 0
 
 
-@pytest.mark.skip(reason="#134")
 def test_class_cohort_submission_gets_no_practice_feedback(api):
     teacher = api.login_instructor()
     cohort = api.create_cohort(teacher, "1기")
@@ -247,14 +237,12 @@ def test_class_cohort_submission_gets_no_practice_feedback(api):
     assert _quota(api, s)["used"] == 0
 
 
-@pytest.mark.skip(reason="#134")
 def test_feedback_needs_login(api):
     assert api.get("/api/practice/feedback-quota").status_code == 401
     assert api.post("/api/practice/submissions/1/feedback").status_code == 401
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.skip(reason="#134")
 def test_concurrent_requests_keep_the_daily_limit_and_one_feedback_per_submission(api):
     s, pid = _practice_user(api)
     subs = [_submit(api, s, pid)["id"] for _ in range(7)]
