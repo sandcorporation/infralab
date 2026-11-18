@@ -4,7 +4,7 @@
 # 필요: backend=uv + 접근 가능한 Postgres(POSTGRES_HOST·PORT 등, 기본 127.0.0.1:55440),
 #       web=node+npm, agent=go(agent/·proxy/), factory=bash·jq·git (가짜 gh 로 공장 스크립트 시험),
 #       release=bash·git·jq·python3 (production 승격 스크립트 시험, 로컬 bare 저장소, 병합 장치 시험),
-#       e2e=docker(compose)·node+npm·curl (개발 스택을 띄워 Playwright 로 브라우저 시험, 127.0.0.1:7777 이 비어 있어야 한다).
+#       e2e=docker(compose)·node+npm·curl·python3 (개발 스택을 띄워 Playwright 로 브라우저 시험, 127.0.0.1:7777 이 비어 있어야 한다).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -68,8 +68,11 @@ e2e() {
   need docker "e2e 스택"
   need npm "e2e (node 필요)"
   need curl "e2e 스택 대기"
-  export INFRALAB_DB_PORT="${INFRALAB_DB_PORT:-55450}" INFRALAB_API_PORT="${INFRALAB_API_PORT:-58050}" \
-    INFRALAB_WEB_PORT="${INFRALAB_WEB_PORT:-53050}"
+  # web 포트는 지금 빈 포트를 고른다(고정 포트는 실행기의 임시 포트와 부딪힌다). db·backend 는 호스트에 열지 않는다.
+  if [ -z "${INFRALAB_WEB_PORT:-}" ]; then
+    INFRALAB_WEB_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+  fi
+  export INFRALAB_WEB_PORT
   if (exec 3<>/dev/tcp/127.0.0.1/7777) 2>/dev/null; then
     echo "ci.sh e2e: 127.0.0.1:7777 을 다른 프로세스(학생 에이전트?)가 쓴다 — 내리고 다시 돌린다" >&2
     exit 1

@@ -6,7 +6,13 @@
 # workstation 은 운영 이미지 대신 bash 만 든 작은 이미지다(터미널·환경 준비·준비 표시만 본다).
 
 services:
+  # db·backend 는 호스트에 열지 않는다 — web(Vite)이 compose 망 안에서 backend 로 넘긴다. 고정 포트는 CI 실행기의
+  # 임시 포트 대역(32768~60999)과 부딪혀 「address already in use」 로 깨진 적이 있다.
+  db:
+    ports: !reset []
+
   backend:
+    ports: !reset []
     environment:
       SCENARIOS_DIR: /e2e-scenarios
     volumes:

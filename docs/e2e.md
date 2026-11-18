@@ -10,7 +10,7 @@ scripts/ci.sh e2e -g 붙여넣기      # 뒤 인자는 playwright test 로
 bash scripts/check_workstation_image.sh --build   # workstation 이미지 실행 시험(#125)
 ```
 
-- 스택: `docker/compose.dev.yaml` + `docker/compose.e2e.yaml`, 프로젝트 `infralab-e2e`, 포트 db 55450 · api 58050 · web 53050. 로그인은 dev-login, 강사는 `set_instructor`.
+- 스택: `docker/compose.dev.yaml` + `docker/compose.e2e.yaml`, 프로젝트 `infralab-e2e`. 호스트에는 web(그때 빈 포트)과 에이전트(7777)만 연다. 로그인은 dev-login, 강사는 `set_instructor`.
 - 학생 PC 쪽: 실제 에이전트(`docker/agent.e2e.Dockerfile` — 운영과 같은 바이너리, kind·kubectl 없음)와 bash 만 든 작은 workstation. 에이전트 주소는 서버가 정한 `127.0.0.1:7777` 이라 그 포트가 비어 있어야 한다. 토큰은 사용자마다 달라 시험이 토큰을 안 뒤 에이전트를 다시 올린다(`web/e2e/stack.ts`).
 - 시나리오는 `web/e2e/fixtures/scenarios/e2e-prepare` 하나(준비가 `/work/app/ready.txt` 를 만들고, 검사 하나).
 - 재시도 없음, workers 1. 실패하면 `web/test-results/` 에 trace 가 남는다(CI 는 아티팩트 `e2e-traces`).
