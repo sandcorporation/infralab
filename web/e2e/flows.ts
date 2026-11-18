@@ -9,7 +9,7 @@ export const SCENARIO_TITLE = "e2e 환경 준비";
 export type ExamCohort = { instructor: Page; cohortId: number; name: string };
 
 /** 강사로 로그인해 감독을 켠 시험 회차를 만들고 e2e 시나리오를 연다(설정 탭까지 화면으로). */
-export async function createExamCohort(browser: Browser): Promise<ExamCohort> {
+export async function createExamCohort(browser: Browser, opts: { hiddenChecks?: boolean } = {}): Promise<ExamCohort> {
   const ctx = await browser.newContext();
   const instructor = await ctx.newPage();
   const uid = uniqueId("instructor");
@@ -33,9 +33,32 @@ export async function createExamCohort(browser: Browser): Promise<ExamCohort> {
   await instructor.getByRole("link", { name: "설정", exact: true }).last().click();
   await instructor.getByLabel("시간 제한(분)").fill("30");
   await instructor.getByRole("checkbox", { name: "감독" }).check();
+  if (opts.hiddenChecks) await instructor.getByRole("checkbox", { name: "숨은 검사 사용" }).check();
   await instructor.getByRole("button", { name: "설정 저장" }).click();
   await expect(instructor.getByRole("status").filter({ hasText: "저장됨" })).toBeVisible();
   return { instructor, cohortId, name };
+}
+
+/** 응시 중 시나리오 화면에서 환경 준비를 확정하고 「준비됨」이 뜰 때까지. */
+export async function prepareEnvironment(c: Candidate): Promise<void> {
+  const p = c.page;
+  await p.getByRole("button", { name: "환경 준비", exact: true }).click();
+  await p.getByRole("button", { name: "환경 준비 확정" }).click();
+  await expect(p.locator(".sc-badge--success", { hasText: "준비됨" })).toBeVisible({ timeout: 60_000 });
+}
+
+/** 상단 띠의 회차 이름으로 응시 화면(/exam/<토큰>)에 돌아간다 — 마감 뒤 숨은 검사는 이 화면이 돌린다. */
+export async function backToExamPage(c: Candidate): Promise<void> {
+  const p = c.page;
+  await p.locator(".exam-bar").getByRole("link").click();
+  await p.waitForURL(/\/exam\/[^/]+$/);
+  await expect(headBadge(p)).toHaveText("응시 중");
+}
+
+/** 「제출하고 끝내기」 → 확인 대화상자의 「끝내기」. */
+export async function finishAttempt(c: Candidate): Promise<void> {
+  await c.page.getByRole("button", { name: "제출하고 끝내기" }).click();
+  await c.page.getByRole("dialog").getByRole("button", { name: "끝내기", exact: true }).click();
 }
 
 /** 응시 링크 탭에서 링크를 하나 발급하고 그 주소(/exam/<토큰>)를 준다. */
