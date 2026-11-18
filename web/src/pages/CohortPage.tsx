@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, getCohortScenarios, parseId, type StudentScenarioSummary } from "../api";
 import { AgentStatusBadge, useAgentProbe } from "../components/AgentStatusBadge";
+import { PreflightPanel, usePreflight } from "../components/PreflightPanel";
 import { RequiresTags } from "../components/ScenarioPicker";
 import { useMyCohort } from "../hooks";
 
@@ -11,6 +12,8 @@ export default function CohortPage() {
   const cohortId = parseId(id);
   const { cohort, error } = useMyCohort(cohortId);
   const probe = useAgentProbe(cohort?.agent_url, cohort?.agent_token);
+  // 이 화면에서는 응시 전 점검을 경고로만 보인다(연습). 시험의 「시작」은 응시 화면이 점검으로 막는다.
+  const preflight = usePreflight(cohort?.agent_url, cohort?.agent_token);
   const [scenarios, setScenarios] = useState<StudentScenarioSummary[] | null>(null);
   const [scenarioError, setScenarioError] = useState<string | null>(null);
 
@@ -75,6 +78,9 @@ export default function CohortPage() {
               <li key={p}>{p}</li>
             ))}
           </ul>
+        )}
+        {probe.state === "connected" && (
+          <PreflightPanel state={preflight} mode="practice" cohortId={cohort.id} />
         )}
         <p>
           <Link className="button secondary" to={`/cohorts/${cohort.id}/setup`}>

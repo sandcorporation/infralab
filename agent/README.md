@@ -46,6 +46,11 @@ workstation·Floci 를 찾고, kind 클러스터를 올리고 내리며, 브라�
   하나씩 온다. 도구 호출·결과·사고·시스템 메시지는 뺀다. 두 도구 합계 200KB(발화 하나 32KB)를 넘으면 오래된 것부터 버리고
   `truncated`. 한 도구의 세션 파일을 못 읽으면 그 도구만 빈 `entries` + `error`(200). 읽기 전용이라 환경 작업 잠금과 무관하다.
   파일 위치·형식은 `docs/ai-session-formats-2026-10-23.md`
+- `GET /api/preflight` — 응시 전 점검. `{ok, checks:[{id, ok, message, help_url}]}` 이고 `checks` 는 늘 `engine`·`linux_mode`·`permission`
+  순서다. `engine`·`permission` 은 `docker version` 으로 본다(실패하면 엔진 꺼짐, 실패 출력에 `permission denied` 가 있으면 권한
+  실패), `linux_mode` 는 `docker info --format {{.OSType}}` 이 `linux` 인지 본다. 엔진에 닿지 못하면 확인하지 못한 항목도 원인을
+  가리키는 실패로 온다. 실패한 항목은 `message`·`help_url` 이 비지 않고, 모두 통과해야 `ok:true`. 시험 응시 화면은 실패나
+  무응답이면 「시작」을 막고, 연습 화면은 경고만 보인다. 읽기 전용이라 환경 작업 잠금과 무관하다
 - `WS /ws/terminal?token=` — 입력은 JSON 텍스트 프레임(`{t:"i",d}` 입력, `{t:"r",c,r}` 크기), 출력은 바이너리 프레임
 
 환경을 바꾸는 작업(kind up/down)은 한 번에 하나만 돈다 — 돌고 있는 중에 들어온 요청은 409. 잘못된 메서드(GET 으로 kind/down 등)는 405.

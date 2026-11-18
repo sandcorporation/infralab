@@ -43,6 +43,7 @@ func newHandler(cfg config, r Runner) http.Handler {
 	// 읽기 전용 — 환경 작업이 도는 동안에도 준비 여부를 물을 수 있게 잠금 밖에 둔다.
 	mux.HandleFunc("/api/prepared", s.auth(get(s.handlePrepared)))
 	mux.HandleFunc("/api/ai-transcript", s.auth(get(s.handleAITranscript)))
+	mux.HandleFunc("/api/preflight", s.auth(get(s.handlePreflight)))
 	// 채점도 환경 작업과 겹치지 않게 — 반쯤 내려간 클러스터를 보고 내린 판정은 증거가 못 된다.
 	mux.HandleFunc("/api/check", s.auth(post(s.exclusive(s.handleCheck))))
 	mux.HandleFunc("/ws/terminal", s.handleTerminal)
