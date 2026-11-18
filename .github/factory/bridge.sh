@@ -1,83 +1,113 @@
 #!/usr/bin/env bash
-# Mail bridge of the software factory (ADR-0001 "다리"). Not a workflow: a person's PC or server runs it
-# from cron (every 2 minutes). The factory itself never sends mail; this reads its marker comments
-# with gh and mails each new one once.
+# Mail bridge of the software factory (ADR-0001 "다리", #192). Not a workflow: a person's PC or server
+# runs it from cron (every 2 minutes). The factory itself never sends mail; this reads the repository
+# with gh and mails what waits for a person, once.
 #
 #   bridge.sh [--seed]
 #
-# Looks at the repository's issue and PR comments updated in the last BRIDGE_LOOKBACK_DAYS days (or since
-# BRIDGE_SINCE) on open issues and PRs, for:
+# What it sends:
 #
-#   <!-- factory-question -->            a question (only while the issue has `needs-decision`)
-#   <!-- factory-budget-spec -->         a spec stopped at its budget (`factory-paused`)
-#   <!-- factory-budget-daily DATE -->   the whole factory stopped at the daily budget (ledger issue)
-#   <!-- factory-human -->               a ticket handed to a person
-#   <!-- factory-local -->               a ticket touching workflow or .claude files, left to a local worker
-#                                        (local-ticket.sh: `ready-for-human` + `local`)
-#   <!-- factory-queue-empty S -->       the last spec S of FACTORY_SPEC_QUEUE was started (ledger issue)
-#   <!-- factory-idle Q -->              every spec of the queue is labelled; the factory is idle (ledger)
-#   <!-- factory-human-check S -->       spec S's tickets are merged but its check issue has unchecked
-#                                        `사람 확인` items, so the spec stays open (human-check.sh gate, #167)
+# 1. Labels. An open issue (or PR) carrying one of these labels waits for a person (#192: a label
+#    without a marker comment used to reach nobody, #166):
 #
-# Anyone can write those markers on a public repository, so only comments by `github-actions[bot]` or by
-# someone with write access (collaborator permission admin, maintain or write) are sent. A comment by
-# anyone else is never sent and its id is remembered so it is not looked at again. Each author's
-# permission is asked once per run.
+#      needs-decision   a question only the owner decides                  → BRIDGE_TO_BOSS
+#      human-check      a check issue (human-check.sh); only while its body
+#                       still has an unchecked `- [ ]` item                 → BRIDGE_TO_BOSS
+#      ready-for-human  an issue handed to a person (hand-to-human.sh); with
+#                       `local` too it is a local worker's ticket (local-ticket.sh) → BRIDGE_TO_COORD + BRIDGE_CC
+#      factory-paused   a spec stopped at its budget                       → BRIDGE_TO_COORD + BRIDGE_CC
 #
-# It sends each comment it has not sent before:
+#    It is mailed once per (issue, label, time the label was put on, recipient). The time is the last
+#    `labeled` event of that label in the issue's timeline, so taking the label off and putting it on
+#    again is a new mail. The label itself is trusted (only someone with write access can put it on).
+#    The reason in the mail is the issue's latest `<!-- factory-… -->` marker comment by a trusted
+#    author (below), quoted; without one the mail says 「까닭 댓글 없음」 and is sent anyway.
+#    needs-triage, needs-info and `local` alone are not mailed.
 #
-#   switchboard send --to <recipient> --task <name>-factory --idempotency-key <name>-factory-<comment id>
-#     --subject … --body …
+# 2. Marker comments that have no label of their own:
 #
-# The recipient depends on the kind (owner's decision 2026-11-18): a question and a human-check go to
-# the boss (BRIDGE_TO_BOSS), because only the owner decides or checks them by hand; every other kind (budget-spec, budget-daily, human,
-# local, queue-empty, idle) goes straight to the repository's coordinator (BRIDGE_TO_COORD), who
-# acts on it.
+#      <!-- factory-budget-daily DATE -->   the whole factory stopped at the daily budget (ledger issue)
+#      <!-- factory-queue-empty S -->       the last spec S of FACTORY_SPEC_QUEUE was started (ledger)
+#      <!-- factory-idle Q -->              every spec of the queue is labelled; the factory is idle (ledger)
+#                                           → BRIDGE_TO_COORD + BRIDGE_CC
+#      <!-- factory-human-check S -->       spec S's tickets are merged but its check issue still has
+#                                           unchecked items, so the spec is held (human-check.sh gate,
+#                                           #167; again when new items arrive)  → BRIDGE_TO_BOSS
 #
-# A kind that goes to the coordinator is also sent, one mail each, to every recipient in BRIDGE_CC
-# (2026-11-19: the factory stopped on a ticket handed to a person and the boss never heard of it, because
-# only the coordinator was told). The coordinator's mail keeps the key <name>-factory-<comment id>; a CC
-# recipient's key is <name>-factory-<comment id>-cc-<recipient with every character outside
-# [A-Za-z0-9._-] made ->. A comment id in the state file means every recipient has it, so markers sent
-# before BRIDGE_CC was set are never sent to the new recipients (no flood of old markers when it is first
-# set). When one recipient fails, the ones that succeeded are remembered as "<comment id> <recipient>"
-# lines and only the others are tried again on the next run.
+#    The other markers (factory-question, factory-budget-spec, factory-human, factory-local, …) are only
+#    quoted as the reason of a label mail. Anyone can write markers on a public repository, so only
+#    comments by `github-actions[bot]`, the factory App `sandcorp-factory[bot]` (#172) or someone with
+#    write access (collaborator permission admin, maintain or write) are sent or quoted; a marker comment
+#    by anyone else is never sent and its id is remembered. Each author's permission is asked once per run.
 #
-# <name> is the repository name (the part of FACTORY_REPO after the slash).
+# 3. Idle, seen directly: when FACTORY_SPEC_QUEUE is set, every spec in it is closed and no open issue has
+#    `ready-for-agent` or `in-progress`, the factory is idle → BRIDGE_TO_COORD + BRIDGE_CC, once per queue
+#    value. It shares its state with the `factory-idle` marker of the same queue, so the two never both
+#    arrive.
 #
-# The body has the kind, the issue link, its title, the comment as written and what to do. The comment
-# id is remembered in the state file only after a successful send, so a failed send is tried again on the
-# next run (the idempotency key keeps a retry from arriving twice). --seed remembers every marker found
-# now without sending anything (run once when installing, so old markers do not all arrive at once).
+# Every send is
+#
+#   switchboard send --to <recipient> --task <name>-factory --idempotency-key <key> \
+#     --subject "[<name> 공장] …" --body …
+#
+# <name> is the name part of FACTORY_REPO (owner/name). Keys: a label mail
+# <name>-factory-label-<n>-<label>-<time>-<recipient>, an idle mail <name>-factory-idle-<queue>-<recipient>,
+# a marker comment <name>-factory-<comment id> to its first recipient (BRIDGE_TO_COORD, or BRIDGE_TO_BOSS
+# for a human-check) and <name>-factory-<comment id>-cc-<recipient> to the others (as before #192), each
+# with every character outside [A-Za-z0-9._-] made -.
+#
+# Recipients are names in the switchboard mailbox and are given only by the environment (the cron line);
+# the script has none. Without BRIDGE_TO_COORD nothing is read or sent (exit 2). Without BRIDGE_TO_BOSS the
+# boss's mails (needs-decision, human-check) are held, not remembered, and sent on the first run that has
+# it; everything else is still sent, and the run exits 1.
+#
+# State file `sent`, one line per thing sent:
+#
+#   <comment id>                           a marker comment every recipient has (or one not trusted)
+#   <comment id> <recipient>               that comment sent to one recipient while another still failed
+#   label <n> <label> <time> <recipient>   a label mail
+#   idle <queue> <recipient>               an idle mail
+#   labels-seeded                          the label part has run on this file (see below)
+#
+# A line is written only after a successful send, so a failed send is tried again next run (the
+# idempotency key keeps a retry from arriving twice). --seed remembers everything that would be sent now
+# (marker comments, labels as they are now, idle) without sending: run it once when installing.
+#
+# Upgrading from the marker-only bridge (#192): the first run on a state file that has lines but no
+# `labels-seeded` line sends no label mail whose reason comment (the latest trusted marker) is already in
+# the file: that wait was mailed by the old bridge, so it is only remembered. A labelled issue whose
+# reason was never mailed (no marker at all, as on #166) is sent once. Then `labels-seeded` is written.
 #
 # Environment:
 #   FACTORY_REPO          owner/name (default sandcorporation/infralab); gh must be logged in
-#   BRIDGE_TO_BOSS        recipient of questions and human-checks (default sandcorp/boss)
-#   BRIDGE_TO_COORD       recipient of every other kind (default <name>/coordinator)
-#   BRIDGE_CC             more recipients of the coordinator's kinds, separated by spaces (default none);
-#                         the coordinator itself is skipped if listed
-#   BRIDGE_TO             removed (it sent every kind to one place) and ignored: a warning is printed when
-#                         it is still set and the two variables above (or their defaults) are used, so a
-#                         leftover BRIDGE_TO can never send a question to the coordinator.
+#   BRIDGE_TO_COORD       recipient of everything but the boss's kinds (required)
+#   BRIDGE_TO_BOSS        recipient of needs-decision and human-check (required for those; see above)
+#   BRIDGE_CC             more recipients of BRIDGE_TO_COORD's kinds, separated by commas or spaces
+#                         (optional; BRIDGE_TO_COORD or a name listed twice gets one mail)
+#   BRIDGE_TO             removed and ignored (a warning is printed while it is set)
+#   FACTORY_SPEC_QUEUE    the spec queue (spec numbers, space- or comma-separated) for the idle check
 #   SWITCHBOARD_PROFILE   switchboard credential profile (default automation); the profile knows the server
-#   BRIDGE_LOOKBACK_DAYS  how far back to read comments (default 14)
-#   BRIDGE_SINCE          ISO 8601 time to read from instead (tests)
-#   XDG_STATE_HOME        the state file is $XDG_STATE_HOME/<name>-factory-bridge/sent (default under
-#                         ~/.local/state), one comment id per line (or "<comment id> <recipient>" while a
-#                         CC send is still owed)
+#   BRIDGE_LOOKBACK_DAYS  how far back to read marker comments (default 14)
+#   BRIDGE_SINCE          ISO 8601 time to read comments from instead (tests)
+#   BRIDGE_STATE_DIR      folder of the state file; default $XDG_STATE_HOME/<name>-factory-bridge
+#   XDG_STATE_HOME        default ~/.local/state
 #
-# Exits 1 when a send failed (the others are still sent). Needs bash, gh, jq and switchboard.
+# Exits 1 when a read or a send failed or a boss mail is held (the rest is still sent), 2 on a usage or
+# setup error. Needs bash, gh, jq and switchboard.
 set -u
 REPO=${FACTORY_REPO:-sandcorporation/infralab}
 NAME=${REPO##*/}
-TO_BOSS=${BRIDGE_TO_BOSS:-sandcorp/boss}
-TO_COORD=${BRIDGE_TO_COORD:-$NAME/coordinator}
-CC=${BRIDGE_CC:-}
 if [ -n "${BRIDGE_TO:-}" ]; then
-  echo "bridge: BRIDGE_TO is ignored; use BRIDGE_TO_BOSS (questions) and BRIDGE_TO_COORD (the rest)" >&2
+  echo "bridge: BRIDGE_TO is ignored; use BRIDGE_TO_BOSS (needs-decision, human-check) and BRIDGE_TO_COORD (the rest)" >&2
+fi
+TO_BOSS=${BRIDGE_TO_BOSS:-}
+TO_COORD=${BRIDGE_TO_COORD:-}
+if [ -z "$TO_COORD" ]; then
+  echo "bridge: set BRIDGE_TO_COORD (the recipients have no default); nothing sent" >&2
+  exit 2
 fi
 export SWITCHBOARD_PROFILE=${SWITCHBOARD_PROFILE:-automation}
-STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/$NAME-factory-bridge
+STATE_DIR=${BRIDGE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/$NAME-factory-bridge}
 SENT=$STATE_DIR/sent
 
 seed=false
@@ -87,13 +117,7 @@ case "${1:-}" in
   *) echo "usage: bridge.sh [--seed]" >&2; exit 2 ;;
 esac
 
-# key <comment id> <recipient> <primary recipient>: the idempotency key of that mail.
-key() {
-  if [ "$2" = "$3" ]; then echo "$NAME-factory-$1"; return; fi
-  echo "$NAME-factory-$1-cc-$(printf '%s' "$2" | tr -c 'A-Za-z0-9._-' '-')"
-}
-
-# Strip any CR jq prints (CRLF output on some platforms).
+# jq on Windows prints CRLF; strip the CR everywhere.
 j() { jq "$@" | tr -d '\r'; }
 
 since() {
@@ -102,32 +126,24 @@ since() {
   date -u -d "@$t" +%Y-%m-%dT%H:%M:%SZ 2> /dev/null || date -u -r "$t" +%Y-%m-%dT%H:%M:%SZ
 }
 
-mkdir -p "$STATE_DIR" || { echo "bridge: cannot create $STATE_DIR" >&2; exit 1; }
+mkdir -p "$STATE_DIR" || { echo "bridge: cannot create $STATE_DIR" >&2; exit 2; }
 touch "$SENT"
 
 sent() { grep -qxF -- "$1" "$SENT"; }
 remember() { echo "$1" >> "$SENT"; }
+# A key part: every character outside [A-Za-z0-9._-] made -.
+slug() { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '-'; }
+# Recipients one per line, blanks and repeats dropped.
+uniq_lines() { sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sed '/^$/d' | awk '!seen[$0]++'; }
 
-comments=$(gh api "repos/$REPO/issues/comments?since=$(since)&sort=created&direction=asc&per_page=100" --paginate) \
-  || { echo "bridge: could not read the comments of $REPO" >&2; exit 1; }
+# The old bridge's state file, not upgraded yet: label mails whose reason it sent are only remembered.
+upgrading=false
+if [ -s "$SENT" ] && ! sent labels-seeded; then upgrading=true; fi
 
-# One line per marker comment: id <TAB> kind <TAB> issue number <TAB> author login.
-matches=$(printf '%s' "$comments" | j -s -r '
-  add // [] | .[]
-  | (.body // "") as $b
-  | (if ($b | contains("<!-- factory-question -->")) then "question"
-     elif ($b | contains("<!-- factory-budget-spec -->")) then "budget-spec"
-     elif ($b | contains("<!-- factory-budget-daily ")) then "budget-daily"
-     elif ($b | contains("<!-- factory-human -->")) then "human"
-     elif ($b | contains("<!-- factory-local -->")) then "local"
-     elif ($b | contains("<!-- factory-queue-empty ")) then "queue-empty"
-     elif ($b | contains("<!-- factory-idle ")) then "idle"
-     elif ($b | contains("<!-- factory-human-check ")) then "human-check"
-     else empty end) as $k
-  | [(.id | tostring), $k, (.issue_url | sub(".*/"; "")), (.user.login // "")] | @tsv')
+coord_and_cc=$(printf '%s\n%s\n' "$TO_COORD" "$(printf '%s' "${BRIDGE_CC:-}" | tr ', \t' '\n\n\n')" | uniq_lines)
 
-# trusted <login>: github-actions[bot], the factory App sandcorp-factory[bot] (#172) or a collaborator with write access. Each answer is kept in
-# $trust ("<login> yes|no" lines, plain bash 3) so an author is asked once per run.
+# trusted <login>: github-actions[bot], the factory App or a collaborator with write access. Each answer
+# is kept in $trust ("<login> yes|no" lines, plain bash 3) so an author is asked once per run.
 # Returns 0 trusted, 1 not trusted, 2 the permission could not be read (tried again next run).
 trust=
 trusted() {
@@ -150,23 +166,184 @@ trusted() {
 }
 
 failed=0
-while IFS=$'\t' read -r id kind n author; do
+held=0
+
+# send <recipient> <key> <subject> <text> <what>: one mail; 0 when sent.
+send() {
+  if switchboard send --to "$1" --task "$NAME-factory" --idempotency-key "$2" \
+    --subject "$3" --body "$4" > /dev/null; then
+    echo "bridge: sent $5 to $1"
+  else
+    echo "bridge: could not send $5 to $1; will retry" >&2
+    failed=1
+    return 1
+  fi
+}
+
+# deliver <state key base> <key base> <recipients, one per line> <subject> <text> <what>
+# Sends to each recipient whose line `<state key base> <recipient>` is not in the state file yet (under
+# --seed, or with quiet=true, only remembers it).
+quiet=false
+deliver() {
+  local base=$1 kbase=$2 recipients=$3 subject=$4 text=$5 what=$6 to line
+  while IFS= read -r to; do
+    [ -n "$to" ] || continue
+    line="$base $to"
+    sent "$line" && continue
+    if $seed || $quiet; then remember "$line"; continue; fi
+    send "$to" "$kbase-$(slug "$to")" "$subject" "$text" "$what" && remember "$line"
+  done <<< "$recipients"
+}
+
+# --- 1. labels -------------------------------------------------------------------------------------
+
+# reason <issue number>: sets $why to the issue's latest trusted marker comment, quoted (or 까닭 댓글
+# 없음), and $why_id to that comment's id (empty without one).
+reason() {
+  local n=$1 cs lines id author body
+  why_id=
+  cs=$(gh api "repos/$REPO/issues/$n/comments?per_page=100" --paginate) \
+    || { why="(까닭 댓글을 읽지 못함)"; return 1; }
+  # Marker comments newest first: id <TAB> author.
+  lines=$(printf '%s' "$cs" | j -s -r 'add // [] | map(select((.body // "") | contains("<!-- factory-")))
+    | sort_by(.created_at) | reverse | .[] | [(.id | tostring), (.user.login // "")] | @tsv')
+  while IFS=$'\t' read -r id author; do
+    [ -n "$id" ] || continue
+    trusted "$author" || continue
+    body=$(printf '%s' "$cs" | j -s -r --argjson id "$id" 'add // [] | map(select(.id == $id)) | .[0].body // ""')
+    why=$(printf '%s\n' "$body" | sed 's/^/> /')
+    why_id=$id
+    return 0
+  done <<< "$lines"
+  why="까닭 댓글 없음"
+}
+
+labels_ok=true
+for label in needs-decision human-check ready-for-human factory-paused; do
+  list=$(gh api "repos/$REPO/issues?state=open&labels=$label&per_page=100" --paginate) \
+    || { echo "bridge: could not list the issues labelled $label" >&2; failed=1; labels_ok=false; continue; }
+  numbers=$(printf '%s' "$list" | j -s -r --arg l "$label" 'add // [] | .[]
+    | select(.state == "open" and any(.labels[]; .name == $l))
+    | select($l != "human-check" or ((.body // "") | test("(^|\n)[ \t]*[-*+] \\[ \\]")))
+    | .number')
+  case $label in
+    needs-decision) recipients=$TO_BOSS ;;
+    human-check) recipients=$TO_BOSS ;;
+    *) recipients=$coord_and_cc ;;
+  esac
+  for n in $numbers; do
+    if [ -z "$recipients" ]; then
+      echo "bridge: $label #$n is held: set BRIDGE_TO_BOSS" >&2
+      held=1 labels_ok=false
+      continue
+    fi
+    tl=$(gh api "repos/$REPO/issues/$n/timeline?per_page=100" --paginate) \
+      || { echo "bridge: could not read the timeline of #$n" >&2; failed=1; labels_ok=false; continue; }
+    at=$(printf '%s' "$tl" | j -s -r --arg l "$label" 'add // [] | map(select(.event == "labeled"
+      and (.label.name // "") == $l)) | sort_by(.created_at) | last | .created_at // "unknown"')
+    base="label $n $label $at"
+    # Everything sent already (the usual run): skip without reading anything else.
+    todo_any=false
+    while IFS= read -r to; do
+      [ -n "$to" ] && ! sent "$base $to" && todo_any=true
+    done <<< "$recipients"
+    $todo_any || continue
+    if $seed; then deliver "$base" "" "$recipients" "" "" ""; continue; fi
+    issue=$(printf '%s' "$list" | j -s -c --argjson n "$n" 'add // [] | map(select(.number == $n)) | .[0]')
+    title=$(printf '%s' "$issue" | j -r '.title')
+    url=$(printf '%s' "$issue" | j -r '.html_url')
+    if ! reason "$n"; then echo "bridge: could not read the comments of #$n" >&2; failed=1; labels_ok=false; continue; fi
+    quiet=false
+    if $upgrading && [ -n "$why_id" ] && grep -q "^$why_id\( \|$\)" "$SENT"; then
+      quiet=true
+      echo "bridge: $label #$n was mailed by the old bridge (comment $why_id); remembered"
+    fi
+    case $label in
+      needs-decision)
+        kind="질문"
+        todo="이슈에 답 댓글을 달고 needs-decision 라벨을 떼면 공장이 이어 간다." ;;
+      human-check)
+        kind="사람 확인"
+        todo="이 확인 이슈의 미체크 항목을 손으로 확인해 체크한다(문제는 새 이슈로). 모두 체크하거나 이슈를 닫으면 다음 dispatch 때 spec이 닫히고 공장이 다음 spec으로 간다." ;;
+      ready-for-human)
+        if [ "$(printf '%s' "$issue" | j -r 'any(.labels[]; .name == "local")')" = true ]; then
+          kind="로컬 작업자 몫"
+          todo="공장이 이 티켓을 공장 밖에 두었다(ready-for-human + local, workflow·.claude 파일). 로컬 작업자가 구현한다."
+        else
+          kind="사람 넘김"
+          todo="공장이 이 이슈를 사람에게 넘겼다. 까닭을 보고 이어 받는다(다시 공장에 넣으려면 ready-for-human을 떼고 ready-for-agent를 붙이며 \`<!-- factory-reset -->\` 댓글을 남긴다)."
+        fi ;;
+      factory-paused)
+        kind="spec 상한 멈춤"
+        todo="spec 본문의 \`예산: \$N\` 줄을 올리고 factory-paused 라벨을 떼면 이어 간다." ;;
+    esac
+    text="종류: $kind ($label)
+이슈: $url
+제목: #$n $title
+라벨 붙은 시각: $at
+
+까닭:
+$why
+
+할 일: $todo"
+    deliver "$base" "$NAME-factory-label-$n-$label-$(slug "$at")" "$recipients" \
+      "[$NAME 공장] $kind: #$n $title" "$text" "$label #$n"
+    quiet=false
+  done
+done
+if $labels_ok && ! sent labels-seeded; then remember labels-seeded; fi
+
+# --- 2. marker comments ----------------------------------------------------------------------------
+
+comments=$(gh api "repos/$REPO/issues/comments?since=$(since)&sort=created&direction=asc&per_page=100" --paginate) \
+  || { echo "bridge: could not read the comments of $REPO" >&2; exit 1; }
+
+# One line per marker comment: id <TAB> kind <TAB> issue number <TAB> author login <TAB> marker value.
+matches=$(printf '%s' "$comments" | j -s -r '
+  add // [] | .[]
+  | (.body // "") as $b
+  | (if ($b | contains("<!-- factory-budget-daily ")) then "budget-daily"
+     elif ($b | contains("<!-- factory-queue-empty ")) then "queue-empty"
+     elif ($b | contains("<!-- factory-idle ")) then "idle"
+     elif ($b | contains("<!-- factory-human-check ")) then "human-check"
+     else empty end) as $k
+  | ($b | capture("<!-- factory-" + $k + " (?<v>[^ ]*) -->").v // "") as $v
+  | [(.id | tostring), $k, (.issue_url | sub(".*/"; "")), (.user.login // ""), $v] | @tsv')
+
+while IFS=$'\t' read -r id kind n author value; do
   [ -n "$id" ] || continue
   sent "$id" && continue
+  if [ "$kind" = human-check ]; then recipients=$TO_BOSS; else recipients=$coord_and_cc; fi
+  # An idle marker shares its state with the direct idle check (part 3).
+  if [ "$kind" = idle ]; then base="idle $value"; else base=$id; fi
+  pending=
+  while IFS= read -r to; do
+    [ -n "$to" ] || continue
+    sent "$base $to" || pending="$pending$to
+"
+  done <<< "$recipients"
+  if [ -z "$recipients" ]; then
+    echo "bridge: $kind #$n is held: set BRIDGE_TO_BOSS" >&2
+    held=1
+    continue
+  fi
+  if [ -z "$pending" ]; then remember "$id"; continue; fi
   trusted "$author"
   case $? in
     0) ;;
-    1) remember "$id"; echo "bridge: ignored $kind #$n by ${author:-?} (no write access, comment $id)"
+    1) remember "$id"
+       echo "bridge: ignored $kind #$n by ${author:-?} (no write access, comment $id)"
        continue ;;
     *) echo "bridge: could not read the permission of $author; will retry" >&2; failed=1; continue ;;
   esac
   issue=$(gh api "repos/$REPO/issues/$n") || { echo "bridge: could not read #$n" >&2; failed=1; continue; }
   [ "$(printf '%s' "$issue" | j -r '.state')" = open ] || continue
-  if [ "$kind" = question ] \
-    && [ "$(printf '%s' "$issue" | j -r 'any(.labels[]; .name == "needs-decision")')" != true ]; then
-    continue # answered already; not remembered, so a question asked again is still sent
+  if $seed; then
+    if [ "$kind" = idle ]; then
+      while IFS= read -r to; do [ -n "$to" ] && remember "$base $to"; done <<< "$pending"
+    fi
+    remember "$id"; continue
   fi
-  if $seed; then remember "$id"; continue; fi
 
   title=$(printf '%s' "$issue" | j -r '.title')
   url=$(printf '%s' "$issue" | j -r '.html_url')
@@ -174,21 +351,9 @@ while IFS=$'\t' read -r id kind n author; do
   body=$(printf '%s' "$comment" | j -r '.body // ""')
   link=$(printf '%s' "$comment" | j -r '.html_url // empty')
   case "$kind" in
-    question)
-      label="질문"
-      todo="이슈에 답 댓글을 달고 needs-decision 라벨을 떼면 공장이 이어 간다." ;;
-    budget-spec)
-      label="spec 상한 멈춤"
-      todo="spec 본문의 \`예산: \$N\` 줄을 올리고 factory-paused 라벨을 떼면 이어 간다." ;;
     budget-daily)
       label="하루 상한 멈춤"
       todo="할 일 없음: KST 0시가 지나면 공장이 스스로 다시 돈다." ;;
-    human)
-      label="사람 넘김"
-      todo="공장이 이 이슈를 사람에게 넘겼다(ready-for-human). 위 댓글의 까닭을 보고 이어 받는다." ;;
-    local)
-      label="로컬 작업자 몫"
-      todo="공장이 이 티켓을 공장 밖에 두었다(ready-for-human + local, workflow·.claude 파일). 로컬 작업자가 구현한다." ;;
     queue-empty)
       label="spec 큐 바닥남"
       todo="다음 spec을 FACTORY_SPEC_QUEUE에 넣는다(조율자 몫)." ;;
@@ -207,34 +372,52 @@ while IFS=$'\t' read -r id kind n author; do
 $body
 
 할 일: $todo"
-  to=$TO_COORD
-  case "$kind" in question|human-check) to=$TO_BOSS ;; esac
-  recipients=$to
-  if [ "$to" = "$TO_COORD" ]; then
-    for r in $CC; do
-      case " $recipients " in *" $r "*) ;; *) recipients="$recipients $r" ;; esac
-    done
-  fi
-  done_to=
+  subject="[$NAME 공장] $label: #$n $title"
+  first=$(printf '%s\n' "$recipients" | head -n 1)
   ok=true
-  for r in $recipients; do
-    if grep -qxF -- "$id $r" "$SENT"; then continue; fi
-    if switchboard send --to "$r" --task "$NAME-factory" --idempotency-key "$(key "$id" "$r" "$to")" \
-      --subject "[$NAME 공장] $label: #$n $title" --body "$text" > /dev/null; then
-      done_to="$done_to $r"
-      echo "bridge: sent $kind #$n to $r (comment $id)"
+  while IFS= read -r to; do
+    [ -n "$to" ] || continue
+    if [ "$kind" = idle ]; then key="$NAME-factory-idle-$(slug "$value")-$(slug "$to")"
+    elif [ "$to" = "$first" ]; then key="$NAME-factory-$id"
+    else key="$NAME-factory-$id-cc-$(slug "$to")"; fi
+    if send "$to" "$key" "$subject" "$text" "$kind #$n (comment $id)"; then
+      remember "$base $to"
     else
-      echo "bridge: could not send $kind #$n to $r (comment $id); will retry" >&2
       ok=false
-      failed=1
     fi
-  done
-  if $ok; then
-    remember "$id"
-  else
-    for r in $done_to; do remember "$id $r"; done
-  fi
+  done <<< "$pending"
+  $ok && remember "$id"
 done <<< "$matches"
 
-if $seed; then echo "bridge: seeded $(wc -l < "$SENT" | tr -d ' ') comment ids"; fi
+# --- 3. idle, seen directly ------------------------------------------------------------------------
+
+queue=$(printf '%s' "${FACTORY_SPEC_QUEUE:-}" | tr -s ' \t\r\n,' '-' | sed 's/^-//; s/-$//')
+if [ -n "$queue" ]; then
+  idle=true
+  for s in $(printf '%s' "$queue" | tr '-' ' '); do
+    st=$(gh api "repos/$REPO/issues/$s" --jq '.state' | tr -d '\r') || { idle=false; failed=1; break; }
+    [ "$st" = closed ] || { idle=false; break; }
+  done
+  if $idle; then
+    for l in ready-for-agent in-progress; do
+      c=$(gh api "repos/$REPO/issues?state=open&labels=$l&per_page=100" --paginate \
+        | j -s --arg l "$l" 'add // [] | map(select(.state == "open" and any(.labels[]; .name == $l))) | length') \
+        || { idle=false; failed=1; break; }
+      [ "$c" = 0 ] || { idle=false; break; }
+    done
+  fi
+  if $idle; then
+    text="종류: 공장 idle
+큐: FACTORY_SPEC_QUEUE=${FACTORY_SPEC_QUEUE}
+
+큐의 spec이 모두 닫혔고 ready-for-agent·in-progress 열린 이슈가 없다.
+
+할 일: FACTORY_SPEC_QUEUE에 spec을 넣고 dispatch-next를 다시 돌린다(조율자 몫)."
+    deliver "idle $queue" "$NAME-factory-idle-$(slug "$queue")" "$coord_and_cc" \
+      "[$NAME 공장] 공장 idle: 큐 $queue 끝" "$text" "idle ($queue)"
+  fi
+fi
+
+if $seed; then echo "bridge: seeded $(wc -l < "$SENT" | tr -d ' ') lines"; fi
+[ "$held" = 0 ] || failed=1
 exit "$failed"

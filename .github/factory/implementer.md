@@ -48,6 +48,6 @@ The workflow appends `Closes #<n>` and the checked-commit marker itself.
 
 ## 4. When you cannot finish
 
-If the ticket is blocked by something you cannot resolve (an ADR conflict, a missing decision, an acceptance test you believe is wrong, an external fact you cannot confirm), make no commits, and comment on the ticket with what blocked you and what a human must decide. The run then fails, and the workflow records it.
+If the ticket is blocked by something you cannot resolve (an ADR conflict, a missing decision, an acceptance test you believe is wrong, an external fact you cannot confirm), make no commits, and comment on the ticket with what blocked you and what a human must decide. Start that comment with the line `<!-- factory-implementer-blocked -->`. The run then fails, and the workflow hands the ticket to a person with your comment as the reason (`record-failure.sh`).
 
 If the ticket needs a change under `.github/workflows/`, do not make it and make no commit: the workflow's token cannot push workflow files, so the push is refused. Comment on the ticket that it needs `.github/workflows/` (which file, what change) and stop. Do not try other ways to push it.

@@ -18,6 +18,7 @@
 #                       showing in the list, #183); …/issues/<n> still reads them
 #   runs-list.json      runs for `gh run list`; `gh workflow run` adds one (runs-hidden: it does not)
 #   events-<n>.json     the events of issue <n> (`…/issues/<n>/events`), default []
+#   timeline-<n>.json   the timeline of issue <n> (`…/issues/<n>/timeline`), default []
 #   calls.log           every call's arguments, one line each
 # New comments get created_at $FAKE_GH_NOW (default 2026-11-17T03:00:00Z).
 set -u
@@ -324,6 +325,13 @@ case "$path" in
   repos/*/*/issues/*/events)
     n=${path%/events}; n=${n##*/}
     if [ -f "$d/events-$n.json" ]; then cat "$d/events-$n.json"; else echo '[]'; fi
+    ;;
+  # bridge.sh: the timeline of issue <n>, timeline-<n>.json ([{event, created_at, label: {name}}], default []);
+  # fails while fail-timeline exists.
+  repos/*/*/issues/*/timeline)
+    [ -e "$d/fail-timeline" ] && fail "timelines are broken"
+    n=${path%/timeline}; n=${n##*/}
+    if [ -f "$d/timeline-$n.json" ]; then cat "$d/timeline-$n.json"; else echo '[]'; fi
     ;;
   repos/*/*/issues/*/comments)
     n=${path%/comments}; n=${n##*/}

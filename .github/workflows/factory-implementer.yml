@@ -256,7 +256,7 @@ jobs:
           # Opus only for hard tickets (decompose.md: concurrency, permissions, migrations, secrets); never Fable.
           model=claude-sonnet-5-5
           case ",$labels," in *,model:opus,*) model=claude-opus-5-5;; esac
-          fails=$(gh issue view "$N" --repo "$REPO" --json comments --jq '[.comments[].body | select(contains("<!-- factory-implementer-failed -->") or startswith("<!-- factory-sendback"))] | length')
+          fails=$(gh issue view "$N" --repo "$REPO" --json comments --jq '[.comments[].body] | (map(startswith("<!-- factory-reset -->")) | rindex(true)) as $r | [.[(if $r == null then 0 else $r + 1 end):][] | select(contains("<!-- factory-implementer-failed -->") or startswith("<!-- factory-sendback"))] | length')
           if [ "$fails" -gt 0 ]; then model=claude-opus-5-5; fi
           echo "::notice::#$N runs on $model (earlier code failures and send-backs: $fails)"
           echo "model=$model" >> "$GITHUB_OUTPUT"
@@ -540,28 +540,16 @@ jobs:
       # ticket back in the queue and the retry runs on Opus, two leave it to the managing session
       # (`ready-for-human`, ADR-0001).
       # Any other failure (runner, network, installer, agent action crash) has nothing to do
-      # with the code: retry on the same model , and hand the ticket
-      # to the managing session only after three of them. The handover comment carries
-      # <!-- factory-human --> so the mail bridge tells the coordinator (#188).
+      # with the code: retry on the same model, and hand the ticket to the managing session only
+      # after three of them. A run whose agent left the `<!-- factory-implementer-blocked -->`
+      # comment goes to a person at once. Only failures after the last `<!-- factory-reset -->`
+      # comment count. record-failure.sh does it all and hands over through hand-to-human.sh, whose
+      # `ready-for-human` the mail bridge sends (#192).
       - name: Record failure
         if: failure() && steps.guard.outputs.go == 'true'
         run: |
-          if [ "${{ steps.checks.outcome }}" = failure ]; then
-            marker='<!-- factory-implementer-failed -->'; limit=2; what="code"
-          else
-            marker='<!-- factory-implementer-infra-failed -->'; limit=3; what="infrastructure"
-          fi
-          gh issue comment "$N" --repo "$REPO" --body "$marker
-          Implementer run failed ($what): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          fails=$(gh issue view "$N" --repo "$REPO" --json comments --jq "[.comments[].body | select(contains(\"$marker\"))] | length")
-          gh issue edit "$N" --repo "$REPO" --remove-label in-progress
-          if [ "$fails" -ge "$limit" ]; then
-            gh issue edit "$N" --repo "$REPO" --add-label ready-for-human
-            gh issue comment "$N" --repo "$REPO" --body "<!-- factory-human -->
-          Implementer failed $fails times ($what). The managing session takes this ticket out of the factory."
-          else
-            gh issue edit "$N" --repo "$REPO" --add-label ready-for-agent
-          fi
+          if [ "${{ steps.checks.outcome }}" = failure ]; then what=code; else what=infra; fi
+          bash .github/factory/record-failure.sh "$N" "$what" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       # Refill the tracks: this run's track is free once it ends (dispatch-next.sh does not
       # count the run calling it), so the next ticket waits in the track's group for this run only.

@@ -39,7 +39,7 @@ bash "$script" 80 > /dev/null 2>&1; eq "exit" 0 $?
 eq "local" true "$(res)"
 eq "labels" "local,model:sonnet,ready-for-human" "$(labels 80)"
 eq "one comment" 1 "$(ncomments 80)"
-eq "marker" "<!-- factory-local -->" "$(jq -r '.[0].body | split("\n")[0]' "$FAKE_GH/comments-80.json")"
+eq "marker" "<!-- factory-human -->|<!-- factory-local -->" "$(jq -r '.[0].body | split("\n")[0:2] | join("|")' "$FAKE_GH/comments-80.json")"
 bash "$script" 80 > /dev/null 2>&1
 eq "again: no second comment" 1 "$(ncomments 80)"
 eq "again: labels the same" "local,model:sonnet,ready-for-human" "$(labels 80)"

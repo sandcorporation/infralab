@@ -11,8 +11,9 @@
 # ticket that will change workflow files or `.claude/`) or a checked template line `- [x] workflow 파일을
 # 바꾼다` / `- [x] .claude/ 를 바꾼다` (a hand-written ticket). Merely mentioning
 # `.github/workflows` ("건드리지 않는다") does not count (#66); `workflow-guard.sh` still stops a push.
-# A local ticket that is not yet marked gets `ready-for-human` and `local` (adding a label creates it when
-# missing), loses `ready-for-agent`, and gets one comment starting with `<!-- factory-local -->`.
+# A local ticket gets `local` (adding a label creates it when missing) and, unless it is already with a
+# person, is handed over by hand-to-human.sh (`ready-for-human`, no `ready-for-agent`, one comment
+# `<!-- factory-human -->` whose next line is `<!-- factory-local -->`; #192).
 # Writes local=true|false to $GITHUB_OUTPUT (stdout when unset); exits 0 unless it cannot read the issue.
 # decompose.sh (right after Decompose), odin.sh (before approving) and factory-implementer.yml (the
 # `approved` job and the claim) call it, so a ticket that slipped past Decompose is turned around there.
@@ -21,6 +22,7 @@
 set -u
 : "${REPO:?REPO is not set}"
 n=${1:?usage: local-ticket.sh <issue>}
+here=$(cd "$(dirname "$0")" && pwd)
 
 output() {
   if [ -n "${GITHUB_OUTPUT:-}" ]; then printf '%s\n' "$@" >> "$GITHUB_OUTPUT"; else printf '%s\n' "$@"; fi
@@ -37,20 +39,14 @@ case "$labels" in
 esac
 if [ "$is_local" != true ]; then output local=false; exit 0; fi
 
-case "$labels" in *,ready-for-agent,*)
-  gh api "repos/$REPO/issues/$n/labels/ready-for-agent" -X DELETE > /dev/null \
-    || echo "::warning::local-ticket: could not take ready-for-agent off #$n" ;;
+case "$labels" in *,local,*) ;; *)
+  gh api "repos/$REPO/issues/$n/labels" -f "labels[]=local" > /dev/null \
+    || echo "::warning::local-ticket: could not add local to #$n" ;;
 esac
-for l in local ready-for-human; do
-  case "$labels" in *",$l,"*) ;; *)
-    gh api "repos/$REPO/issues/$n/labels" -f "labels[]=$l" > /dev/null \
-      || echo "::warning::local-ticket: could not add $l to #$n" ;;
-  esac
-done
-if ! gh api "repos/$REPO/issues/$n/comments?per_page=100" --paginate --jq '.[].body | split("\n")[0]' | tr -d '\r' \
-  | grep -qxF '<!-- factory-local -->'; then
-  gh api "repos/$REPO/issues/$n/comments" -f 'body=<!-- factory-local -->
-workflow·`.claude/` 파일 — 로컬 작업자 몫. 이 티켓은 `.github/workflows/` 나 `.claude/` 를 건드린다: 공장의 push 토큰(App)에는 workflows 권한이 없고, 공장 에이전트(Claude Code)는 `.claude/` 아래 파일을 고치지 못한다(민감 파일 거부, #166). `ready-for-human` + `local` 로 공장 밖에 둔다.' > /dev/null \
-    || echo "::warning::local-ticket: could not comment on #$n"
-fi
+# hand-to-human.sh takes ready-for-agent off and leaves the marker; once.
+case "$labels" in *,ready-for-human,*) ;; *)
+  bash "$here/hand-to-human.sh" "$n" '<!-- factory-local -->
+workflow·`.claude/` 파일 — 로컬 작업자 몫. 이 티켓은 `.github/workflows/` 나 `.claude/` 를 건드린다: 공장의 push 토큰(App)에는 workflows 권한이 없고, 공장 에이전트(Claude Code)는 `.claude/` 아래 파일을 고치지 못한다(민감 파일 거부, #166). `local` 로 공장 밖에 두고 사람(로컬 작업자)에게 넘긴다.' > /dev/null \
+    || echo "::warning::local-ticket: could not hand #$n to a human" ;;
+esac
 output local=true

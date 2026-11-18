@@ -8,26 +8,21 @@
 #   workflow-guard.sh check <issue> <base>      the commits <base>..HEAD touch `.github/workflows/`
 #   workflow-guard.sh push-failed <issue> <log> the push log holds that refusal
 #
-# Both: when it applies, `ready-for-human` replaces `in-progress` on the issue, a comment starting with
-# `<!-- factory-human -->` gives the reason, `blocked=true` goes to $GITHUB_OUTPUT (stdout when unset)
+# Both: when it applies, hand-to-human.sh hands the issue to a person (`ready-for-human` replaces
+# `in-progress`, a comment starting with `<!-- factory-human -->` gives the reason), `blocked=true` goes to $GITHUB_OUTPUT (stdout when unset)
 # and the exit code is 0. Otherwise `blocked=false` and exit code 1 (the caller goes on / fails as before).
 #
 # Environment: REPO, GH_TOKEN.
 set -u
 : "${REPO:?REPO is not set}"
-HUMAN='<!-- factory-human -->'
+here=$(cd "$(dirname "$0")" && pwd)
 
 output() {
   if [ -n "${GITHUB_OUTPUT:-}" ]; then printf '%s\n' "$@" >> "$GITHUB_OUTPUT"; else printf '%s\n' "$@"; fi
 }
 
 handover() { # handover <issue> <reason>
-  gh api "repos/$REPO/issues/$1/labels/in-progress" -X DELETE > /dev/null \
-    || echo "::warning::workflow-guard: could not take in-progress off #$1"
-  gh api "repos/$REPO/issues/$1/labels" -f 'labels[]=ready-for-human' > /dev/null \
-    || echo "::warning::workflow-guard: could not add ready-for-human to #$1"
-  gh api "repos/$REPO/issues/$1/comments" -f "body=$HUMAN
-$2" > /dev/null || echo "::warning::workflow-guard: could not comment on #$1"
+  bash "$here/hand-to-human.sh" "$1" "$2" || echo "::warning::workflow-guard: could not hand #$1 to a human"
   output blocked=true
 }
 
