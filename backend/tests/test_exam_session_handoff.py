@@ -102,7 +102,7 @@ def test_exam_compose_url_needs_only_the_exam_token(api):
     assert Client().get("/api/exam/notatoken/compose.yml").status_code == 404
 
 
-def test_exam_compose_url_is_gone_after_finish_and_404_when_revoked(api):
+def test_exam_compose_url_is_gone_after_finish_and_409_on_revoke_of_finished(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
     _enter(api, cand, invite["token"])
@@ -112,6 +112,18 @@ def test_exam_compose_url_is_gone_after_finish_and_404_when_revoked(api):
 
     _expire(invite["id"])
     assert Client().get(url).status_code == 410
+    # 끝난 응시는 회수할 수 없다(#154) — 주소는 계속 410.
+    assert api.delete(f"/api/instructor/cohorts/{cohort['id']}/exam-invites/{invite['id']}", teacher).status_code == 409
+    assert Client().get(url).status_code == 410
+
+
+def test_exam_compose_url_is_404_when_revoked_during_attempt(api):
+    teacher, cohort, invite = _setup(api)
+    cand = _browser()
+    _enter(api, cand, invite["token"])
+    _start(api, cand, invite["token"])
+    url = f"/api/exam/{invite['token']}/compose.yml"
+    assert Client().get(url).status_code == 200
 
     assert api.delete(f"/api/instructor/cohorts/{cohort['id']}/exam-invites/{invite['id']}", teacher).status_code == 204
     assert Client().get(url).status_code == 404
