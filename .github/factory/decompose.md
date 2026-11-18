@@ -69,8 +69,10 @@ methods), each with its full signature, and the test file(s) that hold this tick
 
 ## 손 확인
 
-Criteria CI cannot check (screen, rendering, real mouse or IME, measurements on a desktop),
-each as a step a person follows and what they should see. "None" when every criterion is tested.
+Criteria only a person can check (a real Docker scenario on a workstation, a real AI agent session,
+a look no assertion can state), each as a step a person follows and what they should see. Screen
+behaviour a browser can drive is an e2e test (`web/e2e/*.spec.ts`), not here. "None" when every
+criterion is tested.
 
 ## Blocked by
 
@@ -94,7 +96,7 @@ Turn every acceptance criterion into tests, one or more test functions per crite
 - Test through the highest seam the criterion talks about, as the area's existing tests do: the backend through the HTTP API with the test client and the helpers in `backend/tests/` (`api_helpers.py`, `conftest.py`), the agent through its HTTP handlers or exported functions with the fakes its tests already use (`fake_runner_test.go`), the web through the functions and components the screen uses. Never real Docker, real clusters, real AI services or the network: the factory runners do not run scenarios, only schema and logic tests.
 - A test may call names that do not exist yet: the interface the ticket will add (an endpoint, a model field, a function, a component prop). Write those names and signatures into the ticket's 「계약」 section. Keep that interface as small and as close to existing naming as the spec allows. Do not write those names yourself: Odin adds a minimal stub for each at its real place in the code (`raise NotImplementedError("#<ticket>")`, `throw new Error("#<ticket>")`, `panic("#<ticket>")`), checks that `scripts/ci.sh all` passes with the tests switched off, and the ticket replaces every stub with the real thing.
 - Test the criterion as written, strongly: assert the outcome the user sees (the response body and status, the stored state, the rendered text), not that "something happened". Do not test what the spec leaves out.
-- Criteria CI cannot see (a screen's look, a real browser, a real Docker scenario, a real AI agent session) get no test; put them under the ticket's 「손 확인」.
+- Criteria the factory's unit tests cannot see get no acceptance test here. One a browser or the local stack can exercise (screen behaviour, proctoring signals, the exam flow, terminal input) stays an acceptance criterion the Implementer covers with an end-to-end test in `web/e2e/*.spec.ts` (`scripts/ci.sh e2e`); say so in the criterion. Only what a person alone can check (a real Docker scenario on a workstation, a real AI agent session, a look no assertion can state) goes under the ticket's 「손 확인」: each item there holds the spec open until a person checks it.
 
 The tests must pass the repository checks once their ticket exists (`scripts/ci.sh all`: pytest, `tsc` and vitest, `gofmt`, `go vet` and `go test`). You cannot run them here, so:
 

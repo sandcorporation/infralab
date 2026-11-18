@@ -171,7 +171,7 @@ field() { # field <name>: value of -f/-F name=value, reading @file
 # Calls of verify.sh (all recorded in calls.log):
 #   pull-<n>.json       a PR ({number, state, merged, body, head: {ref}}); PATCH sets state or body,
 #                       PUT …/merge marks it merged and closed (fails while fail-merge exists)
-#   DELETE …/issues/<n>/labels/<name> removes the label; PATCH …/issues/<n> sets state
+#   DELETE …/issues/<n>/labels/<name> removes the label; PATCH …/issues/<n> sets state or body
 #   DELETE …/git/refs/heads/<b> and POST …/actions/workflows/<f>/dispatches only log
 case "$method $path" in
   "PUT repos/"*/*/pulls/*/merge)
@@ -239,8 +239,13 @@ case "$method $path" in
     n=${path##*/}
     f="$d/issue-$n.json"
     [ -f "$f" ] || fail "no issue #$n"
-    s=$(field state) || fail "no state"
-    jqf --arg s "$s" '.state = $s' "$f" > "$f.new" && mv "$f.new" "$f"
+    if s=$(field state); then
+      jqf --arg s "$s" '.state = $s' "$f" > "$f.new" && mv "$f.new" "$f"
+    elif b=$(field body); then
+      jqf --arg b "$b" '.body = $b' "$f" > "$f.new" && mv "$f.new" "$f"
+    else
+      fail "no state or body"
+    fi
     cat "$f"; exit 0 ;;
 esac
 
@@ -259,8 +264,10 @@ case "$path" in
     else echo '{"permission": "read", "role_name": "read"}'; fi
     ;;
   repos/*/*/issues)
-    # POST opens an issue (number 800 + the issue files) with title, body and labels[].
+    # POST opens an issue (number 800 + the issue files) with title, body and labels[] (fails while
+    # fail-issues-post exists).
     if [ "$method" = POST ]; then
+      [ -e "$d/fail-issues-post" ] && fail "opening issues is broken"
       shopt -s nullglob; all=("$d"/issue-*.json)
       n=$((800 + ${#all[@]}))
       jqf -n --argjson n "$n" --arg t "$(field title)" --arg b "$(field body)" --arg l "$(field 'labels[]')" \
