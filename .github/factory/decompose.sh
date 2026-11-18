@@ -95,6 +95,10 @@ dispatch_odin() {
 finish() {
   local s=$1 mode=$2 n tickets branch title list body pr
   tickets=$(open_tickets "$s")
+  # A ticket that changes `.github/workflows/` stays out of the factory (local-ticket.sh).
+  for n in $tickets; do
+    env -u GITHUB_OUTPUT bash "$here/local-ticket.sh" "$n" > /dev/null || echo "::warning::could not check #$n for workflow files"
+  done
   if [ "$mode" = decomposed ]; then
     for n in $tickets; do
       if has_label "$n" ready-for-agent; then

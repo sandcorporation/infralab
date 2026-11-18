@@ -108,8 +108,13 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           SENDER: ${{ github.event.sender.login }}
         run: bash .github/factory/parent-check.sh "$ISSUE" "$SENDER"
-      - name: Fill the empty tracks
+      # A ticket that changes `.github/workflows/` is a local worker's (ready-for-human + local).
+      - name: Keep workflow tickets out
+        id: local
         if: steps.parent.outputs.ok == 'true'
+        run: bash .github/factory/local-ticket.sh "${{ github.event.issue.number }}"
+      - name: Fill the empty tracks
+        if: steps.parent.outputs.ok == 'true' && steps.local.outputs.local != 'true'
         run: bash .github/factory/dispatch-next.sh --tickets-only --candidates "${{ github.event.issue.number }}"
 
   # Daily after KST midnight: fill the empty tracks (dispatch-next.sh skips busy ones).
@@ -221,6 +226,10 @@ jobs:
           if $go; then
             ok=$(env -u GITHUB_OUTPUT bash .github/factory/parent-check.sh "$N" | sed -n 's/^ok=//p' | tail -n 1)
             if [ "$ok" != true ]; then echo "::notice::#$N has no parent spec; not started"; go=false; fi
+          fi
+          if $go; then
+            lc=$(env -u GITHUB_OUTPUT bash .github/factory/local-ticket.sh "$N" | sed -n 's/^local=//p' | tail -n 1)
+            if [ "$lc" = true ]; then echo "::notice::#$N changes workflow files; left to a local worker"; go=false; fi
           fi
           if $go; then
             gh issue edit "$N" --repo "$REPO" --remove-label ready-for-agent --add-label in-progress

@@ -170,14 +170,21 @@ start_chain() {
     echo "::warning::#$s has no open tickets to approve"
     return 0
   fi
+  local approved=
   for n in $tickets; do
+    # A ticket for workflow files stays with a person (local-ticket.sh).
+    if [ "$(env -u GITHUB_OUTPUT bash "$here/local-ticket.sh" "$n" | sed -n 's/^local=//p' | tail -n 1)" = true ]; then
+      echo "#$n changes workflow files: not approved, left to a local worker"
+      continue
+    fi
+    approved="$approved $n"
     add_label "$n" ready-for-agent || echo "::warning::could not label #$n ready-for-agent"
   done
-  echo "approved: $(echo $tickets)"
+  echo "approved: $(echo $approved)"
   if [ -n "${FACTORY_DISPATCH_NEXT:-}" ]; then
     $FACTORY_DISPATCH_NEXT
   else
-    bash "$here/dispatch-next.sh" --tickets-only --candidates "$(echo $tickets)"
+    bash "$here/dispatch-next.sh" --tickets-only --candidates "$(echo $approved)"
   fi
 }
 
