@@ -5,6 +5,7 @@
 """
 
 import runpy
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -42,15 +43,40 @@ def _student_compose(api, images: dict[str, object]) -> dict:
 def test_health_is_200_when_the_database_answers(client):
     res = client.get("/api/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok", "db": "ok"}
+    assert res.json() == {"status": "ok"}
+
+
+def _db_at(**override):
+    params = {**connection.get_connection_params(), **override}
+    return mock.patch.object(connection, "get_connection_params", return_value=params)
 
 
 @pytest.mark.django_db
-def test_health_is_503_when_the_database_is_unreachable(client):
-    with mock.patch.object(connection, "cursor", side_effect=OperationalError("down")):
+def test_health_is_503_when_the_database_refuses(client):
+    # 닫힌 포트: 바로 거절된다. 본문에 호스트·포트·오류 원문이 없어야 한다.
+    with _db_at(host="127.0.0.1", port=1):
         res = client.get("/api/health")
     assert res.status_code == 503
-    assert res.json()["db"] == "unreachable"
+    assert res.json() == {"status": "error", "failed": ["db"]}
+
+
+@pytest.mark.django_db
+def test_health_gives_up_on_an_unanswering_database_within_seconds(client):
+    # 응답 없는 주소(라우팅 안 되는 TEST-NET): 연결 1초 제한으로 오래 걸리지 않는다.
+    started = time.monotonic()
+    with _db_at(host="192.0.2.1", port=5432):
+        res = client.get("/api/health")
+    assert res.status_code == 503
+    assert res.json() == {"status": "error", "failed": ["db"]}
+    assert time.monotonic() - started < 3
+
+
+@pytest.mark.django_db
+def test_health_is_503_when_the_database_query_fails(client):
+    with mock.patch("config.api.psycopg.connect", side_effect=OperationalError("password authentication failed for user x")):
+        res = client.get("/api/health")
+    assert res.status_code == 503
+    assert res.json() == {"status": "error", "failed": ["db"]}
 
 
 @pytest.mark.django_db

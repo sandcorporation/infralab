@@ -66,7 +66,7 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 ```
 DJANGO_SECRET_KEY=local-check POSTGRES_PASSWORD=local-check \
   docker compose -p infralab-prodcheck -f compose.prod.yml up -d --build --wait
-curl -s http://127.0.0.1:18093/api/health      # {"status": "ok", "db": "ok"}
+curl -s http://127.0.0.1:18093/api/health      # {"status":"ok"} — DB 를 못 쓰면 503 {"status":"error","failed":["db"]}
 docker compose -p infralab-prodcheck -f compose.prod.yml down -v
 ```
 
