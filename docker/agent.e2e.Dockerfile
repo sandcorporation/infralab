@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 # e2e 전용 에이전트(scripts/ci.sh e2e) — 운영 이미지(agent/Dockerfile)와 같은 바이너리에 docker-cli·bash 만 얹는다.
 # kind·kubectl 은 받지 않는다(e2e 시나리오는 kind·Floci 를 쓰지 않는다). 빌드 맥락은 저장소 루트다.
-FROM golang:1.23.12-alpine@sha256:383395b794dffa5b53012a212365d40c8e37109a626ca30d6151c8348d380b5f AS build
+FROM golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS build
 WORKDIR /src
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
 COPY agent/*.go ./
 RUN CGO_ENABLED=0 go build -ldflags "-X main.version=e2e" -o /agent .
 
-FROM alpine:3.21.10@sha256:bc21487101ae47172509130ee1092cc273a831968d64b617776d1f69c81e42ab
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk add --no-cache docker-cli bash
 COPY --from=build /agent /usr/local/bin/agent
 EXPOSE 7777
