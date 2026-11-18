@@ -8,6 +8,7 @@ import InstructorCohortPage from "./pages/InstructorCohortPage";
 import CohortPage from "./pages/CohortPage";
 import SetupPage from "./pages/SetupPage";
 import ScenarioPage from "./pages/ScenarioPage";
+import InstructorExamDashboardPage from "./pages/InstructorExamDashboardPage";
 import InstructorOrgPage from "./pages/InstructorOrgPage";
 import OrgInvitePage from "./pages/OrgInvitePage";
 import InstructorGridPage from "./pages/InstructorGridPage";
@@ -75,6 +76,7 @@ export default function App() {
         </Route>
         <Route element={<RequireAuth instructor />}>
           <Route path="/instructor" element={<InstructorCohortsPage />} />
+          <Route path="/instructor/exams" element={<InstructorExamDashboardPage />} />
           <Route path="/instructor/org" element={<InstructorOrgPage />} />
           <Route path="/instructor/cohorts/:id" element={<InstructorCohortPage />} />
           <Route path="/instructor/cohorts/:id/grid" element={<InstructorGridPage />} />

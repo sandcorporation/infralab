@@ -57,7 +57,6 @@ def _attempt(api, teacher, cohort_id, label, passing=None, finish=True):
     return invite
 
 
-@pytest.mark.skip(reason="#77")
 def test_dashboard_lists_only_my_orgs_exam_cohorts(api):
     teacher = api.login_instructor()
     mine = _exam(api, teacher, "백엔드 1회차")
@@ -82,7 +81,6 @@ def test_dashboard_lists_only_my_orgs_exam_cohorts(api):
     assert [r["cohort_id"] for r in api.get("/api/instructor/exam-dashboard", outsider).json()] == [theirs["id"]]
 
 
-@pytest.mark.skip(reason="#77")
 def test_dashboard_counts_attempts_and_buckets_final_scores(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher, "백엔드 1회차")

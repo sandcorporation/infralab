@@ -91,9 +91,27 @@ export function getAiConfig(token: string): Promise<AiConfig> {
   return api<AiConfig>(`${examPath(token)}/ai-config`);
 }
 
+/** GET /api/instructor/exam-dashboard 의 한 행(backend 시험 대시보드). */
+export type ExamDashboardRow = {
+  cohort_id: number;
+  org_id: number;
+  name: string;
+  invited: number;
+  started: number;
+  finished: number;
+  score_buckets: number[];
+};
+
+export const BUCKET_LABELS = ["0–19", "20–39", "40–59", "60–79", "80–100"];
+
+export function getExamDashboard(): Promise<ExamDashboardRow[]> {
+  return api<ExamDashboardRow[]>("/api/instructor/exam-dashboard");
+}
+
 /** 점수 분포 막대 높이 — 가장 큰 구간을 1 로 둔 비율, 모두 0 이면 모두 0. */
-export function bucketHeights(_buckets: number[]): number[] {
-  throw new Error("#77");
+export function bucketHeights(buckets: number[]): number[] {
+  const max = Math.max(0, ...buckets);
+  return buckets.map((n) => (max > 0 ? n / max : 0));
 }
 
 /** 응시 전 점검 결과로 「시작」을 열지 정한다. 시험은 실패·미응답(null)이면 막고, 연습은 경고만 남긴다. */
