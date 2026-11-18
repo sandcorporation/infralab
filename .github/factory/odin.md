@@ -56,7 +56,17 @@ Stubs are the only change outside the spec files you make. Then check, from the 
 
 The workflow runs it again after you. If it still fails you get its log in the same run and one more chance; a second failure hands the spec to a person.
 
-## 5. Report
+## 5. Make the tests fail for the right reason
+
+A switched-off test proves nothing until it runs. Once the stubs build, run `bash .github/factory/acceptance-probe.sh origin/main` from the repo root: it switches on every acceptance test of this PR once, runs them, puts the files back and prints one line per test.
+
+- `fail`: red on an assertion (or `pytest.fail`, a failed `.resolves`/`.rejects`, `t.Error`/`t.Fatal`) or on its ticket's stub. That is what a test of unbuilt behaviour does.
+- `pass`: already green before its ticket. Make sure it still asserts what its criterion needs (a guard of existing behaviour may pass).
+- `error`: red on an error of its own: an import or collection error, a file that does not load or build, an exception of the test's code (a `TypeError`, a yaml `ConstructorError`, a panic), an error in a fixture or setup. No implementation can turn it green, and the Implementer may not touch it (#194 stopped three times on one). Fix the test (keep what it asserts) or the stub until no `error` is left, or ask the owner (section 3) when the fix changes what the ticket promises.
+
+The workflow runs the probe again after you, together with `scripts/ci.sh all`, and treats an `error` like a failed check.
+
+## 6. Report
 
 Always write `.factory/odin-report.md` (Korean): what you checked, each defect with what you did about it (fixed / asked), the stubs you added (path and ticket), and any earlier spec test you changed. The workflow posts it on the spec PR.
 

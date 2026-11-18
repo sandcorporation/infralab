@@ -1,0 +1,58 @@
+{
+  "numTotalTests": 6,
+  "testResults": [
+    {
+      "name": "@ROOT@src/spec/spec_zz_a.test.ts",
+      "status": "failed",
+      "message": "",
+      "assertionResults": [
+        {
+          "fullName": "assert",
+          "status": "failed",
+          "failureMessages": [
+            "AssertionError: expected 1 to be 2 // Object.is equality"
+          ]
+        },
+        {
+          "fullName": "stub",
+          "status": "failed",
+          "failureMessages": [
+            "Error: #9"
+          ]
+        },
+        {
+          "fullName": "typeerr",
+          "status": "failed",
+          "failureMessages": [
+            "TypeError: Cannot read properties of undefined (reading 'x')"
+          ]
+        },
+        {
+          "fullName": "pass",
+          "status": "passed",
+          "failureMessages": []
+        },
+        {
+          "fullName": "rejects",
+          "status": "failed",
+          "failureMessages": [
+            "Error: promise resolved \"1\" instead of rejecting"
+          ]
+        },
+        {
+          "fullName": "resolves-stub",
+          "status": "failed",
+          "failureMessages": [
+            "Error: promise rejected \"Error: #9\" instead of resolving"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "@ROOT@src/spec/spec_zz_b.test.ts",
+      "status": "failed",
+      "message": "Failed to load url ../does-not-exist (resolved id: ../does-not-exist) in @ROOT@src/spec/spec_zz_b.test.ts. Does the file exist?",
+      "assertionResults": []
+    }
+  ]
+}

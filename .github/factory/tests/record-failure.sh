@@ -67,5 +67,55 @@ eq "no failure marker" 0 "$(count '<!-- factory-implementer-failed -->')"
 eq "human marker" 1 "$(count '<!-- factory-human -->')"
 eq "quotes the block" true "$(jq '.[-1].body | contains("ADR-0003과 부딪힌다.")' "$FAKE_GH/comments-7.json" | tr -d '\r')"
 
+# say_by <login> <created_at> <body>: a comment on #7 by <login> at <created_at>
+say_by() {
+  jq --arg u "$1" --arg t "$2" --arg b "$3" '. + [{id: (length + 1), created_at: $t, body: $b, user: {login: $u}}]' \
+    "$FAKE_GH/comments-7.json" | tr -d '\r' > "$FAKE_GH/c" && mv "$FAKE_GH/c" "$FAKE_GH/comments-7.json"
+}
+STOPPED='Implementer 가 멈췄습니다(커밋 없음). 인수 시험 test_only_the_e2e_compose_turns_the_hooks_on 이 통과할 수 없습니다: ConstructorError.'
+
+setup "#194: a run that made no commit and said why goes to a person at once (#212)"
+say_by 'github-actions[bot]' 2026-11-17T02:10:00Z "$STOPPED"
+RUN_STARTED_AT=2026-11-17T02:00:00Z bash "$script" 7 nocommit https://example.invalid/run/1 > /dev/null 2>&1
+eq labels ready-for-human "$(labels)"
+eq "no failure marker" 0 "$(count '<!-- factory-implementer-infra-failed -->')"
+eq "human marker" 1 "$(count '<!-- factory-human -->')"
+eq "quotes the reason" true "$(jq --arg s "$STOPPED" '.[-1].body | contains($s)' "$FAKE_GH/comments-7.json" | tr -d '\r')"
+
+setup "a comment from before the run does not count as this run's (#212)"
+say_by 'github-actions[bot]' 2026-11-17T01:59:59Z "$STOPPED"
+RUN_STARTED_AT=2026-11-17T02:00:00Z bash "$script" 7 nocommit https://example.invalid/run/1 > /dev/null 2>&1
+eq labels ready-for-agent "$(labels)"
+eq "infra failure" 1 "$(count '<!-- factory-implementer-infra-failed -->')"
+
+setup "a person's comment or a factory marker during the run is no reason to stop (#212)"
+say_by farrar142 2026-11-17T02:10:00Z '진행 상황 어때요?'
+say_by 'github-actions[bot]' 2026-11-17T02:11:00Z '<!-- factory-model opus -->
+model'
+RUN_STARTED_AT=2026-11-17T02:00:00Z bash "$script" 7 nocommit https://example.invalid/run/1 > /dev/null 2>&1
+eq labels ready-for-agent "$(labels)"
+eq "infra failure" 1 "$(count '<!-- factory-implementer-infra-failed -->')"
+eq "no human marker" 0 "$(count '<!-- factory-human -->')"
+
+setup "nocommit without RUN_STARTED_AT is an infrastructure failure (an older workflow run)"
+say_by 'github-actions[bot]' 2026-11-17T02:10:00Z "$STOPPED"
+RUN_STARTED_AT= bash "$script" 7 nocommit https://example.invalid/run/1 > /dev/null 2>&1
+eq labels ready-for-agent "$(labels)"
+eq "infra failure" 1 "$(count '<!-- factory-implementer-infra-failed -->')"
+
+setup "an infra failure with a comment is still counted: only nocommit reads it"
+say_by 'github-actions[bot]' 2026-11-17T02:10:00Z "$STOPPED"
+RUN_STARTED_AT=2026-11-17T02:00:00Z bash "$script" 7 infra https://example.invalid/run/1 > /dev/null 2>&1
+eq labels ready-for-agent "$(labels)"
+eq "infra failure" 1 "$(count '<!-- factory-implementer-infra-failed -->')"
+
+current="factory-implementer.yml passes nocommit and the run's start (#212)"
+wf=$(cat "$here/../../workflows/factory-implementer.yml")
+has() { case "$3" in *"$2"*) ok ;; *) bad "$1: [$2] not in the workflow" ;; esac; }
+has "start time" 'echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"' "$wf"
+has "step id" '      - name: Require commits
+        id: commits' "$wf"
+has kind 'elif [ "${{ steps.commits.outcome }}" = failure ]; then what=nocommit' "$wf"
+
 echo "record-failure.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]
