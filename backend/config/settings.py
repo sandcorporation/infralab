@@ -80,6 +80,10 @@ EXAM_PROXY_SECRET = _env("INFRALAB_EXAM_PROXY_SECRET")
 # 루브릭 채점 키 ← INFRALAB_GRADER_ANTHROPIC_KEY. 비면 가짜 채점기.
 GRADER_ANTHROPIC_KEY = _env("INFRALAB_GRADER_ANTHROPIC_KEY")
 
+# ---------- 버전 ----------
+# 배포된 커밋 ← INFRALAB_VERSION(없거나 비면 "dev"). health 본문·X-Infralab-Version 헤더가 이 값만 본다.
+INFRALAB_VERSION = ""  # #179
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
