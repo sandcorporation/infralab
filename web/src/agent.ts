@@ -1,5 +1,6 @@
 // 학생 PC 의 로컬 에이전트(127.0.0.1:7777) 클라이언트. 서버와는 별개의 오리진이라 fetch 가 CORS 를 탄다 —
 // 에이전트는 대시보드 오리진에서 온 요청에만 헤더를 준다.
+import type { Preflight } from "./exam";
 
 export type AgentStatus = {
   version: string;
@@ -68,6 +69,10 @@ export async function agentFetch<T>(
 
 export const agentStatus = (agentUrl: string, token: string, signal?: AbortSignal) =>
   agentFetch<AgentStatus>(agentUrl, token, "/api/status", { signal });
+
+/** 응시 전 점검(엔진·Linux 컨테이너 모드·권한). docker 명령을 몇 개 부르므로 status 보다 넉넉히 기다린다. */
+export const agentPreflight = (agentUrl: string, token: string, signal?: AbortSignal) =>
+  agentFetch<Preflight>(agentUrl, token, "/api/preflight", { signal, timeoutMs: 25000 });
 
 export type Step = { name: string; result: string; ms: number };
 export type StepsResponse = { ok: boolean; steps: Step[] };

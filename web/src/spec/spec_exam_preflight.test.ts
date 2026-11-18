@@ -26,24 +26,24 @@ const windowsMode: Preflight = {
 };
 
 describe("응시 전 점검", () => {
-  it.skip("모두 통과면 시험도 연습도 경고 없이 시작한다", () => { // #78
+  it("모두 통과면 시험도 연습도 경고 없이 시작한다", () => {
     expect(preflightGate(passing, "exam")).toEqual({ canStart: true, warnings: [] });
     expect(preflightGate(passing, "practice")).toEqual({ canStart: true, warnings: [] });
   });
 
-  it.skip("시험에서는 점검이 실패하면 시작할 수 없고 실패한 항목만 경고한다", () => { // #78
+  it("시험에서는 점검이 실패하면 시작할 수 없고 실패한 항목만 경고한다", () => {
     const gate = preflightGate(windowsMode, "exam");
     expect(gate.canStart).toBe(false);
     expect(gate.warnings).toEqual(["Windows 컨테이너 모드다 — Linux 컨테이너로 바꾼다"]);
   });
 
-  it.skip("연습에서는 점검이 실패해도 시작하되 경고가 남는다", () => { // #78
+  it("연습에서는 점검이 실패해도 시작하되 경고가 남는다", () => {
     const gate = preflightGate(windowsMode, "practice");
     expect(gate.canStart).toBe(true);
     expect(gate.warnings).toEqual(["Windows 컨테이너 모드다 — Linux 컨테이너로 바꾼다"]);
   });
 
-  it.skip("agent 가 응답하지 않으면 시험은 막고 연습은 경고만 한다", () => { // #78
+  it("agent 가 응답하지 않으면 시험은 막고 연습은 경고만 한다", () => {
     const exam = preflightGate(null, "exam");
     expect(exam.canStart).toBe(false);
     expect(exam.warnings.length).toBeGreaterThan(0);

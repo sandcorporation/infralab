@@ -11,11 +11,14 @@ import {
   getAiConfig,
   getFinalChecks,
   postFinalResults,
+  preflightGate,
   rememberExamToken,
   startExam,
 } from "../exam";
 import type { AiConfig } from "../exam";
 import { useExamClock } from "../examAttempt";
+import { PreflightPanel, usePreflight } from "../components/PreflightPanel";
+import { useMyCohort } from "../hooks";
 
 const TOOL_LABELS: Record<string, string> = {
   claude_code: "Claude Code",
@@ -88,11 +91,7 @@ export default function ExamPage() {
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             위 안내를 읽었고 동의합니다.
           </label>
-          <p>
-            <button onClick={() => void start()} disabled={!consent || busy}>
-              시작
-            </button>
-          </p>
+          <StartButton cohortId={status.cohort_id} disabled={!consent || busy} onStart={() => void start()} />
         </>
       )}
       {status && status.status !== "invited" && !clock.finished && (
@@ -120,6 +119,26 @@ export default function ExamPage() {
         </>
       )}
     </section>
+  );
+}
+
+// 「시작」 — 내 PC 의 agent 로 응시 전 점검(엔진·Linux 컨테이너 모드·권한)을 하고, 실패하거나 agent 가 응답하지
+// 않으면 막는다. 서버는 점검을 모른다 — 화면의 안내다.
+function StartButton({ cohortId, disabled, onStart }: { cohortId: number; disabled: boolean; onStart: () => void }) {
+  const { cohort, error } = useMyCohort(cohortId);
+  const preflight = usePreflight(cohort?.agent_url, cohort?.agent_token);
+  const gate = preflightGate(preflight.result, "exam");
+  const ready = cohort !== null && !preflight.checking && gate.canStart;
+  return (
+    <>
+      {error && <p className="error">{error}</p>}
+      {cohort && <PreflightPanel state={preflight} mode="exam" cohortId={cohortId} />}
+      <p>
+        <button onClick={onStart} disabled={disabled || !ready}>
+          시작
+        </button>
+      </p>
+    </>
   );
 }
 

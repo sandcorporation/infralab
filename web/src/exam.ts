@@ -116,10 +116,20 @@ export function bucketHeights(buckets: number[]): number[] {
 
 /** 응시 전 점검 결과로 「시작」을 열지 정한다. 시험은 실패·미응답(null)이면 막고, 연습은 경고만 남긴다. */
 export function preflightGate(
-  _result: Preflight | null,
-  _mode: "exam" | "practice",
+  result: Preflight | null,
+  mode: "exam" | "practice",
 ): { canStart: boolean; warnings: string[] } {
-  throw new Error("#78");
+  if (result === null) {
+    return {
+      canStart: mode === "practice",
+      warnings: ["에이전트가 응답하지 않아 응시 전 점검을 하지 못했습니다 — 실습 환경을 켜고 다시 점검하세요."],
+    };
+  }
+  const warnings = result.checks.filter((c) => !c.ok).map((c) => c.message);
+  // ok 가 false 인데 실패 항목이 없으면(옛·이상한 응답) 통과로 보지 않는다.
+  const passed = result.ok && warnings.length === 0;
+  if (!passed && warnings.length === 0) warnings.push("응시 전 점검을 통과하지 못했습니다.");
+  return { canStart: passed || mode === "practice", warnings };
 }
 
 /** GET /api/exam/<토큰>/final-checks — 마감 뒤에만. 열린 시나리오별 숨은 검사 정의(없으면 빈 목록). */
