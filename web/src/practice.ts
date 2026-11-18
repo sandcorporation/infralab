@@ -10,8 +10,11 @@ export type FeedbackAction = "show" | "request" | "no_transcript" | "limit_reach
 
 /** 연습 제출 하나의 결과 아래에 보일 것 — 기존 피드백·「피드백 받기」·다시 제출 안내·한도 소진 안내. */
 export function feedbackAction(
-  _sub: { has_transcript: boolean; has_feedback: boolean },
-  _remaining: number,
+  sub: { has_transcript: boolean; has_feedback: boolean },
+  remaining: number,
 ): FeedbackAction {
-  throw new Error("#134");
+  if (sub.has_feedback) return "show";
+  if (!sub.has_transcript) return "no_transcript";
+  if (remaining <= 0) return "limit_reached";
+  return "request";
 }
