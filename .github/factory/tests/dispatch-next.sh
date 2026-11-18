@@ -274,6 +274,41 @@ done_spec; ledger
 run
 eq "spec closed" closed "$(spec_state)"
 
+# spec_mark <body>: a marker comment of human-check.sh stack on spec #50 (#183)
+spec_mark() {
+  [ -f "$FAKE_GH/comments-50.json" ] || echo '[]' > "$FAKE_GH/comments-50.json"
+  jq --arg b "$1" '. + [{id: (length + 1), created_at: "2026-11-17T02:00:00Z", body: $b, user: {login: "github-actions[bot]"}}]' \
+    "$FAKE_GH/comments-50.json" | tr -d '\r' > "$FAKE_GH/c.new" && mv "$FAKE_GH/c.new" "$FAKE_GH/comments-50.json"
+}
+
+setup "a check issue missing from the label list is found by the spec's marker and holds the spec (#183)"
+done_spec; ledger
+check open "- [ ] Closes #179 (PR #181)"
+spec_mark "<!-- factory-human-check-issue -->"
+spec_mark "<!-- factory-human-check-issue 850 -->"
+touch "$FAKE_GH/labels-lag"
+run
+eq "spec stays open" open "$(spec_state)"
+has notice "spec #50 waits for its 사람 확인 items" "$(log)"
+eq "marker on the check issue" 1 "$(hc_marks)"
+
+setup "a stack began but its check issue is not found: the spec stays open (#183)"
+done_spec; ledger
+check open "- [ ] 환경 준비 표시 (PR #41)"
+spec_mark "<!-- factory-human-check-issue -->"
+touch "$FAKE_GH/labels-lag"
+run
+eq "spec stays open" open "$(spec_state)"
+has "not found told" "check issue is not found yet" "$(log)"
+
+setup "the marked check issue closed lets the spec close (#183)"
+done_spec; ledger
+check closed "- [ ] 환경 준비 표시 (PR #41)"
+spec_mark "<!-- factory-human-check-issue -->"
+spec_mark "<!-- factory-human-check-issue 850 -->"
+run
+eq "spec closed" closed "$(spec_state)"
+
 setup "no ledger issue only warns"
 spec 50 spec
 run

@@ -591,6 +591,65 @@ bash "$verify" pass 7 40 > /dev/null
 eq "exit" 0 "$?"
 eq "nothing to check, no check issue" "" "$(check_numbers)"
 
+# #181's body as the Implementer opened it (#183): `- 없음` and the factory tail after it are no items
+hc_setup human-check-pr181-tail '## 판단
+- 스텁 자리를 지움.
+
+## 사람 확인
+- 없음
+
+
+Closes #179
+
+_Opened by the factory Implementer run: https://github.com/sandcorporation/infralab/actions/runs/44338162424_
+
+<!-- factory-checked 6e7b13f90bb4cc0c522eded260bd87c7deb33167 -->'
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+eq "the tail is no item, no check issue" "" "$(check_numbers)"
+lacks "the spec is not marked" "factory-human-check-issue" "$(cat "$FAKE_GH/comments-62.json" 2>/dev/null)"
+
+hc_setup human-check-mixed-tail '## 사람 확인
+머리말은 항목이 아니다.
+
+- [ ] 붙여넣기 신호가 뜬다.
+* 종료 화면이
+  닫힌다.
+- 해당 없음
+게으른 이음줄.
+
+이 문장은 항목이 아니다.
+- 절 밖의 목록
+
+Closes #179
+<!-- factory-checked abc -->'
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+n=$(check_numbers)
+body=$(body_of "$n")
+eq "only the list items" 2 "$(printf '%s\n' "$body" | grep -c '^- \[ \]')"
+has "checkbox item" "- [ ] 붙여넣기 신호가 뜬다. (PR #40)" "$body"
+has "star item joined" "- [ ] 종료 화면이 닫힌다. (PR #40)" "$body"
+lacks "a plain line is no item" "머리말" "$body"
+lacks "after a blank line the section ends" "절 밖의 목록" "$body"
+lacks "no Closes" "Closes" "$body"
+lacks "no comment" "factory-checked" "$body"
+has "spec marked before" "<!-- factory-human-check-issue -->" "$(jq -r '.[0].body' "$FAKE_GH/comments-62.json" | tr -d '\r')"
+has "spec names the check issue" "<!-- factory-human-check-issue $n -->" "$(jq -r '.[1].body' "$FAKE_GH/comments-62.json" | tr -d '\r')"
+
+# a check issue the label list does not show yet is found by the spec's marker, not opened twice (#183)
+hc_setup human-check-label-lag "$HC_BODY"
+check_issue 850 "<!-- factory-human-check-of 62 -->
+spec: #62
+
+- [ ] 앞 항목 (PR #39)"
+echo '[{"id": 1, "created_at": "2026-11-17T02:00:00Z", "body": "<!-- factory-human-check-issue 850 -->", "user": {"login": "github-actions[bot]"}}]' > "$FAKE_GH/comments-62.json"
+touch "$FAKE_GH/labels-lag"
+bash "$verify" pass 7 40 > /dev/null
+eq "exit" 0 "$?"
+eq "the same check issue" 850 "$(check_numbers)"
+has "new item appended" "- [ ] root 에서 claude 가 뜬다. (PR #40)" "$(body_of 850)"
+
 hc_setup human-check-no-spec "$HC_BODY"
 rm "$FAKE_GH/parent-7.json"
 bash "$verify" pass 7 40 > /dev/null

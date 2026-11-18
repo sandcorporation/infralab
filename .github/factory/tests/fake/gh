@@ -12,6 +12,8 @@
 #   fail-dispatch       if present, workflow dispatches fail
 #   list-empty          if present, `gh issue list` finds nothing (a lagging search index);
 #   list-empty-once     the same for the next `gh issue list` only
+#   labels-lag          if present, `gh api …/issues?labels=<l>` misses the issues (a label not yet
+#                       showing in the list, #183); …/issues/<n> still reads them
 #   runs-list.json      runs for `gh run list`; `gh workflow run` adds one (runs-hidden: it does not)
 #   events-<n>.json     the events of issue <n> (`…/issues/<n>/events`), default []
 #   calls.log           every call's arguments, one line each
@@ -279,6 +281,7 @@ case "$path" in
     shopt -s nullglob
     files=("$d"/issue-*.json)
     if [ ${#files[@]} -eq 0 ]; then echo '[]'; exit 0; fi
+    if [ -n "$label" ] && [ -e "$d/labels-lag" ]; then echo '[]'; exit 0; fi
     jqf -s --arg l "$label" '[.[] | select(.state == "open" and ($l == "" or any(.labels[]; .name == $l)))]' "${files[@]}"
     ;;
   # ledger.sh event: the issue's events, events-<n>.json ([{event, created_at, label: {name}}], default []).

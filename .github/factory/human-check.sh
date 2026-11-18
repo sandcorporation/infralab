@@ -21,10 +21,16 @@
 #                                        waits for a check issue it comments `<!-- factory-human-check <spec> -->`
 #                                        on it (again, with only the new items, when unchecked items of PRs the earlier markers did not list are stacked later; #170), which bridge.sh mails to the boss.
 #
-# The items of `사람 확인`: from a heading line (`#`…) containing 사람 확인 to the next heading, every list
-# item (`-`, `*`, `+`, `1.`, `1)`, an existing `[ ]`/`[x]` dropped) with its indented continuation lines
-# joined, and every other non-empty line as an item of its own. An item that starts with 없음 or None is
-# no item.
+# The items of `사람 확인`: from a heading line (`#`…) containing 사람 확인, every list item (`-`, `*`, `+`,
+# `1.`, `1)`, an existing `[ ]`/`[x]` dropped) with its continuation lines joined. Other lines are no items.
+# The section ends at the next heading, an HTML comment, a `Closes/Fixes/Resolves #` line, a rule, or an
+# unindented non-list line after a blank line that follows the list — the factory tail of a PR body is no
+# item (#183). An item that starts with 없음, 해당 없음, None or N/A is no item.
+#
+# The check issue is found through the spec's marker comments, not only the label list (#183): stack
+# comments `<!-- factory-human-check-issue -->` on the spec before it opens the check issue and
+# `<!-- factory-human-check-issue N -->` after. The gate reads those issues directly; while the first is
+# there and no check issue is found, it does not close the spec.
 #
 # Environment: REPO (or GITHUB_REPOSITORY), GH_TOKEN, RUN_URL (optional). Needs bash, gh and jq.
 set -u
@@ -40,26 +46,49 @@ usage() { echo "usage: human-check.sh stack <ticket> <PR> | gate <spec>" >&2; ex
 # items: the `사람 확인` items of a PR body on stdin, one per line.
 items() {
   tr -d '\r' | awk '
-    function flush() { if (item != "" && item !~ /^(없음|None|none)/) print item; item = "" }
-    /^#+[[:space:]]/ { flush(); ins = ($0 ~ /사람 확인/); next }
+    function flush() { if (item != "" && item !~ /^\(?(없음|해당 ?없음|None|none|N\/A|n\/a)/) print item; item = "" }
+    /^#+[[:space:]]/ { flush(); ins = ($0 ~ /사람 확인/); seen = 0; blank = 0; next }
     !ins { next }
-    /^[[:space:]]*$/ { flush(); next }
+    # the factory tail the Implementer appends after the last section (#183), and a rule, end the section
+    /^[[:space:]]*<!--/ || /^[[:space:]]*([Cc]loses|[Ff]ixes|[Rr]esolves)[[:space:]]+#/ || /^[[:space:]]*(---+|\*\*\*+|___+)[[:space:]]*$/ {
+      flush(); ins = 0; next
+    }
+    /^[[:space:]]*$/ { flush(); blank = 1; next }
     /^([-*+]|[0-9]+[.)])[[:space:]]/ {
-      flush(); item = $0
+      flush(); seen = 1; blank = 0; item = $0
       sub(/^([-*+]|[0-9]+[.)])[[:space:]]+/, "", item); sub(/^\[[ xX]\][[:space:]]*/, "", item)
       next
     }
-    /^[[:space:]]/ && item != "" { t = $0; sub(/^[[:space:]]+/, "", t); item = item " " t; next }
-    { flush(); item = $0; sub(/^[[:space:]]+/, "", item) }
+    /^[[:space:]]/ { if (item != "") { t = $0; sub(/^[[:space:]]+/, "", t); item = item " " t }; next }
+    # an unindented line that is no list item: right under an item it continues it (lazy continuation);
+    # after a blank line that follows the list it ends the section; before any item it is no item.
+    item != "" { item = item " " $0; next }
+    seen && blank { ins = 0; next }
     END { flush() }'
 }
 
-# check_issues <spec>: the open check issues of <spec> as JSON [{number, body}], oldest first.
+# check_issues <spec>: {issues: the open check issues of <spec> as [{number, body}] oldest first,
+# lost: true when a stack began one (a spec marker comment) but none is found}.
+# The issues the spec's marker comments name are read directly; the label list is only added to it,
+# since an issue opened a moment ago may not be in that list yet (#183: the gate closed spec #178 25s after
+# its check issue was opened, before the label showed).
 check_issues() {
-  gh api "repos/$REPO/issues?labels=$LABEL&state=open&per_page=100" --paginate \
-    | j -s --arg m "<!-- factory-human-check-of $1 -->" \
-      '[add // [] | .[] | select(.pull_request | not) | select((.body // "") | contains($m)) | {number, body}]
-       | sort_by(.number)'
+  local spec=$1 marks nums n one direct='[]' listed pending=false
+  marks=$(gh api "repos/$REPO/issues/$spec/comments?per_page=100" --paginate \
+    --jq '.[].body | split("\n")[0] | select(startswith("<!-- factory-human-check-issue"))') || return 1
+  marks=$(printf '%s\n' "$marks" | tr -d '\r')
+  nums=$(printf '%s\n' "$marks" | sed -n 's/^<!-- factory-human-check-issue \([0-9][0-9]*\) -->$/\1/p' | sort -un)
+  printf '%s\n' "$marks" | grep -qx '<!-- factory-human-check-issue -->' && pending=true
+  for n in $nums; do
+    one=$(gh api "repos/$REPO/issues/$n") || return 1
+    direct=$(printf '%s' "$one" | j -c --argjson d "$direct" '$d + [.]')
+  done
+  listed=$(gh api "repos/$REPO/issues?labels=$LABEL&state=open&per_page=100" --paginate) || return 1
+  { printf '%s\n' "$direct"; printf '%s\n' "$listed"; } \
+    | j -s -c --arg m "<!-- factory-human-check-of $spec -->" --argjson pending "$pending" --arg nums "$nums" '
+      ([.[] | .[]?] | map(select(.pull_request | not) | select(.state == "open")
+        | select((.body // "") | contains($m)) | {number, body}) | unique_by(.number)) as $i
+      | {issues: $i, lost: ($pending and $nums == "" and ($i | length) == 0)}'
 }
 
 stack() {
@@ -74,15 +103,23 @@ stack() {
   fi
   lines=$(printf '%s\n' "$list" | sed "s/^/- [ ] /; s/\$/ (PR #$pr)/")
   issues=$(check_issues "$spec") || { echo "::warning::human-check: could not list the check issues"; return 1; }
+  issues=$(printf '%s' "$issues" | j -c '.issues')
   issue=$(printf '%s' "$issues" | j -r '.[0].number // empty')
   f=$(mktemp)
   if [ -z "$issue" ]; then
+    # Mark the spec first: from now on the gate does not close it until it finds the check issue (#183).
+    gh api "repos/$REPO/issues/$spec/comments" -f "body=<!-- factory-human-check-issue -->
+사람 확인 항목을 쌓는 중(PR #$pr)." > /dev/null \
+      || { rm -f "$f"; echo "::warning::human-check: could not mark spec #$spec"; return 1; }
     printf '<!-- factory-human-check-of %s -->\nspec: #%s\n\n미체크 항목이 남아 있으면 공장이 spec #%s 를 닫지 않고 다음 spec 으로 넘어가지 않는다.\n\n%s\n' \
       "$spec" "$spec" "$spec" "$lines" > "$f"
     issue=$(gh api "repos/$REPO/issues" -f "title=사람 확인: spec #$spec" -F "body=@$f" -f "labels[]=$LABEL" \
       | j -r '.number // empty')
     rm -f "$f"
     [ -n "$issue" ] || { echo "::warning::human-check: could not open the check issue of spec #$spec"; return 1; }
+    gh api "repos/$REPO/issues/$spec/comments" -f "body=<!-- factory-human-check-issue $issue -->
+사람 확인 이슈: #$issue" > /dev/null \
+      || echo "::warning::human-check: could not name check issue #$issue on spec #$spec (the gate finds it by its label)"
     echo "stacked PR #$pr on the new check issue #$issue of spec #$spec"
     return 0
   fi
@@ -101,6 +138,11 @@ stack() {
 gate() {
   local spec=$1 issues waiting n left marker prs told fresh new text p
   issues=$(check_issues "$spec") || { echo "could not read the check issues of spec #$spec"; return 1; }
+  if [ "$(printf '%s' "$issues" | j -r '.lost')" = true ]; then
+    echo "::warning::spec #$spec: a 사람 확인 stack began but its check issue is not found yet; the spec stays open (to unblock: comment <!-- factory-human-check-issue N --> on the spec)"
+    return 1
+  fi
+  issues=$(printf '%s' "$issues" | j -c '.issues')
   waiting=$(printf '%s' "$issues" | j -r '.[] | "\(.number) \([(.body // "") | split("\n")[]
     | select(test("^\\s*[-*+] \\[ \\]"))] | length)" | select(endswith(" 0") | not)')
   [ -n "$waiting" ] || return 0

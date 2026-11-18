@@ -52,6 +52,9 @@ release() {
   bash scripts/retry_test.sh
   # 병합 장치(#164): CI 초록일 때만 병합하는 스크립트(로컬 작업자·공장 공용, #172).
   bash scripts/pr-merge_test.sh
+  # 필수 검사 목록 드리프트(#183): ci.yml 잡 == pr-merge.sh REQUIRED. ruleset 쪽은 release.yml ruleset 잡.
+  bash scripts/check_required_test.sh
+  bash scripts/check_required.sh
 }
 
 # 브라우저 e2e(#168): 개발 스택(compose.dev.yaml + compose.e2e.yaml)을 따로 프로젝트 이름으로 올리고
