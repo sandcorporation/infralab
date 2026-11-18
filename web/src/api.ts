@@ -88,6 +88,15 @@ export type Participant = {
   display_name: string;
   joined_at: string;
 };
+export type ExamInvite = {
+  id: number;
+  label: string;
+  token: string;
+  status: "invited" | "in_progress" | "finished" | "revoked";
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
 export type JoinPreview = { cohort_id: number; name: string; join_open: boolean };
 export type KindRequirement = { control_planes: number; workers: number };
 export type Requires = { floci: boolean; kind: KindRequirement | null };
@@ -223,6 +232,9 @@ export const instructor = {
       method: "PUT",
       body: JSON.stringify({ scenario_ids: scenarioIds }),
     }),
+  createExamInvite: (_cohortId: number, _label: string): Promise<ExamInvite> => {
+    throw new Error("#70");
+  },
 };
 
 export const previewOrgInvite = (token: string) =>
@@ -250,6 +262,10 @@ export const orgAdmin = {
 
 export function orgInviteUrl(token: string): string {
   return `${location.origin}/org-invite/${token}`;
+}
+
+export function examInviteUrl(_token: string): string {
+  throw new Error("#70");
 }
 
 export function joinUrl(token: string): string {

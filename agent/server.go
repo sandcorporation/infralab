@@ -20,6 +20,7 @@ type config struct {
 	Workstation    string // compose 가 만든 workstation 컨테이너 이름
 	Floci          string // compose 가 만든 Floci 컨테이너 이름
 	KindCluster    string
+	LocalLLMURL    string // 로컬 LLM(OpenAI 호환) 주소 ← AGENT_LOCAL_LLM_URL. 비면 중계하지 않는다. #79
 }
 
 type server struct {
