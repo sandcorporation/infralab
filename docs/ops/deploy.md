@@ -49,13 +49,13 @@ Jenkins 가 넣는 값(`.env` 에 쓰지 않는다): `INFRALAB_BACKEND_IMAGE`, `
 ## 서버 쪽에서 할 일
 
 - [ ] Jenkins 잡: multibranch 또는 파이프라인, 저장소 `sandcorporation/infralab`, 브랜치 지정자 `*/production`, `Jenkinsfile`, GitHub push 웹훅.
-- [ ] 운영 서버의 Jenkins 작업 디렉터리에 `.env`(위 필수 네 개 + 필요한 선택 값). 저장소에 넣지 않는다.
+- [ ] 운영 서버의 Jenkins 작업 디렉터리에 `.env`(위 필수 네 개 + 필요한 선택 값). 저장소에 넣지 않는다. **함정**: Jenkins 첫 클론이 작업 디렉터리를 비우므로 `.env` 는 첫 빌드(클론) 뒤에 넣고 다시 빌드한다(먼저 넣으면 지워진다).
 - [ ] 리버스 프록시 호스트 `infralab.sandcorp.co.kr` → web 컨테이너(`HTTP_BIND:HTTP_PORT`). TLS 는 프록시에서 끝내고 `X-Forwarded-Proto` 를 넘긴다.
 - [ ] DB 볼륨(`infralab_db`) 백업 — 정기 `pg_dump` 또는 볼륨 스냅숏.
 - [ ] GitHub 저장소 변수 `VITE_KAKAO_REST_KEY`, 카카오 개발자 콘솔 Redirect URI `https://infralab.sandcorp.co.kr/auth/kakao/callback`.
 - [ ] GitHub ruleset: `production` 브랜치 강제 push·삭제 금지(승격은 fast-forward 만).
 - [ ] ghcr 패키지 넷(`infralab-backend`·`-web`·`-agent`·`-workstation`)의 공개 범위 — 응시자 PC 가 로그인 없이 pull 하려면 agent·workstation 은 공개.
-- [ ] 첫 강사 지정: `docker compose -f compose.prod.yml run --rm backend python manage.py set_instructor …`.
+- [ ] 첫 강사 지정: `docker compose -f compose.prod.yml run --rm backend python manage.py set_instructor kakao:<id>` — 「기본 조직」 owner 로 넣는다. 카카오로 한 번 로그인한 뒤에 한다(그 전에는 사용자가 없다).
 
 ## 로컬에서 운영 compose 확인
 
