@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+FROM ghcr.io/astral-sh/uv:0.9.30-python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca
 
 # 가상환경을 /app 밖에 둔다 — dev compose 가 소스를 /app 에 바인드 마운트하므로 안에 두면 가려진다.
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
