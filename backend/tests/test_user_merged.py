@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 
 import pytest
-from django.apps import apps
 from django.contrib.auth import get_user_model
 
-from accounts import sandcorp_auth
+from accounts import merge, sandcorp_auth
 from cohorts.models import Cohort, Membership
 from orgs.models import Organization, OrgMember
 from submissions.models import Submission
@@ -140,20 +139,15 @@ def test_merged_with_an_unknown_from_sub_is_2xx_and_does_nothing(fake, client):
     assert User.objects.count() == 1 and User.objects.get().pk == target.pk
 
 
-@pytest.mark.django_db
-def test_every_foreign_key_to_the_user_is_handled_by_the_merge():
+def test_every_relation_to_the_user_is_declared_in_merge():
     pointing = {
-        f"{m._meta.label}.{f.name}"
-        for m in apps.get_models()
-        for f in m._meta.get_fields()
-        if f.is_relation and f.concrete and f.related_model is User
+        f"{rel.related_model._meta.label}.{rel.field.name}"
+        for rel in User._meta.related_objects  # FK·OneToOne·ManyToMany 의 역방향 전부
     }
-    # 합치기가 옮기는 것. 새 모델이 사용자를 가리키면 accounts/merge.py 에 옮기는 줄을 더하고 여기에 적는다.
-    handled = {"cohorts.Membership.user", "orgs.OrgMember.user"}
-    # 인증·관리 앱의 내장 관계(그룹·권한·관리 로그)는 이 앱들이 쓰지 않는다.
-    ignored = {p for p in pointing if p.split(".")[0] in {"auth", "admin", "contenttypes", "sessions"}}
-    assert pointing - ignored - handled == set()
-    assert "accounts.User.groups" not in pointing  # M2M 은 concrete 가 아니다
+    # 인증·관리 앱의 내장 관계(관리 로그 등)는 이 앱들이 쓰지 않는다.
+    builtin = {p for p in pointing if p.split(".")[0] in {"auth", "admin", "contenttypes", "sessions"}}
+    missing = pointing - builtin - merge.HANDLED
+    assert not missing, f"사용자를 가리키는 관계 {sorted(missing)} — accounts/merge.py 에 옮기는 법을 더하고 HANDLED 에 적어라"
 
 
 # ---------- 대표 토큰 A1·A4 ----------

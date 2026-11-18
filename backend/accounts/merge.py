@@ -16,6 +16,10 @@ from orgs.models import OrgMember
 from submissions.models import Submission
 
 
+#: 이 모듈이 옮긴다고 선언한 사용자 관계. 새 모델이 사용자를 가리키면 옮기는 코드를 더하고 여기에 적는다.
+HANDLED = {"cohorts.Membership.user", "orgs.OrgMember.user"}
+
+
 def username_for(sub: str) -> str:
     return f"sandcorp:{sub}"
 
