@@ -25,8 +25,13 @@ RUN printf 'export JAVA_HOME=/opt/java/openjdk\nexport PATH="/root/.local/bin:$J
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 # pip 설치는 홈(/root/.local, 홈 볼륨)으로 — 컨테이너를 다시 만들어도 남고 pytest·uvicorn 이 PATH 에 있다.
 ENV PIP_USER=1
+# 컨테이너는 root 로 돈다 — Claude Code 는 root 에서 --dangerously-skip-permissions 를 IS_SANDBOX=1 이 없으면 거부한다.
+# 이 컨테이너가 응시자 전용 격리 환경이라 허용한다(#125, 비root 전환은 시나리오 권한 때문에 하지 않는다).
+ENV IS_SANDBOX=1
 # 빌드 검증 — 하나라도 실행되지 않으면 빌드가 깨진다. java 는 25 여야 한다.
+# claude 는 root 거부 문구가 나오면 깨진다(로그인이 없어 「Not logged in」 으로 끝나는 것은 정상).
 RUN node --version && python3 --version && pip --version && claude --version && codex --version \
- && java -version 2>&1 | head -1 && java -version 2>&1 | grep -q '"25'
+ && java -version 2>&1 | head -1 && java -version 2>&1 | grep -q '"25' \
+ && ! (timeout 60 claude --dangerously-skip-permissions -p ok </dev/null 2>&1 | tee /dev/stderr | grep -q 'root/sudo')
 WORKDIR /work
 CMD ["sleep", "infinity"]
