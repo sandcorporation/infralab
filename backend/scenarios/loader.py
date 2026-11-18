@@ -18,7 +18,7 @@ command 가 부른다).
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -415,4 +415,35 @@ def load_all(root: Path) -> dict[str, Scenario]:
 def load_hidden(problems_root: Path, scenarios: dict[str, Scenario]) -> dict[str, Scenario]:
     """문제은행 폴더의 `<id>/hidden.yaml` 을 읽어 숨은 검사를 붙인 새 dict. 깨지면 `ScenarioError`."""
 
-    raise NotImplementedError("#69")
+    if not problems_root.is_dir():
+        raise ScenarioError(f"문제은행 디렉터리가 없다: {problems_root}")
+    out = dict(scenarios)
+    for directory in sorted(p for p in problems_root.iterdir() if p.is_dir() and not p.name.startswith((".", "_"))):
+        path = directory / "hidden.yaml"
+        where = str(path)
+        scenario = scenarios.get(directory.name)
+        if scenario is None:
+            raise ScenarioError(f"{where}: 시나리오 {directory.name!r} 가 저장소에 없다")
+        if not path.is_file():
+            raise ScenarioError(f"{where}: 파일이 없다")
+        try:
+            raw = yaml.load(_read_text(path, where), Loader=_StrictLoader)  # noqa: S506 - SafeLoader 하위
+        except yaml.YAMLError as exc:
+            raise ScenarioError(f"{where}: YAML 을 읽을 수 없다: {exc}") from exc
+        if not isinstance(raw, dict):
+            raise ScenarioError(f"{where}: 최상위는 맵이어야 한다")
+        _reject_unknown(raw, {"checks"}, where)
+        checks_raw = _require(raw, "checks", where, list)
+        if not checks_raw:
+            raise ScenarioError(f"{where}: checks 가 비어 있다")
+        checks = tuple(_parse_check(c, f"{where}: checks[{i}]") for i, c in enumerate(checks_raw))
+        seen = {c.id for c in scenario.checks}
+        for c in checks:
+            if c.id in seen:
+                raise ScenarioError(f"{where}: 검사 id 가 공개 검사나 다른 숨은 검사와 겹친다 ({c.id!r})")
+            seen.add(c.id)
+            for token in _BARE_SCRIPT_TOKEN.findall(c.command):
+                if token not in scenario.scripts:
+                    raise ScenarioError(f"{where}: 검사 {c.id} 가 부르는 스크립트 {token} 이 없다")
+        out[scenario.id] = replace(scenario, hidden_checks=checks)
+    return out

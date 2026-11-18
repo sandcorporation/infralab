@@ -14,5 +14,7 @@ infralab 의 도메인 용어. 화면·코드·이슈·커밋에서 이 뜻으�
 | **기수** | 수업 종류 묶음의 표시 이름. 화면과 API 경로(`/cohorts`)는 이 이름을 쓴다. | `cohorts.Cohort` |
 | **응시자** | 묶음에 들어온 사람(수업이면 학생, 시험이면 지원자). 묶음마다 에이전트 토큰 하나를 갖는다. | `cohorts.Membership` |
 | **제출** | 응시자가 한 시나리오에 대해 보낸 자동 검사 결과 한 번(대화 기록이 붙을 수 있다). | `submissions.Submission` |
+| **숨은 검사** | 시나리오에 붙지만 공개 검사와 섞이지 않는 검사. 문제은행의 `<id>/hidden.yaml` 에서 읽고(공개 검사와 같은 스키마, id 는 겹칠 수 없다), 시나리오 상세·환경 준비·제출 검증은 공개 검사만 본다. | `scenarios.loader.Scenario.hidden_checks` |
+| **문제은행** | 숨은 검사를 담은 비공개 저장소. 저장소 루트 `problems.ref` 가 고정 sha 를 가리키고, 서버는 `PROBLEMS_DIR`(`INFRALAB_PROBLEMS_DIR`) 폴더에서 읽는다. 폴더가 비었거나 없으면 숨은 검사를 건너뛰고 경고만 남긴다. 저장소 안 `problems-sample/` 은 시험·개발용 견본이다. | `problems.ref`, `config.settings.PROBLEMS_DIR` |
 
 피할 말: 조직 담당자를 「관리자」「어드민」이라 부르지 않는다(서비스 운영자와 헷갈린다). 묶음을 「그룹」「반」이라 부르지 않는다.

@@ -79,7 +79,6 @@ def _student_in_s3_cohort(api):
     return cohort, student
 
 
-@pytest.mark.skip(reason="#69")
 def test_problems_ref_is_one_line_of_a_forty_hex_sha():
     text = (REPO_ROOT / "problems.ref").read_text(encoding="utf-8")
     lines = text.strip().splitlines()
@@ -87,7 +86,6 @@ def test_problems_ref_is_one_line_of_a_forty_hex_sha():
     assert re.fullmatch(r"[0-9a-f]{40}", lines[0]) is not None
 
 
-@pytest.mark.skip(reason="#69")
 def test_hidden_yaml_attaches_hidden_checks_and_keeps_public_checks(tmp_path):
     scenarios = _scenarios()
     root = _bank(tmp_path, {S3: HIDDEN_YAML})
@@ -109,7 +107,6 @@ def test_hidden_yaml_attaches_hidden_checks_and_keeps_public_checks(tmp_path):
     assert scenarios[S3].hidden_checks == ()
 
 
-@pytest.mark.skip(reason="#69")
 def test_registry_load_reads_the_problems_dir_setting(hidden_bank):
     s3 = registry.get(S3)
     assert s3 is not None
@@ -118,7 +115,6 @@ def test_registry_load_reads_the_problems_dir_setting(hidden_bank):
 
 
 @pytest.mark.parametrize("problems_dir", ["", "/nonexistent/infralab-problems"])
-@pytest.mark.skip(reason="#69")
 def test_empty_or_missing_problems_dir_loads_without_hidden_checks_and_warns(problems_dir, caplog):
     expected = set(_scenarios())
     caplog.set_level(logging.WARNING, logger="scenarios")
@@ -148,14 +144,12 @@ def test_empty_or_missing_problems_dir_loads_without_hidden_checks_and_warns(pro
     ],
     ids=["missing-expect", "unknown-expect", "public-id", "unknown-scenario"],
 )
-@pytest.mark.skip(reason="#69")
 def test_broken_problem_bank_raises_scenario_error(tmp_path, files):
     root = _bank(tmp_path, files)
     with pytest.raises(ScenarioError):
         load_hidden(root, _scenarios())
 
 
-@pytest.mark.skip(reason="#69")
 def test_student_detail_and_prepare_never_show_hidden_checks(api, hidden_bank):
     cohort, student = _student_in_s3_cohort(api)
 
@@ -175,7 +169,6 @@ def test_student_detail_and_prepare_never_show_hidden_checks(api, hidden_bank):
         assert "index.html 본문" not in body
 
 
-@pytest.mark.skip(reason="#69")
 def test_submission_takes_only_public_check_ids(api, hidden_bank):
     cohort, student = _student_in_s3_cohort(api)
 
@@ -188,7 +181,6 @@ def test_submission_takes_only_public_check_ids(api, hidden_bank):
     assert with_hidden.status_code == 422
 
 
-@pytest.mark.skip(reason="#69")
 def test_sample_problem_bank_loads_and_has_hidden_checks():
     sample = REPO_ROOT / "problems-sample"
     assert sample.is_dir()
@@ -202,7 +194,6 @@ def test_sample_problem_bank_loads_and_has_hidden_checks():
         assert public_ids.isdisjoint(c.id for c in s.hidden_checks)
 
 
-@pytest.mark.skip(reason="#69")
 def test_problems_dir_setting_comes_from_env_and_defaults_to_empty(monkeypatch):
     monkeypatch.delenv("INFRALAB_PROBLEMS_DIR", raising=False)
     monkeypatch.delenv("DJANGO_DEBUG", raising=False)
