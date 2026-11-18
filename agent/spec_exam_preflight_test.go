@@ -65,7 +65,6 @@ func healthyDocker() *fakeRunner {
 }
 
 func TestSpecExamPreflight_WithoutTokenIs401(t *testing.T) {
-	t.Skip("#78")
 	srv := newTestServer(t, healthyDocker())
 	res := do(t, srv, "GET", "/api/preflight", "", nil)
 	if res.StatusCode != http.StatusUnauthorized {
@@ -78,7 +77,6 @@ func TestSpecExamPreflight_WithoutTokenIs401(t *testing.T) {
 }
 
 func TestSpecExamPreflight_AllPassIsOK(t *testing.T) {
-	t.Skip("#78")
 	body := preflight(t, healthyDocker())
 	if !body.OK {
 		t.Fatalf("ok = false, want true: %+v", body.Checks)
@@ -91,7 +89,6 @@ func TestSpecExamPreflight_AllPassIsOK(t *testing.T) {
 }
 
 func TestSpecExamPreflight_EngineDownFailsEngineWithHelp(t *testing.T) {
-	t.Skip("#78")
 	fake := newFakeRunner()
 	down := Result{
 		Stderr:   "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
@@ -115,7 +112,6 @@ func TestSpecExamPreflight_EngineDownFailsEngineWithHelp(t *testing.T) {
 }
 
 func TestSpecExamPreflight_WindowsContainersFailLinuxMode(t *testing.T) {
-	t.Skip("#78")
 	fake := newFakeRunner()
 	fake.respond("docker version", "27.3.1\n", 0)
 	fake.respond("docker info", "windows\n", 0)
@@ -141,7 +137,6 @@ func TestSpecExamPreflight_WindowsContainersFailLinuxMode(t *testing.T) {
 }
 
 func TestSpecExamPreflight_PermissionDeniedFailsPermission(t *testing.T) {
-	t.Skip("#78")
 	fake := newFakeRunner()
 	denied := Result{
 		Stderr:   "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get \"http://%2Fvar%2Frun%2Fdocker.sock/v1.47/version\": dial unix /var/run/docker.sock: connect: permission denied",
