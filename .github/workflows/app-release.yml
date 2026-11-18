@@ -1,0 +1,106 @@
+# Windows 설치 파일(Inno Setup)을 빌드한다. 태그 `app-v<버전>` 을 밀면 GitHub Release 자산으로 올리고,
+# workflow_dispatch 는 빌드만 하고 산출물을 Actions artifact 로 남긴다(Release 없음).
+# 이미지 release.yml(main push → production 승격)과 태그·트리거가 겹치지 않는다.
+# 코드 서명은 하지 않는다(인증서 비밀값 없음) — SmartScreen 경고가 뜬다.
+name: app-release
+
+on:
+  push:
+    tags: ["app-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "설치 파일 버전(태그 없이 시험할 때)"
+        default: "0.0.0-dev"
+        required: false
+
+concurrency:
+  group: app-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 버전 정하기
+        id: ver
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            v="${REF_NAME#app-v}"
+          else
+            v="${INPUT_VERSION:-0.0.0-dev}"
+          fi
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
+            echo "버전 형식이 아님: $v" >&2
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Inno Setup 준비
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: 설치 파일 빌드
+        shell: pwsh
+        working-directory: installer/windows
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=$env:APP_VERSION" infralab.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem Output | Format-Table Name, Length
+
+      - name: 산출물 확인
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          f="installer/windows/Output/infralab-setup-${APP_VERSION}.exe"
+          test -s "$f" || { echo "없음: $f" >&2; exit 1; }
+          sha256sum "$f" | tee "$f.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infralab-setup-${{ steps.ver.outputs.version }}
+          path: installer/windows/Output/infralab-setup-*
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: infralab-setup-${{ needs.build.outputs.version }}
+          path: dist
+      - name: GitHub Release 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release create "$TAG" dist/* --repo "$REPO" --title "infralab 설치 프로그램 $TAG" \
+            --notes "Windows 설치 프로그램(서명 없음). Docker Desktop(Linux 컨테이너 모드)이 따로 필요합니다." \
+            || gh release upload "$TAG" dist/* --repo "$REPO" --clobber

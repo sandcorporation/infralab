@@ -18,7 +18,7 @@ iscc /DAppVersion=1.0.0 infralab.iss
 ```
 
 산출물: `installer\windows\Output\infralab-setup-1.0.0.exe` (`infralab-setup-<버전>.exe`).
-버전 문자열은 `/DAppVersion=` 빌드 인자 한 곳에서만 온다(없으면 빌드가 실패한다). 빌드·게시 workflow 는 따로 둔다.
+버전 문자열은 `/DAppVersion=` 빌드 인자 한 곳에서만 온다(없으면 빌드가 실패한다). 
 
 ## 설치 뒤 동작
 
@@ -28,3 +28,8 @@ iscc /DAppVersion=1.0.0 infralab.iss
   `http://127.0.0.1:7777/api/preflight` 를 부른다. 실패한 항목(엔진·Linux 모드·권한)의 `help_url` 을 브라우저로 연다.
   docker 가 없거나 compose 가 실패하거나 agent 가 응답하지 않으면 Docker Desktop 안내 페이지를 연다.
 - 스크립트는 직접도 돌릴 수 있다: `powershell -File infralab-start.ps1 -ComposeUrl <주소> -DashboardUrl <주소>`.
+
+## 릴리스
+
+`.github/workflows/app-release.yml` 이 Windows 실행기에서 빌드한다. 태그 `app-v<버전>`(예 `app-v1.0.0`)을 밀면 GitHub Release 에 `infralab-setup-<버전>.exe` 와 `.sha256` 을 올린다.
+태그 없이 Actions 에서 `app-release` 를 수동 실행(workflow_dispatch, 버전 입력)하면 빌드만 하고 artifact 로 남긴다. 코드 서명은 하지 않는다.
