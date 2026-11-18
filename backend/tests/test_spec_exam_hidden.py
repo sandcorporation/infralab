@@ -4,7 +4,7 @@ target: backend/tests/test_spec_exam_hidden.py
 AC: #74: 응시 중 final-checks 409, 마감 뒤에는 열린 시나리오별 숨은 검사 정의(공개 검사는 없음)
 AC: #74: 응시 중 지원자가 받는 어떤 응답(응시 상태, 시나리오 목록·상세·환경 준비, 제출 응답·이력)에도 숨은 검사 id 가 없다
 AC: #74: 마감 뒤 final-results 한 번(204), 두 번째 409, 마감 전 409, 숨은 검사 id 가 맞지 않으면 422
-AC: #74: 담당자 score 가 공개·숨은 통과/전체, hidden_status(done·pending·skipped), final_percent 를 준다. 남의 조직 404
+AC: #74: 담당자 score 가 공개·숨은 통과/전체, hidden_status(done·pending·skipped), final_percent 를 준다(pending 이면 null). 남의 조직 404
 AC: #74: hidden_checks: false 면 final-checks 가 빈 목록이고 점수는 skipped, 공개만으로 final_percent
 
 문제은행은 시험마다 임시 폴더(s3-static-site 의 숨은 검사 둘)로 만들어 레지스트리를 다시 읽는다. 지원자는
@@ -187,6 +187,8 @@ def test_score_combines_public_and_hidden_checks(api, hidden_bank):
     assert pending.status_code == 200, pending.content
     assert pending.json()["hidden_status"] == "pending"
     assert (pending.json()["public_passed"], pending.json()["public_total"]) == (3, 4)
+    # 숨은 결과를 기다리는 동안 최종 점수는 없다(공개만으로 낸 점수를 최종으로 보이지 않는다).
+    assert pending.json()["final_percent"] is None
 
     assert _final_results(api, cand, invite["token"], _hidden_results({"hidden-website-suffix"})).status_code == 204
     score = _score(api, teacher, cohort["id"], invite["id"]).json()

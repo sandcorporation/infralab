@@ -4,6 +4,8 @@ target: backend/tests/test_spec_exam_local_llm.py
 AC: #79: backend 제출이 tool: "local_llm"(선택 model) 기록을 받는다
 AC: #79: 로컬 LLM 을 허용한 회차의 ai-config 에 local_llm 항목(env 의 OPENAI_BASE_URL 이 /llm/v1 로 끝남)이 있다
 AC: #79: 응시의 제출에 local_llm 기록이 있으면 보고서 local_model_unverified: true, 없으면 false
+AC: #79: 응시 제출의 local_llm 기록이 루브릭 채점 재료가 된다(근거 인용이 그 기록 안의 글)
+AC: #79: local_llm 을 허용한 회차의 local_llm 기록은 ai_outside_proxy 신호를 남기지 않고, 허용하지 않은 회차면 남긴다
 
 학생·지원자의 제출 API 와 담당자 보고서 API 를 테스트 클라이언트로 부른다. agent 쪽 중계·기록은
 agent/spec_exam_llm_relay_test.go 가 본다. 보고서 화면의 「로컬 모델 — 조건 미검증」 글은 「손 확인」이다.
@@ -130,3 +132,43 @@ def test_report_marks_local_model_as_unverified_only_when_used(api):
 
     assert report(local_invite["id"])["local_model_unverified"] is True
     assert report(plain_invite["id"])["local_model_unverified"] is False
+
+
+@pytest.mark.skip(reason="#79")
+def test_local_llm_transcript_is_grading_material(api):
+    teacher = api.login_instructor()
+    cohort = _exam(api, teacher)
+    invite, cand = _attempt(api, teacher, cohort["id"])
+    assert _submit(api, cand, cohort["id"], [LOCAL_TRANSCRIPT]).status_code == 201
+    assert api.post(f"/api/exam/{invite['token']}/finish", session=cand).status_code == 200
+
+    res = api.post(f"/api/instructor/cohorts/{cohort['id']}/exam-invites/{invite['id']}/report/grade", session=teacher)
+
+    assert res.status_code == 200, res.content
+    rubric = res.json()["rubric"]
+    assert rubric["grader"] == "fake"
+    quotes = [q for item in rubric["items"] for q in item["evidence"]]
+    assert quotes, "로컬 LLM 기록이 채점 재료로 쓰이지 않았다"
+    sources = [e["text"] for e in LOCAL_TRANSCRIPT["entries"]]
+    for quote in quotes:
+        assert quote.strip()
+        assert any(quote in text for text in sources), quote
+
+
+@pytest.mark.parametrize("tools, signalled", [(["local_llm"], False), (["claude_code"], True)], ids=["allowed", "not-allowed"])
+@pytest.mark.skip(reason="#79")
+def test_local_llm_transcript_and_the_outside_proxy_signal(api, tools, signalled):
+    teacher = api.login_instructor()
+    models = {"claude_code": "claude-sonnet-4-5"} if "claude_code" in tools else {}
+    cohort = _exam(api, teacher, {**EXAM_SETTINGS, "tools": tools, "models": models, "proctoring": True})
+    invite, cand = _attempt(api, teacher, cohort["id"])
+
+    assert _submit(api, cand, cohort["id"], [LOCAL_TRANSCRIPT]).status_code == 201
+
+    res = api.get(f"/api/instructor/cohorts/{cohort['id']}/exam-invites/{invite['id']}/events", teacher)
+    assert res.status_code == 200, res.content
+    outside = [e for e in res.json() if e["kind"] == "ai_outside_proxy"]
+    if signalled:
+        assert len(outside) == 1 and "local_llm" in outside[0]["detail"]
+    else:
+        assert outside == []

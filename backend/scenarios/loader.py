@@ -149,6 +149,8 @@ class Scenario:
     setup_reset: str = "none"
     #: 공통 AI 규칙 뒤에 붙는 시나리오 추가 규칙(markdown).
     ai_rules: str = ""
+    #: 숨은 검사 — 문제은행(`PROBLEMS_DIR/<id>/hidden.yaml`)에서 붙는다. 공개 표면에는 나오지 않는다. #69
+    hidden_checks: tuple[Check, ...] = ()
 
     def check_definitions(self) -> list[dict[str, Any]]:
         """에이전트 `/api/check` 에 넘기는 검사 정의 전문."""
@@ -408,3 +410,9 @@ def load_all(root: Path) -> dict[str, Scenario]:
         scenario = load_scenario(directory)
         scenarios[scenario.id] = scenario
     return scenarios
+
+
+def load_hidden(problems_root: Path, scenarios: dict[str, Scenario]) -> dict[str, Scenario]:
+    """문제은행 폴더의 `<id>/hidden.yaml` 을 읽어 숨은 검사를 붙인 새 dict. 깨지면 `ScenarioError`."""
+
+    raise NotImplementedError("#69")

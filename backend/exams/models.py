@@ -1,0 +1,61 @@
+"""시험 모드 — 응시 링크(ExamInvite), 임시 토큰(AIToken), 프록시 기록(AIExchange).
+
+응시 링크는 시험 회차(`cohorts.Cohort`, 종류 `exam`)의 지원자 한 사람의 응시 한 번이다(#70). 응시 흐름
+필드(`membership`·`consented_at`·`started_at`·`finished_at`)는 #71, 임시 토큰과 프록시 기록은 #72 가 쓴다.
+"""
+
+from __future__ import annotations
+
+from django.db import models
+
+from cohorts.models import new_token
+
+
+class ExamInvite(models.Model):
+    cohort = models.ForeignKey("cohorts.Cohort", related_name="exam_invites", on_delete=models.CASCADE)
+    #: 지원자 표시 이름(담당자의 메모).
+    label = models.CharField(max_length=100)
+    token = models.CharField(max_length=64, unique=True, default=new_token)
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    membership = models.OneToOneField(
+        "cohorts.Membership", related_name="exam_invite", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    consented_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.label}@{self.cohort_id}"
+
+
+class AIToken(models.Model):
+    """응시 한 번짜리 임시 토큰. 진짜 공급사 키가 아니다 — AI 프록시가 backend 에 물어 확인한다(#72)."""
+
+    invite = models.OneToOneField(ExamInvite, related_name="ai_token", on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True, default=new_token)
+    issued_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    used_tokens = models.IntegerField(default=0)
+    last_client_id = models.CharField(max_length=200, blank=True, default="")
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+
+class AIExchange(models.Model):
+    """AI 프록시가 넘긴 요청·응답 한 번(채점 재료)."""
+
+    ai_token = models.ForeignKey(AIToken, related_name="exchanges", on_delete=models.CASCADE)
+    tool = models.CharField(max_length=20)
+    model = models.CharField(max_length=200, blank=True, default="")
+    client_id = models.CharField(max_length=200, blank=True, default="")
+    request = models.TextField(blank=True, default="")
+    response = models.TextField(blank=True, default="")
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
