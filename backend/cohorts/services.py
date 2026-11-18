@@ -29,7 +29,7 @@ def managed_cohort(request: HttpRequest, cohort_id: int) -> Cohort:
 def my_membership(request: HttpRequest, cohort_id: int) -> Membership:
     """요청한 사용자의 이 기수 참여. 없으면 404 — 참여하지 않은 기수는 존재 여부도 알리지 않는다."""
 
-    m = Membership.objects.filter(user=request.auth, cohort_id=cohort_id).select_related("cohort").first()
+    m = Membership.objects.filter(user=request.auth, cohort_id=cohort_id).select_related("cohort", "user").first()
     if m is None:
         raise HttpError(404, "참여하지 않은 기수입니다.")
     return m

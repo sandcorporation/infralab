@@ -14,6 +14,7 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
+from accounts.models import agent_token_for
 from cohorts.compose import AGENT_CONTAINER, AGENT_PORT
 
 from . import providers, services
@@ -79,7 +80,7 @@ def tool_configs(invite: ExamInvite, token: str) -> list[dict]:
     if "local_llm" in allowed and invite.membership is not None:
         env = {
             "OPENAI_BASE_URL": f"http://{AGENT_CONTAINER}:{AGENT_PORT}{LLM_RELAY_PATH}",
-            "OPENAI_API_KEY": invite.membership.agent_token,
+            "OPENAI_API_KEY": agent_token_for(invite.membership.user),
         }
         out.append({"tool": "local_llm", "model": "", "env": env, "config_toml": ""})
     return out

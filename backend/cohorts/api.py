@@ -16,6 +16,7 @@ from ninja.errors import HttpError
 from ninja.responses import Status
 
 from accounts.auth import instructor_auth, jwt_auth
+from accounts.models import agent_token_for, regenerate_agent_token as regenerate_user_agent_token
 
 from .compose import AGENT_PORT, render_compose
 from .models import Cohort, Membership, new_token
@@ -196,7 +197,7 @@ def _my_cohort_detail(m: Membership) -> MyCohortDetailOut:
         kind=m.cohort.kind,
         archived=m.cohort.archived,
         joined_at=m.joined_at,
-        agent_token=m.agent_token,
+        agent_token=agent_token_for(m.user),
         agent_url=AGENT_URL,
     )
 
@@ -214,9 +215,10 @@ def my_compose_file(request: HttpRequest, cohort_id: int):
 
 
 def compose_response(m: Membership) -> HttpResponse:
-    """참여 하나의 compose.yml 내려받기 응답. 응시 전용 주소(`/api/exam/<token>/compose.yml`)도 이것을 쓴다."""
+    """참여 하나의 compose.yml 내려받기 응답. 응시 전용 주소(`/api/exam/<token>/compose.yml`)도 이것을 쓴다.
+    토큰은 참여가 아니라 사용자 것이라 같은 사람의 수업·연습 compose 는 토큰이 같다(#153)."""
 
-    body = render_compose(agent_token=m.agent_token, cohort_name=m.cohort.name)
+    body = render_compose(agent_token=agent_token_for(m.user), cohort_name=m.cohort.name)
     response = HttpResponse(body, content_type="text/yaml; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="compose.yml"'
     return response
@@ -224,17 +226,9 @@ def compose_response(m: Membership) -> HttpResponse:
 
 @student_router.post("/cohorts/{cohort_id}/agent-token/regenerate", response=MyCohortDetailOut)
 def regenerate_agent_token(request: HttpRequest, cohort_id: int):
-    """노트북을 바꿨거나 토큰이 새었을 때. 옛 compose.yml 의 에이전트는 더 이상 인증되지 않는다."""
+    """노트북을 바꿨거나 토큰이 새었을 때. 토큰은 사용자 하나에 하나라 이 사람의 모든 기수·연습이 함께 바뀐다.
+    옛 compose.yml 의 에이전트는 더 이상 인증되지 않는다."""
 
     m = my_membership(request, cohort_id)
-    for attempt in range(3):
-        m.agent_token = new_token()
-        try:
-            with transaction.atomic():
-                m.save(update_fields=["agent_token"])
-            break
-        except IntegrityError:
-            # 유일 제약 충돌은 천문학적으로 드물지만 500 대신 다시 뽑는다.
-            if attempt == 2:
-                raise
+    regenerate_user_agent_token(m.user)
     return _my_cohort_detail(m)

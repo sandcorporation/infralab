@@ -2,7 +2,7 @@
 
 조직 → 묶음 → 응시자: 기수(`Cohort`)는 수업 묶음이고 반드시 한 조직(`orgs.Organization`)에 속한다.
 강사 표면은 그 조직의 담당자만 쓴다(`orgs.services`). 참여(`Membership`)가 응시자다. 가입 링크는 기수의 `join_token` 하나로, 재발급하면 옛 링크는
-바로 죽는다. 참여는 사용자 × 기수 하나이고 학생별 에이전트 토큰을 든다(compose.yml 에 박힌다).
+바로 죽는다. 참여는 사용자 × 기수 하나다. 에이전트 토큰은 참여가 아니라 사용자(`accounts.User.agent_token`) 것이다(#153).
 """
 
 from __future__ import annotations
@@ -47,7 +47,8 @@ class Membership(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="memberships", on_delete=models.CASCADE)
     cohort = models.ForeignKey(Cohort, related_name="memberships", on_delete=models.CASCADE)
     joined_at = models.DateTimeField(auto_now_add=True)
-    #: 학생 PC 의 에이전트가 요구하는 Bearer 토큰. 재발급 가능.
+    #: 옛 참여별 에이전트 토큰 — 더 이상 읽지 않는다(#153, 사용자 토큰으로 옮김). 이전(accounts 0003)이 사용자 토큰의 씨앗으로
+    #: 썼고, migrate 뒤 backend 를 바꾸기 전·롤백 때 옛 코드가 이 열을 읽어서 남겨 둔다. 열 지우기는 다음 배포 몫.
     agent_token = models.CharField(max_length=64, unique=True, default=new_token)
 
     class Meta:

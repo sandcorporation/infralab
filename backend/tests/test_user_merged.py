@@ -108,6 +108,24 @@ def test_merged_keeps_the_higher_role_of_the_target_and_its_own_name(fake, clien
 
 
 @pytest.mark.django_db
+def test_merged_moves_the_agent_token_only_when_the_target_has_none(fake, client):
+    # 합쳐진 쪽 PC 의 compose.yml 이 그대로 맞게 — 대상에 토큰이 없을 때만 옮긴다(#153).
+    _user(MEMBER, agent_token="from-token")
+    target = _user(OTHER_MEMBER)
+    body = _merged()
+    assert _hook(client, body, _signed(body)).status_code == 204
+    target.refresh_from_db()
+    assert target.agent_token == "from-token"
+    assert User.objects.get(username=f"sandcorp:{MEMBER}").agent_token is None
+
+    _user("third", agent_token="third-token")
+    body = _merged("third", OTHER_MEMBER, event_id="01JB0Z8F3W4Q2Y6K7M9N0P1R2T")
+    assert _hook(client, body, _signed(body)).status_code == 204
+    target.refresh_from_db()
+    assert target.agent_token == "from-token"
+
+
+@pytest.mark.django_db
 def test_merged_is_processed_once_per_event_id(fake, client):
     source, target = _user(MEMBER), _user(OTHER_MEMBER)
     org = Organization.objects.create(name="o")

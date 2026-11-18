@@ -1,7 +1,7 @@
 """학생 PC 에 내려 주는 compose.yml.
 
 `docker compose up -d` 하나로 에이전트·workstation·Floci·네트워크가 올라온다. 컨테이너 이름은 고정이다
-— 에이전트가 그 이름으로 workstation·Floci 를 찾는다. 토큰은 학생(참여)마다 다르고, 이미지 태그와
+— 에이전트가 그 이름으로 workstation·Floci 를 찾는다. 토큰은 사용자마다 하나(수업·연습 공통, #153)이고, 이미지 태그와
 대시보드 오리진은 서버 설정값이다(운영은 배포 sha 의 ghcr 주소 — docs/ops/deploy.md).
 """
 
