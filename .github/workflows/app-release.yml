@@ -75,7 +75,8 @@ jobs:
         run: |
           f="installer/windows/Output/infralab-setup-${APP_VERSION}.exe"
           test -s "$f" || { echo "없음: $f" >&2; exit 1; }
-          sha256sum "$f" | tee "$f.sha256"
+          # 내려받은 폴더에서 `sha256sum -c` 가 되게 파일 이름만 적는다.
+          (cd "$(dirname "$f")" && sha256sum "$(basename "$f")" | tee "$(basename "$f").sha256")
 
       - uses: actions/upload-artifact@v4
         with:

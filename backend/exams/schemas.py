@@ -93,6 +93,12 @@ class ExamStatusOut(Schema):
     server_time: datetime
 
 
+class ExamEnterOut(ExamStatusOut):
+    """enter 의 답. `replaced_login` — 이 브라우저에 있던 다른 사용자의 로그인을 응시 세션으로 바꿨다."""
+
+    replaced_login: bool
+
+
 class ExamStartIn(Schema):
     consent: bool
 

@@ -62,6 +62,8 @@ describe("Windows 설치 파일 링크와 SmartScreen 안내", () => {
   it("응시 안내·동의 화면에 있다", () => {
     const html = render("/exam/t", "/exam/:token", <ExamPage />);
     expect(html).toContain("위 안내를 읽었고 동의합니다");
+    expect(html).toContain("설치 프로그램의 compose.yml 주소에 붙여 넣기");
+    expect(html).toContain("/api/exam/t/compose.yml");
     for (const k of KEY) expect(html).toContain(k);
   });
 });

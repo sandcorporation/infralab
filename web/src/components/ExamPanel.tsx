@@ -166,7 +166,7 @@ export function ExamPanel({ cohort, onSaved }: { cohort: Cohort; onSaved: (c: Co
             />
           </label>
           <label>
-            임시 토큰 한도(토큰){" "}
+            임시 토큰 한도(토큰, 0 = 무제한){" "}
             <input
               type="number"
               min={0}

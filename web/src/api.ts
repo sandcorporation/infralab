@@ -30,8 +30,14 @@ async function errorMessage(res: Response): Promise<string> {
   return `${res.status} ${res.statusText}`;
 }
 
+// 세션을 바꾸는 요청(응시 링크 enter)이 도는 동안 다른 요청은 그 뒤로 미룬다. 다른 사용자로 로그인된 브라우저에서
+// enter 는 옛 세션을 지운다 — 같은 때 옛 쿠키로 나간 요청은 401 이고, 그 응답이 enter 의 새 세션 쿠키보다 늦게
+// 닿으면 새 쿠키까지 지운다(#122).
+let sessionSwitch: Promise<void> | null = null;
+
 /** 세션 쿠키를 실어 요청한다. 401 이면 로그아웃 상태를 알린다. 성공 응답만 돌려준다. */
-async function request(path: string, init: RequestInit = {}): Promise<Response> {
+async function request(path: string, init: RequestInit = {}, waitForSwitch = true): Promise<Response> {
+  while (waitForSwitch && sessionSwitch) await sessionSwitch;
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const res = await fetch(path, { ...init, headers, credentials: "same-origin" });
@@ -40,11 +46,28 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   return res;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await request(path, init);
+async function json<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return json<T>(await request(path, init));
+}
+
+/** 세션을 바꾸는 요청. 끝날 때까지(실패해도) 이 모듈의 다른 요청을 붙잡아 두었다가 그 뒤에 보낸다. */
+export function apiSwitchingSession<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const result = request(path, init, false).then((res) => json<T>(res));
+  const settled = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  sessionSwitch = settled;
+  void settled.then(() => {
+    if (sessionSwitch === settled) sessionSwitch = null;
+  });
+  return result;
 }
 
 export async function apiText(path: string, init: RequestInit = {}): Promise<string> {
