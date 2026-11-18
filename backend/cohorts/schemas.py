@@ -89,3 +89,4 @@ class MyCohortDetailOut(MyCohortOut):
 
     agent_token: str
     agent_url: str
+    kind: str = ""  # #132
