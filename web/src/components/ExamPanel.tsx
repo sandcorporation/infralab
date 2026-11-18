@@ -272,43 +272,18 @@ export function ExamInvites({ cohort }: { cohort: Cohort }) {
             </thead>
             <tbody>
               {invites.map((i) => (
-                <tr key={i.id}>
-                  <td>
-                    <Link to={`/instructor/cohorts/${cohort.id}/exam-invites/${i.id}/report`}>{i.label}</Link>
-                  </td>
-                  <td>
-                    <span className="sc-badge sc-badge--neutral">{STATUS_LABEL[i.status]}</span>
-                  </td>
-                  <td>{formatTime(i.created_at)}</td>
-                  <td className="sc-num">
-                    {(i.event_count ?? 0) > 0 ? (
-                      <button
-                        className="link"
-                        onClick={() =>
-                          run(async () => setEventsOf({ invite: i, events: await instructor.examEvents(cohort.id, i.id) }), "감독 기록")
-                        }
-                      >
-                        {i.event_count}건
-                      </button>
-                    ) : (
-                      0
-                    )}
-                  </td>
-                  <td>
-                    {i.status !== "revoked" && (
-                      <button className="secondary" onClick={() => copy(i)} title={examInviteUrl(i.token)}>
-                        {copied === i.id ? "복사됨" : "링크 복사"}
-                      </button>
-                    )}
-                  </td>
-                  <td className="right">
-                    {i.status !== "revoked" && (
-                      <button className="link" disabled={busy} onClick={() => setRevoking(i)}>
-                        회수
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <InviteRow
+                  key={i.id}
+                  cohortId={cohort.id}
+                  invite={i}
+                  copied={copied === i.id}
+                  busy={busy}
+                  onCopy={() => copy(i)}
+                  onRevoke={() => setRevoking(i)}
+                  onEvents={() =>
+                    run(async () => setEventsOf({ invite: i, events: await instructor.examEvents(cohort.id, i.id) }), "감독 기록")
+                  }
+                />
               ))}
             </tbody>
           </table>
@@ -373,5 +348,62 @@ export function ExamInvites({ cohort }: { cohort: Cohort }) {
         </ol>
       </Drawer>
     </>
+  );
+}
+
+/** 끝난 응시는 회수하지 않는다(API 409) — 상태 「끝남」과 보고서 길을 지킨다(#154). */
+export const canRevoke = (status: ExamInvite["status"]) => status === "invited" || status === "in_progress";
+
+/** 응시 링크 표의 한 줄. 지원자 이름은 늘 보고서 링크. */
+export function InviteRow({
+  cohortId,
+  invite: i,
+  copied,
+  busy,
+  onCopy,
+  onRevoke,
+  onEvents,
+}: {
+  cohortId: number;
+  invite: ExamInvite;
+  copied: boolean;
+  busy: boolean;
+  onCopy: () => void;
+  onRevoke: () => void;
+  onEvents: () => void;
+}) {
+  return (
+    <tr>
+      <td>
+        <Link to={`/instructor/cohorts/${cohortId}/exam-invites/${i.id}/report`}>{i.label}</Link>
+      </td>
+      <td>
+        <span className="sc-badge sc-badge--neutral">{STATUS_LABEL[i.status]}</span>
+      </td>
+      <td>{formatTime(i.created_at)}</td>
+      <td className="sc-num">
+        {(i.event_count ?? 0) > 0 ? (
+          <button className="link" onClick={onEvents}>
+            {i.event_count}건
+          </button>
+        ) : (
+          0
+        )}
+      </td>
+      <td>
+        {i.status !== "revoked" && (
+          <button className="secondary" onClick={onCopy} title={examInviteUrl(i.token)}>
+            {copied ? "복사됨" : "링크 복사"}
+          </button>
+        )}
+      </td>
+      <td className="right">
+        {canRevoke(i.status) && (
+          <button className="link" disabled={busy} onClick={onRevoke}>
+            회수
+          </button>
+        )}
+      </td>
+    </tr>
   );
 }
