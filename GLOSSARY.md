@@ -10,7 +10,7 @@ infralab 의 도메인 용어. 화면·코드·이슈·커밋에서 이 뜻으�
 | **초대 링크** | 조직에 담당자를 들이는 링크(`/org-invite/<토큰>`). 역할(owner·staff)을 정해 owner 가 발급하고, 7일 뒤 만료되며 닫을 수 있다. 같은 역할로 다시 발급하면 옛 링크는 닫힌다. 수락한 로그인 사용자가 담당자가 된다. 담당자 관리는 owner 만 하고, 마지막 owner 는 내보내거나 staff 로 내릴 수 없다. | `orgs.OrgInvite` |
 | **기본 조직** | 조직 이전이 만든 조직. 이전 전의 모든 기수와 강사(`is_instructor=True`)가 들어갔다. `set_instructor` 명령은 이 조직의 owner 로 넣고 뺀다. | `orgs.models.DEFAULT_ORG_NAME` |
 | **묶음** | 조직 안에서 응시자를 모으는 단위(수업 한 기수, 시험 한 회차). 가입 링크와 열어 둔 시나리오를 갖는다. 반드시 한 조직에 속한다. | `cohorts.Cohort` |
-| **종류** | 묶음이 수업(`class`, 기본)인지 시험(`exam`)인지. 수업 묶음은 「기수」, 시험 묶음은 「시험 회차」로 보인다. 시험 설정(`exam_settings`, 키는 2단계에서 정한다)이 묶음에 붙는다. | `cohorts.Cohort.kind` |
+| **종류** | 묶음이 수업(`class`, 기본)·시험(`exam`)·연습(`practice`) 중 무엇인지. 수업 묶음은 「기수」, 시험 묶음은 「시험 회차」로 보인다. 연습 묶음은 시스템에 하나(「개인 연습」 조직, 담당자 없음)이고 저장소의 모든 시나리오가 열려 있으며, 로그인한 누구나 「연습 시작」으로 응시자가 된다. 강사 화면과 「내 기수」에는 나오지 않는다. 시험 설정(`exam_settings`, 키는 2단계에서 정한다)이 묶음에 붙는다. | `cohorts.Cohort.kind` |
 | **시험 설정** | 시험 회차가 가진 응시 조건. 시간 제한(1~600분), 허용 도구(Claude Code·Codex·로컬 LLM, 비어도 됨), Claude Code·Codex 의 고정 모델, 감독 여부, 숨은 검사 사용 여부, 임시 토큰 사용량 한도. 조직 담당자가 저장하며, 저장해야 응시 링크를 발급할 수 있다. | `Cohort.exam_settings` |
 | **응시 링크** | 지원자 한 사람의 응시 한 번을 여는 링크(`/exam/<토큰>`, 가입 없음). 담당자가 지원자 표시 이름(메모)을 붙여 발급·복사·회수하고, 상태는 초대됨·응시 중·끝남·회수됨이다. 조직 담당자를 들이는 「초대 링크」와 다르다. 메일은 보내지 않는다. | `exams.ExamInvite` |
 | **AI 프록시** | 지원자의 AI 도구(Claude Code·Codex)와 공급사 사이에 서는 별도 서비스. 진짜 공급사 키는 이 서비스만 갖는다(backend 도 갖지 않는다). 요청마다 backend 프록시 전용 내부 API(`/api/proxy/…`, 공유 비밀 `INFRALAB_EXAM_PROXY_SECRET`)에 임시 토큰을 물어 허용·고정 모델을 받고, 요청·응답과 사용량을 backend 에 기록으로 넘긴다(채점 재료). 주소는 `INFRALAB_EXAM_PROXY_URL`. | `config.settings.EXAM_PROXY_URL`, `exams.AIExchange` |
