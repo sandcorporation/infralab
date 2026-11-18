@@ -172,10 +172,11 @@ export function watchProctorSignals(
   };
   doc.addEventListener("visibilitychange", onVisibility);
   win.addEventListener("blur", onBlur);
-  doc.addEventListener("paste", onPaste);
+  // capture 단계 — 시나리오 터미널(xterm)은 자기 textarea 에서 paste 의 전파를 막는다(#126). 문서가 먼저 본다.
+  doc.addEventListener("paste", onPaste, true);
   return () => {
     doc.removeEventListener("visibilitychange", onVisibility);
     win.removeEventListener("blur", onBlur);
-    doc.removeEventListener("paste", onPaste);
+    doc.removeEventListener("paste", onPaste, true);
   };
 }
