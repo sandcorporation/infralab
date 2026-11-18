@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# PR 검사와 같은 검사를 저장소 루트에서 한 명령으로 돈다.
+#   scripts/ci.sh <backend|web|agent|all>
+# 필요: backend=uv + 접근 가능한 Postgres(POSTGRES_HOST·PORT 등, 기본 127.0.0.1:55440),
+#       web=node+npm, agent=go.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+need() { command -v "$1" >/dev/null 2>&1 || { echo "ci.sh: '$1' 가 필요합니다 ($2)" >&2; exit 127; }; }
+
+backend() {
+  need uv "backend 시험"
+  (cd backend && uv sync --locked && uv run pytest)
+}
+
+web() {
+  need npm "web 검사 (node 필요)"
+  (cd web && npm ci && npm run typecheck && npm run test --if-present && npm run build)
+}
+
+agent() {
+  need go "agent 검사"
+  (
+    cd agent
+    out="$(gofmt -l .)"
+    if [ -n "$out" ]; then echo "gofmt 가 필요한 파일:" >&2; echo "$out" >&2; exit 1; fi
+    go vet ./...
+    go test ./...
+  )
+}
+
+case "${1:-}" in
+  backend) backend ;;
+  web) web ;;
+  agent) agent ;;
+  all) backend; web; agent ;;
+  *) echo "사용법: scripts/ci.sh <backend|web|agent|all>" >&2; exit 2 ;;
+esac
