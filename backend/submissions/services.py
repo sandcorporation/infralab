@@ -89,7 +89,10 @@ def normalize_transcript(raw: list | None) -> list[dict] | None:
                 truncated = True
             entries.append({"role": e.role, "at": e.at, "text": text})
         if entries:
-            parts.append({"tool": t.tool, "since": t.since, "truncated": truncated, "entries": entries})
+            part = {"tool": t.tool, "since": t.since, "truncated": truncated, "entries": entries}
+            if t.tool == "local_llm":
+                part["model"] = t.model
+            parts.append(part)
     if not parts:
         return None
 

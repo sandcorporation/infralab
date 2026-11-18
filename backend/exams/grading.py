@@ -67,7 +67,7 @@ _CUES: dict[str, tuple[bool, re.Pattern[str]]] = {
         re.compile(r"먼저|그다음|그 다음|다음으로|마지막으로|단계|순서|나눠|\bfirst\b|\bthen\b|\bfinally\b|\bstep", re.I),
     ),
     "instruction_clarity": (
-        True,
+        False,
         re.compile(r"`|://|\b(aws|kubectl|terraform|docker|helm)\b|\.\w{2,5}\b|--\w|이름|정확히", re.I),
     ),
     "verification": (

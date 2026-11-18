@@ -14,6 +14,8 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
+from cohorts.compose import AGENT_CONTAINER, AGENT_PORT
+
 from . import services
 from .models import AIExchange, AIToken, ExamInvite
 
@@ -24,8 +26,10 @@ ANTHROPIC_PATH = "/anthropic"
 OPENAI_PATH = "/openai/v1"
 #: Codex 가 임시 토큰을 읽는 환경변수 이름(config.toml 의 env_key).
 CODEX_TOKEN_ENV = "INFRALAB_AI_TOKEN"
-#: AI 키 설정을 주는 도구 순서(로컬 LLM 은 agent 가 중계하므로 여기서 주지 않는다).
+#: AI 프록시를 지나는 도구(로컬 LLM 은 agent 가 중계하므로 프록시 판정·모델 고정 대상이 아니다).
 PROXY_TOOLS = ("claude_code", "codex")
+#: 로컬 LLM 중계 경로 — workstation 의 AI 도구가 agent 컨테이너로 부른다(#79).
+LLM_RELAY_PATH = "/llm/v1"
 
 
 def proxy_url() -> str:
@@ -69,6 +73,12 @@ def tool_configs(invite: ExamInvite, token: str) -> list[dict]:
             out.append({"tool": tool, "model": model, "env": env, "config_toml": ""})
         else:
             out.append({"tool": tool, "model": model, "env": {CODEX_TOKEN_ENV: token}, "config_toml": _codex_toml(base, model)})
+    if "local_llm" in allowed and invite.membership is not None:
+        env = {
+            "OPENAI_BASE_URL": f"http://{AGENT_CONTAINER}:{AGENT_PORT}{LLM_RELAY_PATH}",
+            "OPENAI_API_KEY": invite.membership.agent_token,
+        }
+        out.append({"tool": "local_llm", "model": "", "env": env, "config_toml": ""})
     return out
 
 

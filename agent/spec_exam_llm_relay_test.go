@@ -76,7 +76,6 @@ type relayTranscriptResponse struct {
 }
 
 func TestSpecExamLLMRelay_PassesTheBodyThroughAndReturnsTheAnswer(t *testing.T) {
-	t.Skip("#79")
 	llm, rec := newFakeLocalLLM(t)
 	srv := newRelayServer(t, transcriptFake(), llm.URL)
 
@@ -113,7 +112,6 @@ func TestSpecExamLLMRelay_PassesTheBodyThroughAndReturnsTheAnswer(t *testing.T) 
 }
 
 func TestSpecExamLLMRelay_NeedsTheAgentToken(t *testing.T) {
-	t.Skip("#79")
 	llm, rec := newFakeLocalLLM(t)
 	srv := newRelayServer(t, transcriptFake(), llm.URL)
 
@@ -131,7 +129,6 @@ func TestSpecExamLLMRelay_NeedsTheAgentToken(t *testing.T) {
 }
 
 func TestSpecExamLLMRelay_RelayedTalkShowsUpAsLocalLLMTranscript(t *testing.T) {
-	t.Skip("#79")
 	llm, _ := newFakeLocalLLM(t)
 	srv := newRelayServer(t, transcriptFake(), llm.URL)
 	relay := do(t, srv, "POST", "/llm/v1/chat/completions", relayRequest, authed(map[string]string{"Content-Type": "application/json"}))
@@ -172,7 +169,6 @@ func TestSpecExamLLMRelay_RelayedTalkShowsUpAsLocalLLMTranscript(t *testing.T) {
 }
 
 func TestSpecExamLLMRelay_WithoutLocalLLMURLRelayIs502AndTranscriptKeepsItsShape(t *testing.T) {
-	t.Skip("#79")
 	srv := newRelayServer(t, transcriptFake(), "")
 
 	res := do(t, srv, "POST", "/llm/v1/chat/completions", relayRequest, authed(map[string]string{"Content-Type": "application/json"}))

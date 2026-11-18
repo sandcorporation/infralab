@@ -30,7 +30,7 @@ from cohorts.services import managed_cohorts
 from cohorts.schemas import CohortOut
 
 from . import ai, grading, services
-from submissions.models import MAX_OUTPUT_CHARS
+from submissions.models import MAX_OUTPUT_CHARS, Submission
 
 from .models import AIExchange, ExamEvent, ExamInvite, ExamRubric, RubricEdit
 from .schemas import (
@@ -170,10 +170,32 @@ def _report_invite(request: HttpRequest, cohort_id: int, invite_id: int) -> Exam
     return get_object_or_404(cohort.exam_invites.select_related("cohort", "membership"), pk=invite_id)
 
 
-def _exchanges(invite: ExamInvite) -> list[AIExchange]:
-    """이 응시의 프록시 기록만(채점 재료)."""
+def _local_llm_parts(invite: ExamInvite) -> list[dict]:
+    """이 응시의 제출들에 붙은 local_llm 대화 기록(제출 순서)."""
 
-    return list(AIExchange.objects.filter(ai_token__invite=invite))
+    if invite.membership_id is None:
+        return []
+    out = []
+    for sub in Submission.objects.filter(membership_id=invite.membership_id).order_by("id"):
+        out.extend(t for t in (sub.ai_transcript or []) if t.get("tool") == "local_llm" and t.get("entries"))
+    return out
+
+
+def _exchanges(invite: ExamInvite) -> list[AIExchange]:
+    """채점 재료 — 프록시 기록과, 제출에 붙은 local_llm 기록(저장하지 않는 AIExchange 로 바꾼 것)."""
+
+    out = list(AIExchange.objects.filter(ai_token__invite=invite))
+    for part in _local_llm_parts(invite):
+        user: list[str] = []
+        for e in part["entries"]:
+            if e["role"] == "user":
+                user.append(e["text"])
+            elif user:
+                out.append(AIExchange(tool="local_llm", model=part.get("model", ""), request="\n".join(user), response=e["text"]))
+                user = []
+        if user:
+            out.append(AIExchange(tool="local_llm", model=part.get("model", ""), request="\n".join(user), response=""))
+    return out
 
 
 def _report(invite: ExamInvite) -> ExamReportOut:
@@ -190,7 +212,7 @@ def _report(invite: ExamInvite) -> ExamReportOut:
             "graded_at": rubric.graded_at,
             "items": [{**item, "label": grading.RUBRIC_LABELS.get(item["key"], item["key"])} for item in rubric.items],
         },
-        local_model_unverified=AIExchange.objects.filter(ai_token__invite=invite, tool="local_llm").exists(),
+        local_model_unverified=bool(_local_llm_parts(invite)),
         edits=list(invite.rubric_edits.all()),
     )
 

@@ -27,6 +27,8 @@ def check_outside_proxy(membership: Membership, transcript: list[dict] | None) -
             continue
         name = part["tool"]
         tool = TRANSCRIPT_TOOLS.get(name, name)
+        if tool == "local_llm" and tool in allowed:
+            continue  # 로컬 LLM 은 프록시를 지나지 않는다.
         if tool in allowed and AIExchange.objects.filter(ai_token__invite=invite, tool=tool).exists():
             continue
         ExamEvent.objects.create(invite=invite, kind="ai_outside_proxy", detail=name)

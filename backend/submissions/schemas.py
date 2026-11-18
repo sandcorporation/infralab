@@ -28,7 +28,9 @@ class TranscriptEntryIn(Schema):
 class ToolTranscriptIn(Schema):
     """에이전트 /api/ai-transcript 응답의 transcripts[] 한 칸."""
 
-    tool: Literal["claude", "codex"]
+    tool: Literal["claude", "codex", "local_llm"]
+    #: 로컬 LLM 만 — 요청이 자기 신고한 모델 이름.
+    model: str = ""
     since: str = ""
     truncated: bool = False
     entries: list[TranscriptEntryIn]

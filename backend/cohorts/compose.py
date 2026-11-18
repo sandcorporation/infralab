@@ -65,6 +65,10 @@ services:
       AGENT_ALLOWED_ORIGINS: "{origins}"
       WORKSTATION_CONTAINER: {WORKSTATION_CONTAINER}
       FLOCI_CONTAINER: {FLOCI_CONTAINER}
+      # 로컬 LLM 중계(시험) — 지원자가 자기 PC 에서 값을 준다. 예: http://host.docker.internal:11434
+      AGENT_LOCAL_LLM_URL: "${{AGENT_LOCAL_LLM_URL:-}}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [lab]
 
   workstation:

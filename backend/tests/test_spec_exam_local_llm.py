@@ -71,7 +71,6 @@ def _attempt(api, teacher, cohort_id, label="지원자 A"):
     return invite, cand
 
 
-@pytest.mark.skip(reason="#79")
 def test_submission_takes_a_local_llm_transcript_with_its_model(api):
     teacher = api.login_instructor()
     cohort = api.create_cohort(teacher)
@@ -96,7 +95,6 @@ def test_submission_takes_a_local_llm_transcript_with_its_model(api):
     assert _submit(api, student, cohort["id"], [without_model]).status_code == 201
 
 
-@pytest.mark.skip(reason="#79")
 def test_ai_config_has_a_local_llm_entry_through_the_agent(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -114,7 +112,6 @@ def test_ai_config_has_a_local_llm_entry_through_the_agent(api):
     assert "OPENAI_API_KEY" in local["env"]
 
 
-@pytest.mark.skip(reason="#79")
 def test_report_marks_local_model_as_unverified_only_when_used(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -134,7 +131,6 @@ def test_report_marks_local_model_as_unverified_only_when_used(api):
     assert report(plain_invite["id"])["local_model_unverified"] is False
 
 
-@pytest.mark.skip(reason="#79")
 def test_local_llm_transcript_is_grading_material(api):
     teacher = api.login_instructor()
     cohort = _exam(api, teacher)
@@ -156,7 +152,6 @@ def test_local_llm_transcript_is_grading_material(api):
 
 
 @pytest.mark.parametrize("tools, signalled", [(["local_llm"], False), (["claude_code"], True)], ids=["allowed", "not-allowed"])
-@pytest.mark.skip(reason="#79")
 def test_local_llm_transcript_and_the_outside_proxy_signal(api, tools, signalled):
     teacher = api.login_instructor()
     models = {"claude_code": "claude-sonnet-4-5"} if "claude_code" in tools else {}

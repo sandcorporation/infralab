@@ -37,6 +37,7 @@ type transcriptEntry struct {
 
 type toolTranscript struct {
 	Tool      string            `json:"tool"`
+	Model     string            `json:"model,omitempty"` // local_llm 만 — 요청의 자기 신고
 	Since     string            `json:"since"`
 	Truncated bool              `json:"truncated"`
 	Error     string            `json:"error,omitempty"`
@@ -78,11 +79,21 @@ func (s *server) handleAITranscript(w http.ResponseWriter, r *http.Request) {
 
 	claude := s.readSessions(ctx, "claude", sinceText, since, claudeRoot, "*.jsonl", markPath, parseClaudeLine)
 	codex := s.readSessions(ctx, "codex", sinceText, since, codexRoot, "rollout-*.jsonl", markPath, parseCodexLine)
-	capTranscripts([]*toolTranscript{&claude, &codex})
+	list := []toolTranscript{claude, codex}
+	if s.cfg.LocalLLMURL != "" {
+		list = append(list, s.localLLMTranscript(sinceText, since))
+	}
+	capTranscripts(func() []*toolTranscript {
+		ps := make([]*toolTranscript, len(list))
+		for i := range list {
+			ps[i] = &list[i]
+		}
+		return ps
+	}())
 	writeJSON(w, 200, map[string]any{
 		"scenario_id": id,
 		"since":       sinceText,
-		"transcripts": []toolTranscript{claude, codex},
+		"transcripts": list,
 	})
 }
 
