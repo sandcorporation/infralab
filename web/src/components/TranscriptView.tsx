@@ -43,7 +43,7 @@ export function TranscriptView({ transcript }: { transcript: ToolTranscript[] | 
 /** 이력·격자 칸의 기록 유무 표시. */
 export function TranscriptMark({ has }: { has: boolean }) {
   return has ? (
-    <span className="tag small" title="AI 대화 있음">
+    <span className="sc-badge sc-badge--info" title="AI 대화 있음">
       대화
     </span>
   ) : null;

@@ -100,8 +100,8 @@ export default function InstructorCohortPage() {
             </button>
           </>
         )}
-        {c.archived && <span className="tag">보관됨</span>}
-        {!effectivelyOpen && <span className="tag">가입 닫힘</span>}
+        {c.archived && <span className="sc-badge sc-badge--neutral">보관됨</span>}
+        {!effectivelyOpen && <span className="sc-badge sc-badge--neutral">가입 닫힘</span>}
         <span className="grow" />
         <Link className="button" to={`/instructor/cohorts/${c.id}/grid`}>
           진행 격자
@@ -169,7 +169,8 @@ export default function InstructorCohortPage() {
         <h2>학생 {people?.length ?? 0}명</h2>
         {people && people.length === 0 && <p className="muted">참여자 없음</p>}
         {people && people.length > 0 && (
-          <table>
+          <div className="sc-table-scroll">
+            <table className="sc-table">
             <thead>
               <tr>
                 <th>이름</th>
@@ -216,7 +217,8 @@ export default function InstructorCohortPage() {
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
         )}
       </section>
 
