@@ -55,6 +55,16 @@ export function inWorkstation(...cmd: string[]): string {
   return execFileSync("docker", ["exec", workstation, ...cmd], { encoding: "utf8", timeout: 30_000 });
 }
 
+/** workstation 안의 파일을 만든다(상위 폴더 포함) — 학생이 AI 도구로 남긴 세션 기록을 심는 데 쓴다. */
+export function writeInWorkstation(path: string, content: string): void {
+  const dir = path.slice(0, path.lastIndexOf("/"));
+  execFileSync("docker", ["exec", "-i", workstation, "sh", "-c", `mkdir -p '${dir}' && cat > '${path}'`], {
+    input: content,
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+}
+
 /** 기본 조직의 owner 로 — 강사 화면이 열린다. 사용자는 먼저 로그인으로 만들어져 있어야 한다. */
 export function makeInstructor(uid: string): void {
   compose(["exec", "-T", "backend", "python", "manage.py", "set_instructor", `sandcorp:${uid}`]);
