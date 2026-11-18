@@ -86,8 +86,8 @@ e2e() {
   # 호스트 npm ci 를 먼저 — web 컨테이너의 node_modules 볼륨이 먼저 붙으면 docker 가 web/node_modules 를 root 로 만들어
   # 호스트 npm ci 가 EACCES 로 깨진다(CI 처음 실행에서 겪었다).
   (cd web && npm ci --no-audit --no-fund && npx playwright install ${CI:+--with-deps} chromium)
-  e2e_compose build agent
-  e2e_compose up -d db backend web workstation
+  e2e_compose build agent proxy
+  e2e_compose up -d db backend web workstation proxy
   local base="http://127.0.0.1:$INFRALAB_WEB_PORT"
   # web 컨테이너는 npm install 뒤 Vite 를 띄운다 — /api 까지 닿아야(로그인 전 401) 준비된 것이다.
   local code="" i
