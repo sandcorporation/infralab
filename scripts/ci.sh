@@ -87,7 +87,8 @@ e2e() {
   # 호스트 npm ci 가 EACCES 로 깨진다(CI 처음 실행에서 겪었다).
   (cd web && npm ci --no-audit --no-fund && npx playwright install ${CI:+--with-deps} chromium)
   e2e_compose build agent proxy
-  e2e_compose up -d db backend web workstation proxy
+  # agent 컨테이너도 여기서 한 번만 만든다 — 시험 중 다시 만들면 호스트 veth 가 생겨 브라우저 요청이 끊긴다(#227).
+  e2e_compose up -d db backend web workstation proxy agent
   local base="http://127.0.0.1:$INFRALAB_WEB_PORT"
   # web 컨테이너는 npm install 뒤 Vite 를 띄운다 — /api 까지 닿아야(로그인 전 401) 준비된 것이다.
   local code="" i

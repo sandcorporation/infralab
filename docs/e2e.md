@@ -11,7 +11,7 @@ bash scripts/check_workstation_image.sh --build   # workstation 이미지 실행
 ```
 
 - 스택: `docker/compose.dev.yaml` + `docker/compose.e2e.yaml`, 프로젝트 `infralab-e2e`. 호스트에는 web(그때 빈 포트)과 에이전트(7777)만 연다. 로그인은 dev-login, 강사는 `set_instructor`.
-- 학생 PC 쪽: 실제 에이전트(`docker/agent.e2e.Dockerfile` — 운영과 같은 바이너리, kind·kubectl 없음)와 bash 만 든 작은 workstation. 에이전트 주소는 서버가 정한 `127.0.0.1:7777` 이라 그 포트가 비어 있어야 한다. 토큰은 사용자마다 달라 시험이 토큰을 안 뒤 에이전트를 다시 올린다(`web/e2e/stack.ts`).
+- 학생 PC 쪽: 실제 에이전트(`docker/agent.e2e.Dockerfile` — 운영과 같은 바이너리, kind·kubectl 없음)와 bash 만 든 작은 workstation. 에이전트 주소는 서버가 정한 `127.0.0.1:7777` 이라 그 포트가 비어 있어야 한다. 토큰은 사용자마다 달라 시험이 토큰을 안 뒤 에이전트를 다시 띄운다(`web/e2e/stack.ts`). agent 컨테이너는 스택과 함께 한 번만 만들고 그 안의 프로세스만 `docker/agent-e2e/agentctl` 로 바꾼다 — 시험 중 컨테이너를 다시 만들면 호스트에 veth 가 생기고 Chromium 이 진행 중인 요청을 `net::ERR_NETWORK_CHANGED` 로 끊는다(#227). 내린 상태(`stopAgent`)에서도 7777 은 열린 채 연결을 끊는다.
 - 연습 시나리오도 이 e2e 시나리오다(연습 묶음은 서버의 모든 시나리오를 연다). 공통 조작 `newStudent`·`startPractice`·`joinClassCohort` 는 `web/e2e/flows.ts` 에 있다.
 - 시나리오는 `web/e2e/fixtures/scenarios/` 의 둘: `e2e-prepare`(준비가 `/work/app/ready.txt` 를 만들고, 검사 하나)와 `e2e-untouched`(「제출 없는 시나리오」 행을 보이려고 둔 것 — 시험이 제출하지 않는다).
 - 연습 피드백은 공급사 키 없는 스택의 가짜 채점기(결정적)가 매긴다. AI 대화는 학생이 AI 도구로 남긴 세션 기록을 workstation 홈(`/root/.claude/projects/…jsonl`)에 심어(`plantClaudeSession`) 「AI 대화 함께 제출」로 올린다 — 진짜 AI 없이. 에이전트는 준비 표시보다 나중에 바뀐 파일만 읽으므로(초 단위) 환경 준비 뒤에 심는다.

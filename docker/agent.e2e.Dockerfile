@@ -11,5 +11,7 @@ RUN CGO_ENABLED=0 go build -ldflags "-X main.version=e2e" -o /agent .
 FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk add --no-cache docker-cli bash
 COPY --from=build /agent /usr/local/bin/agent
+COPY docker/agent-e2e/agentctl /usr/local/bin/agentctl
 EXPOSE 7777
-ENTRYPOINT ["agent"]
+# 컨테이너는 스택과 함께 한 번만 뜨고, 에이전트 프로세스는 시험이 agentctl 로 토큰마다 띄운다(#227).
+ENTRYPOINT ["sleep", "infinity"]

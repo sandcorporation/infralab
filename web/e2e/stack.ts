@@ -17,9 +17,13 @@ function compose(args: string[], env: Record<string, string> = {}): string {
   );
 }
 
-/** 이 사용자의 토큰으로 에이전트를 (다시) 올리고 /api/status 가 답할 때까지 기다린다. */
+/**
+ * 이 사용자의 토큰으로 에이전트를 (다시) 띄우고 /api/status 가 답할 때까지 기다린다.
+ * 컨테이너는 다시 만들지 않고 그 안의 프로세스만 바꾼다(`docker/agent-e2e/agentctl`) — 재생성은 호스트에 veth 를 만들어
+ * Chromium 이 진행 중인 요청을 net::ERR_NETWORK_CHANGED 로 끊는다(#227).
+ */
 export async function startAgent(request: APIRequestContext, token: string): Promise<void> {
-  compose(["up", "-d", "--force-recreate", "--no-build", "agent"], { E2E_AGENT_TOKEN: token });
+  compose(["exec", "-T", "-e", `AGENT_TOKEN=${token}`, "agent", "agentctl", "start"]);
   await expect
     .poll(
       async () => {
@@ -38,9 +42,9 @@ export async function startAgent(request: APIRequestContext, token: string): Pro
     .toBe(200);
 }
 
-/** 에이전트를 내린다 — 학생이 실습 환경을 켜지 않은 꼴. */
+/** 에이전트를 내린다 — 학생이 실습 환경을 켜지 않은 꼴. 컨테이너는 남긴다(위 까닭). */
 export function stopAgent(): void {
-  compose(["rm", "-sf", "agent"]);
+  compose(["exec", "-T", "agent", "agentctl", "stop"]);
 }
 
 /** workstation 을 새 /work 로 다시 만든다 — 홈 볼륨(/root)은 그대로. 학생이 다른 기수 폴더에서 compose 를 올린 꼴. */
