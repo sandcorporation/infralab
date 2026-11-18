@@ -45,8 +45,8 @@ has() { # has <what> <needle> <haystack>
 
 # issue <n> <labels comma-separated> [title]
 issue() {
-  jq -n --argjson n "$1" --arg l "$2" --arg t "${3:-Ticket $1}" \
-    '{number: $n, state: "open", title: $t, body: "", labels: ($l | split(",") | map(select(. != "") | {name: .}))}' \
+  jq -n --argjson n "$1" --arg l "$2" --arg t "${3:-Ticket $1}" --arg b "${4:-}" \
+    '{number: $n, state: "open", title: $t, body: $b, labels: ($l | split(",") | map(select(. != "") | {name: .}))}' \
     | tr -d '\r' > "$FAKE_GH/issue-$1.json"
 }
 
@@ -148,7 +148,7 @@ eq branch no "$(remote_branch 249)"
 
 setup "finish: a ticket that changes workflow files becomes ready-for-human + local"
 issue 249 spec,needs-decision
-issue 301 model:sonnet ".github/workflows/ 에 단계를 더한다"
+issue 301 model:sonnet "CI 에 단계를 더한다" "<!-- factory-touches-workflows -->"
 issue 302 model:sonnet
 subs 249 301:open 302:open
 finish 249 decomposed
