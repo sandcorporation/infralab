@@ -357,6 +357,34 @@ func TestUnknownPathAndNonJSONBody(t *testing.T) {
 	}
 }
 
+// count_tokens(Claude Code /context): 같은 토큰 규칙으로 통과, 사용량 기록 없음, 요청 수 한도에 안 센다.
+func TestCountTokensPassesWithTokenRuleAndIsNotRecorded(t *testing.T) {
+	h := newHarness(t, fixedReply(`{"input_tokens":42}`))
+	reqBody := `{"model":"claude-opus-whatever","messages":[{"role":"user","content":"hi"}]}`
+
+	resp, body := post(t, h.proxy.URL+"/anthropic/v1/messages/count_tokens", bearer(testToken), reqBody)
+	if resp.StatusCode != http.StatusOK || body != `{"input_tokens":42}` {
+		t.Fatalf("status = %d, body %s", resp.StatusCode, body)
+	}
+	if h.upstream.calls() != 1 || h.upstream.requests[0].URL.Path != "/v1/messages/count_tokens" {
+		t.Fatalf("upstream calls = %d", h.upstream.calls())
+	}
+	if h.upstream.requests[0].Header.Get("x-api-key") != testAnthropicKey || h.upstream.requests[0].Header.Get("Authorization") != "" {
+		t.Fatalf("provider key must replace the temporary token: %v", h.upstream.requests[0].Header)
+	}
+	if !strings.Contains(string(h.upstream.bodies[0]), fixedModel) {
+		t.Fatalf("model must be the fixed one: %s", h.upstream.bodies[0])
+	}
+	if len(h.backend.recorded()) != 0 {
+		t.Fatal("count_tokens must not be recorded as usage")
+	}
+	// 토큰 없음은 다른 경로와 같이 막힌다.
+	resp, _ = post(t, h.proxy.URL+"/anthropic/v1/messages/count_tokens", nil, reqBody)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no token status = %d", resp.StatusCode)
+	}
+}
+
 // AC: 스트리밍 응답이 조각 단위로 흘러가고 끝난 뒤 한 번 기록된다.
 func TestStreamingFlowsChunkByChunkAndIsRecordedOnceAtTheEnd(t *testing.T) {
 	release := make(chan struct{})

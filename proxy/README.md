@@ -20,6 +20,7 @@
 | 프록시 경로 | 도구(`tool`) | 공급사 경로 | 임시 토큰 |
 |---|---|---|---|
 | `POST /anthropic/v1/messages` | `claude_code` | Anthropic `/v1/messages` | `Authorization: Bearer <토큰>` 또는 `x-api-key: <토큰>` |
+| `POST /anthropic/v1/messages/count_tokens` | `claude_code` | Anthropic `/v1/messages/count_tokens` | 위와 같음. Claude Code `/context` 가 부른다. 사용량으로 기록하지 않고 요청 수 한도에도 세지 않는다 |
 | `POST /openai/v1/responses` | `codex` | OpenAI `/v1/responses` | `Authorization: Bearer <토큰>` |
 | `POST /openai/v1/chat/completions` | `codex` | OpenAI `/v1/chat/completions` | `Authorization: Bearer <토큰>` |
 | `GET /healthz` | — | — | — (`{"status":"ok"}`) |
