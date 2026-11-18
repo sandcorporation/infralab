@@ -106,6 +106,17 @@ describe("사이드바 내비", () => {
     auth.me = { ...STUDENT, username: "exam-invite:7" };
     expect(render("/cohorts/1")).not.toContain("sc-sidenav");
   });
+
+  it("응시자에겐 「내 기수」 길이 없다 — 브랜드는 응시 첫 화면으로", () => {
+    auth.me = { ...STUDENT, username: "exam-invite:7" };
+    const onExam = render("/exam/abc");
+    expect(onExam).toContain('href="/exam/abc"');
+    expect(onExam).toContain("app-exam-page");
+    for (const html of [onExam, render("/cohorts/1")]) {
+      expect(html).not.toContain('href="/"');
+      expect(html).not.toContain("내 기수");
+    }
+  });
 });
 
 describe("기수 상세 탭", () => {

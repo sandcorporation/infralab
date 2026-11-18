@@ -7,7 +7,6 @@ import {
   enterExam,
   envExportText,
   examComposeUrl,
-  formatRemaining,
   getAiConfig,
   getFinalChecks,
   postFinalResults,
@@ -20,6 +19,7 @@ import { useExamClock } from "../examAttempt";
 import { PreflightPanel, usePreflight } from "../components/PreflightPanel";
 import { WindowsInstallerNotice } from "../components/SmartScreenNotice";
 import { useMyCohort } from "../hooks";
+import { PageHead, StatRow } from "../components/ui";
 
 const TOOL_LABELS: Record<string, string> = {
   claude_code: "Claude Code",
@@ -71,9 +71,20 @@ export default function ExamPage() {
   const start = () => run(async () => clock?.apply(await startExam(token)));
 
   const status = clock?.status;
+  const inProgress = status && status.status !== "invited" && !clock.finished;
   return (
-    <section className="card narrow">
-      <h1>{status?.cohort_name ?? "시험"}</h1>
+    <>
+      <PageHead
+        title={status?.cohort_name ?? "시험"}
+        badges={status && <span className="sc-badge sc-badge--neutral">{examStatusLabel(status.status, clock.finished)}</span>}
+        actions={
+          inProgress && (
+            <Link className="button" to={`/cohorts/${status.cohort_id}`}>
+              시나리오
+            </Link>
+          )
+        }
+      />
       {error && <p className="error">{error}</p>}
       {!error && !status && <p className="muted">확인 중…</p>}
       {status && status.status === "invited" && (
@@ -81,48 +92,51 @@ export default function ExamPage() {
           {replacedLogin && (
             <p className="notice">이 브라우저의 로그인은 응시 세션으로 바뀌었습니다 — 원래 계정은 시험이 끝난 뒤 다시 로그인하세요.</p>
           )}
-          <ul>
-            <li>시간 제한: {status.time_limit_minutes}분 — 「시작」을 누른 때부터 흐릅니다.</li>
-            <li>
-              허용 AI 도구:{" "}
-              {status.tools.length ? status.tools.map((t) => TOOL_LABELS[t] ?? t).join(", ") : "없음"}
-            </li>
-            {status.proctoring && <li>이 시험은 감독합니다 — 응시 중 화면 이탈 같은 신호가 기록됩니다.</li>}
-            <li>시간이 끝나거나 「제출하고 끝내기」를 누르면 더 제출할 수 없습니다.</li>
-            <li>
-              Windows 는 설치 프로그램으로 실습 환경을 준비할 수 있습니다.
-              <WindowsInstallerNotice />
-              <ComposeUrlCopy token={token} />
-            </li>
-          </ul>
-          <label className="row">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-            위 안내를 읽었고 동의합니다.
-          </label>
-          <StartButton cohortId={status.cohort_id} disabled={!consent || busy} onStart={() => void start()} />
+          <StatRow
+            items={[
+              { label: "시간 제한", value: `${status.time_limit_minutes}분` },
+              {
+                label: "허용 AI 도구",
+                value: status.tools.length ? status.tools.map((t) => TOOL_LABELS[t] ?? t).join(", ") : "없음",
+              },
+              { label: "감독", value: status.proctoring ? "켜짐" : "꺼짐" },
+            ]}
+          />
+          <section className="card">
+            <h2>응시 안내</h2>
+            <ul>
+              <li>시간은 「시작」을 누른 때부터 흐릅니다.</li>
+              {status.proctoring && <li>응시 중 화면 이탈 같은 신호가 기록됩니다.</li>}
+              <li>시간이 끝나거나 「제출하고 끝내기」를 누르면 더 제출할 수 없습니다.</li>
+            </ul>
+            <label className="row">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              위 안내를 읽었고 동의합니다.
+            </label>
+            <StartButton cohortId={status.cohort_id} disabled={!consent || busy} onStart={() => void start()} />
+          </section>
+          <section className="card">
+            <h2>실습 환경 (Windows)</h2>
+            <WindowsInstallerNotice />
+            <ComposeUrlCopy token={token} />
+          </section>
         </>
       )}
-      {status && status.status !== "invited" && !clock.finished && (
-        <>
-          <p>
-            남은 시간 <strong className="exam-clock">{formatRemaining(clock.remaining ?? 0)}</strong>
-          </p>
-          <p>
-            <Link className="button" to={`/cohorts/${status.cohort_id}`}>
-              시나리오로 가기
-            </Link>
-          </p>
-          {status.tools.some((t) => t === "claude_code" || t === "codex") && <AiKeySetup token={token} />}
-        </>
-      )}
+      {inProgress && status.tools.some((t) => t === "claude_code" || t === "codex") && <AiKeySetup token={token} />}
       {status && clock.finished && (
         <>
           <p className="notice">시험이 마감되었습니다. 수고하셨습니다 — 더 제출할 수 없습니다.</p>
           <FinalGrading token={token} cohortId={status.cohort_id} />
         </>
       )}
-    </section>
+    </>
   );
+}
+
+/** 머리 배지 — 시작 전 · 응시 중 · 마감. */
+export function examStatusLabel(status: string, finished: boolean): string {
+  if (finished) return "마감";
+  return status === "invited" ? "시작 전" : "응시 중";
 }
 
 // 「시작」 — 내 PC 의 agent 로 응시 전 점검(엔진·Linux 컨테이너 모드·권한)을 하고, 실패하거나 agent 가 응답하지
@@ -197,14 +211,14 @@ function AiKeySetup({ token }: { token: string }) {
   }
 
   return (
-    <div className="ai-key-setup">
+    <section className="card ai-key-setup">
       <h2>AI 키 설정</h2>
       {error && <p className="error">{error}</p>}
       {!error && !config && <p className="muted">불러오는 중…</p>}
       {config?.tools.map((t) => {
         const envText = envExportText(t.env);
         return (
-          <div key={t.tool}>
+          <div key={t.tool} className="ai-key-tool">
             <h3>
               {TOOL_LABELS[t.tool] ?? t.tool} <span className="muted">({t.model})</span>
             </h3>
@@ -230,7 +244,7 @@ function AiKeySetup({ token }: { token: string }) {
         );
       })}
       {config && <p className="muted">이 키는 이 응시에서만, 시험 시간 안에만 쓸 수 있습니다.</p>}
-    </div>
+    </section>
   );
 }
 

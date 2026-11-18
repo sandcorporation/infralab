@@ -172,15 +172,41 @@ function TopBar({ me, logout, navOpen, onToggleNav }: { me: Me; logout: () => Pr
   );
 }
 
-/** 로그인 전·응시자 화면: 사이드바 없이 브랜드 한 줄 + 가운데 본문. */
-function BareLayout({ me, logout }: { me: Me | null; logout: () => Promise<void> }) {
+/**
+ * 로그인 전·응시자 화면: 사이드바 없이 브랜드 한 줄 + 가운데 본문.
+ * 응시(examToken)면 브랜드가 응시 첫 화면으로 가고(「내 기수」 길 없음) 본문은 콘솔 규칙(머리·카드/탭 세로 쌓기).
+ */
+function BareLayout({
+  me,
+  logout,
+  exam,
+  examToken,
+}: {
+  me: Me | null;
+  logout: () => Promise<void>;
+  exam: boolean;
+  examToken: string | null;
+}) {
+  const brand = (
+    <>
+      <Brand />
+      Sandcorp <span className="brand-product">infralab</span>
+    </>
+  );
   return (
     <div className="app-bare">
       <header className="sc-topbar">
-        <Link to="/" className="app-bare-brand">
-          <Brand />
-          Sandcorp <span className="brand-product">infralab</span>
-        </Link>
+        {!exam ? (
+          <Link to="/" className="app-bare-brand">
+            {brand}
+          </Link>
+        ) : examToken ? (
+          <Link to={`/exam/${encodeURIComponent(examToken)}`} className="app-bare-brand">
+            {brand}
+          </Link>
+        ) : (
+          <span className="app-bare-brand">{brand}</span>
+        )}
         {me ? (
           <button type="button" className="link" onClick={() => void logout()}>
             로그아웃
@@ -190,7 +216,7 @@ function BareLayout({ me, logout }: { me: Me | null; logout: () => Promise<void>
         )}
       </header>
       <ExamBar />
-      <main className="app-bare-page">
+      <main className={exam ? "app-bare-page app-exam-page" : "app-bare-page"}>
         <Outlet />
       </main>
     </div>
@@ -206,11 +232,12 @@ export function AppShell() {
   const examUser = isExamUser(me?.username);
   // 응시 화면이면 그 링크, 응시자 세션이면 들어온 링크의 시계를 어느 화면에서나 보인다.
   const examToken = matchPath("/exam/:token", location.pathname)?.params.token ?? (examUser ? rememberedExamToken() : null);
-  const bare = !me || examUser || matchPath("/exam/:token", location.pathname) !== null;
+  const exam = examUser || matchPath("/exam/:token", location.pathname) !== null;
+  const bare = !me || exam;
   return (
     <ExamClockProvider token={examToken}>
       {bare ? (
-        <BareLayout me={me} logout={logout} />
+        <BareLayout me={me} logout={logout} exam={exam} examToken={examToken} />
       ) : (
         <CrumbsProvider>
           <div className="sc-app" data-nav-open={navOpen || undefined}>
