@@ -104,6 +104,16 @@ export async function apiText(path: string, init: RequestInit = {}): Promise<str
 
 export type OrgRole = { id: number; name: string; role: "owner" | "staff" };
 export type Me = { id: number; username: string; display_name: string; is_instructor: boolean; orgs: OrgRole[] };
+export type OrgMemberRow = {
+  id: number;
+  user_id: number;
+  username: string;
+  display_name: string;
+  role: "owner" | "staff";
+  joined_at: string;
+};
+export type OrgInvite = { id: number; token: string; role: "owner" | "staff"; created_at: string; expires_at: string };
+export type OrgInvitePreview = { org_name: string; role: "owner" | "staff"; valid: boolean };
 export type CohortKind = "class" | "exam";
 export type Cohort = {
   id: number;
@@ -265,6 +275,33 @@ export const instructor = {
       body: JSON.stringify({ scenario_ids: scenarioIds }),
     }),
 };
+
+export const previewOrgInvite = (token: string) =>
+  api<OrgInvitePreview>(`/api/org-invites/${encodeURIComponent(token)}`);
+export const acceptOrgInvite = (token: string) =>
+  api<{ org_id: number; org_name: string; role: "owner" | "staff"; created: boolean }>(
+    `/api/org-invites/${encodeURIComponent(token)}/accept`,
+    { method: "POST" },
+  );
+export const orgAdmin = {
+  members: (orgId: number) => api<OrgMemberRow[]>(`/api/instructor/orgs/${orgId}/members`),
+  setRole: (orgId: number, memberId: number, role: "owner" | "staff") =>
+    api<OrgMemberRow>(`/api/instructor/orgs/${orgId}/members/${memberId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+  remove: (orgId: number, memberId: number) =>
+    api<void>(`/api/instructor/orgs/${orgId}/members/${memberId}`, { method: "DELETE" }),
+  invites: (orgId: number) => api<OrgInvite[]>(`/api/instructor/orgs/${orgId}/invites`),
+  createInvite: (orgId: number, role: "owner" | "staff") =>
+    api<OrgInvite>(`/api/instructor/orgs/${orgId}/invites`, { method: "POST", body: JSON.stringify({ role }) }),
+  revokeInvite: (orgId: number, inviteId: number) =>
+    api<void>(`/api/instructor/orgs/${orgId}/invites/${inviteId}`, { method: "DELETE" }),
+};
+
+export function orgInviteUrl(token: string): string {
+  return `${location.origin}/org-invite/${token}`;
+}
 
 export function joinUrl(token: string): string {
   return `${location.origin}/join/${token}`;
