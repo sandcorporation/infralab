@@ -65,7 +65,6 @@ here=$(cd "$(dirname "$0")" && pwd)
 REPO=${REPO:-${GITHUB_REPOSITORY:-}}
 # Every send-back comment starts with this; `kind=` follows since  (none: acceptance).
 SENDBACK='<!-- factory-sendback'
-HUMAN='<!-- factory-human -->'
 # Send-backs of one kind that hand the ticket to a human (decision 2026-11-18): a failed
 # acceptance twice, a conflict with main three times. Conflicts are mostly the other track's luck,
 # not the ticket's fault, and resolving one does not implement the ticket again.
@@ -176,9 +175,12 @@ delete_branch() {
 }
 # sendbacks <N>: the ticket's send-back comments, oldest first, as JSON lines {kind, pr}
 # (a marker without kind= is an acceptance send-back from before ).
+# Only send-backs after the last `<!-- factory-reset -->` comment count: a person resets the counts by
+# leaving one when handing the ticket back to the factory (hand-to-human.sh, #192).
 sendbacks() {
   gh api "repos/$REPO/issues/$1/comments?per_page=100" --paginate \
-    | j -c -s --arg m "$SENDBACK" '.[][] | .body | select(startswith($m)) | split("\n")[0]
+    | j -c -s --arg m "$SENDBACK" '[.[][] | .body] | (map(startswith("<!-- factory-reset -->")) | rindex(true)) as $r
+        | .[(if $r == null then 0 else $r + 1 end):][] | select(startswith($m)) | split("\n")[0]
         | {kind: ((capture("kind=(?<k>[a-z]+)").k) // "acceptance"),
            pr: ((capture("pr=(?<p>[0-9]+)").p) // null)}'
 }
@@ -218,9 +220,8 @@ $reason"
 
   count=$(sendback_count "$n" "$kind")
   if [ "${count:-0}" -ge "$limit" ]; then
-    add_label "$n" ready-for-human
-    comment "$n" "$HUMAN
-Verify가 이 티켓을 ${what}로 ${count}번 되돌렸다(사람 넘김 한도: ${what} ${limit}번). 공장은 더 돌리지 않는다: 사람이 위 되돌림 사유를 보고 티켓이나 인수 시험을 고치거나 충돌을 푼 뒤 \`ready-for-human\`을 떼고 \`ready-for-agent\`를 붙인다."
+    bash "$here/hand-to-human.sh" "$n" "Verify가 이 티켓을 ${what}로 ${count}번 되돌렸다(사람 넘김 한도: ${what} ${limit}번). 공장은 더 돌리지 않는다: 사람이 위 되돌림 사유를 보고 티켓이나 인수 시험을 고치거나 충돌을 푼 뒤 \`ready-for-human\`을 떼고 \`ready-for-agent\`를 붙이며 \`<!-- factory-reset -->\` 댓글을 남긴다." \
+      || echo "::warning::could not hand #$n to a human"
     echo "#$n: $kind send-back $count of $limit, handed to a human"
     next_ticket
   else

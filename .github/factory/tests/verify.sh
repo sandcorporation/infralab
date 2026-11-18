@@ -362,6 +362,14 @@ checked_pr() { # the PR body as Verify left it
     body: "본문\n\nCloses #7\n\n<!-- factory-checked abc123 -->"}' | tr -d '\r' > "$FAKE_GH/pull-40.json"
 }
 
+setup a-reset-forgets-earlier-sendbacks
+prior acceptance
+jq '. + [{id: 9, created_at: "2026-11-17T02:00:00Z", body: "<!-- factory-reset -->\n티켓을 고쳤다."}]' \
+  "$FAKE_GH/comments-7.json" | tr -d '\r' > "$FAKE_GH/c.json" && mv "$FAKE_GH/c.json" "$FAKE_GH/comments-7.json"
+bash "$verify" sendback 7 40 "$tmp/reason.md" acceptance > /dev/null
+eq "one acceptance failure after the reset" ready-for-agent "$(labels_of 7)"
+eq "no human marker after the reset (#192)" 0 "$(count_marker 7 '<!-- factory-human -->')"
+
 setup conflict-sendback-keeps-the-pr
 checked_pr
 bash "$verify" sendback 7 40 "$tmp/reason.md" conflict > /dev/null

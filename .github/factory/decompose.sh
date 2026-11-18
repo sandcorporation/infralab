@@ -26,7 +26,7 @@
 #                                   issue (adds "## Parent", "## Blocked by" with the real numbers, the local
 #                                   marker and `<!-- factory-ticket spec=S -->` to the body), make it a
 #                                   sub-issue of #S, add native blocked-by edges, the `model:*` label, and for
-#                                   a local ticket `local` + `ready-for-human` and local-ticket.sh. Prints
+#                                   a local ticket `local` and local-ticket.sh (→ `ready-for-human`). Prints
 #                                   `#<n> <key> <title>` per ticket. Idempotent by title + marker: run it again
 #                                   after a failure and it finishes the rest without duplicates. File format
 #                                   above create_tickets.
@@ -253,7 +253,7 @@ $(ticket_marker "$s")"
         || { echo "::error::could not record #$n blocked by #$b" >&2; return 1; }
     done
   fi
-  for l in ${model:+model:$model} ${kind:+local ready-for-human}; do
+  for l in ${model:+model:$model} ${kind:+local}; do
     gh api "repos/$REPO/issues/$n/labels" -f "labels[]=$l" > /dev/null \
       || { echo "::error::could not label #$n $l" >&2; return 1; }
   done
