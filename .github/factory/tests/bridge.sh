@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests of .github/factory/bridge.sh (marker comments → Agent Mail) against the fake gh and agent-mail.
+# Tests of .github/factory/bridge.sh (marker comments → switchboard mailbox) against the fake gh and switchboard.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 script="$here/../bridge.sh"
@@ -16,7 +16,7 @@ setup() {
   tmp=$(mktemp -d "$root/t.XXXXXX")
   export FAKE_GH="$tmp/gh" FAKE_MAIL="$tmp/mail" XDG_STATE_HOME="$tmp/state"
   export FACTORY_REPO=owner/repo BRIDGE_SINCE=2026-11-01T00:00:00Z
-  unset BRIDGE_TO BRIDGE_TO_BOSS BRIDGE_TO_COORD AGENT_MAIL_PROFILE
+  unset BRIDGE_TO BRIDGE_TO_BOSS BRIDGE_TO_COORD SWITCHBOARD_PROFILE
   mkdir -p "$FAKE_GH" "$FAKE_MAIL"
   echo '[]' > "$FAKE_GH/repo-comments.json"
 }
@@ -131,9 +131,9 @@ eq "queue-empty to" repo/coordinator "$(arg 4 --to)"
 eq "idle to" repo/coordinator "$(arg 5 --to)"
 has "log names the recipient" "sent human #301 to repo/coordinator" "$(cat "$tmp/log")"
 
-setup "BRIDGE_TO_BOSS, BRIDGE_TO_COORD and AGENT_MAIL_PROFILE are passed through"
+setup "BRIDGE_TO_BOSS, BRIDGE_TO_COORD and SWITCHBOARD_PROFILE are passed through"
 markers
-export BRIDGE_TO_BOSS=boss/else BRIDGE_TO_COORD=coord/else AGENT_MAIL_PROFILE=other
+export BRIDGE_TO_BOSS=boss/else BRIDGE_TO_COORD=coord/else SWITCHBOARD_PROFILE=other
 run
 eq "question to" boss/else "$(arg 0 --to)"
 eq "human to" coord/else "$(arg 3 --to)"

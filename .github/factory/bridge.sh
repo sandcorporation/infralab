@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mail bridge of the software factory (ADR-0001 "다리"). Not a workflow: a person's PC or server runs it
-# from cron (every 2 minutes). The factory itself never calls Agent Mail; this reads its marker comments
+# from cron (every 2 minutes). The factory itself never sends mail; this reads its marker comments
 # with gh and mails each new one once.
 #
 #   bridge.sh [--seed]
@@ -22,7 +22,7 @@
 #
 # It sends each comment it has not sent before:
 #
-#   agent-mail send --to <recipient> --task <name>-factory --idempotency-key <name>-factory-<comment id>
+#   switchboard send --to <recipient> --task <name>-factory --idempotency-key <name>-factory-<comment id>
 #     --subject … --body …
 #
 # The recipient depends on the kind (owner's decision 2026-11-18): a question goes to the boss
@@ -44,13 +44,13 @@
 #   BRIDGE_TO             removed (it sent every kind to one place) and ignored: a warning is printed when
 #                         it is still set and the two variables above (or their defaults) are used, so a
 #                         leftover BRIDGE_TO can never send a question to the coordinator.
-#   AGENT_MAIL_PROFILE    agent-mail credential profile (default automation); the profile knows the server
+#   SWITCHBOARD_PROFILE   switchboard credential profile (default automation); the profile knows the server
 #   BRIDGE_LOOKBACK_DAYS  how far back to read comments (default 14)
 #   BRIDGE_SINCE          ISO 8601 time to read from instead (tests)
 #   XDG_STATE_HOME        the state file is $XDG_STATE_HOME/<name>-factory-bridge/sent (default under
 #                         ~/.local/state), one comment id per line
 #
-# Exits 1 when a send failed (the others are still sent). Needs bash, gh, jq and agent-mail.
+# Exits 1 when a send failed (the others are still sent). Needs bash, gh, jq and switchboard.
 set -u
 REPO=${FACTORY_REPO:-sandcorporation/infralab}
 NAME=${REPO##*/}
@@ -59,7 +59,7 @@ TO_COORD=${BRIDGE_TO_COORD:-$NAME/coordinator}
 if [ -n "${BRIDGE_TO:-}" ]; then
   echo "bridge: BRIDGE_TO is ignored; use BRIDGE_TO_BOSS (questions) and BRIDGE_TO_COORD (the rest)" >&2
 fi
-export AGENT_MAIL_PROFILE=${AGENT_MAIL_PROFILE:-automation}
+export SWITCHBOARD_PROFILE=${SWITCHBOARD_PROFILE:-automation}
 STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/$NAME-factory-bridge
 SENT=$STATE_DIR/sent
 
@@ -178,7 +178,7 @@ $body
 할 일: $todo"
   to=$TO_COORD
   [ "$kind" = question ] && to=$TO_BOSS
-  if agent-mail send --to "$to" --task "$NAME-factory" --idempotency-key "$NAME-factory-$id" \
+  if switchboard send --to "$to" --task "$NAME-factory" --idempotency-key "$NAME-factory-$id" \
     --subject "[$NAME 공장] $label: #$n $title" --body "$text" > /dev/null; then
     remember "$id"
     echo "bridge: sent $kind #$n to $to (comment $id)"
