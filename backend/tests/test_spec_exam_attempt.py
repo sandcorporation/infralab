@@ -88,7 +88,6 @@ def _statuses(api, teacher, cohort_id):
     return {i["id"]: i["status"] for i in api.get(f"/api/instructor/cohorts/{cohort_id}/exam-invites", teacher).json()}
 
 
-@pytest.mark.skip(reason="#71")
 def test_exam_status_is_public_and_describes_the_exam(api):
     teacher, cohort, invite = _setup(api)
 
@@ -106,7 +105,6 @@ def test_exam_status_is_public_and_describes_the_exam(api):
     assert abs((_ts(body["server_time"]) - timezone.now()).total_seconds()) < 60
 
 
-@pytest.mark.skip(reason="#71")
 def test_unknown_or_revoked_exam_link_is_404(api):
     teacher, cohort, invite = _setup(api)
     assert api.get("/api/exam/no-such-token").status_code == 404
@@ -117,7 +115,6 @@ def test_unknown_or_revoked_exam_link_is_404(api):
     assert api.post(f"/api/exam/{invite['token']}/enter", session=_browser()).status_code == 404
 
 
-@pytest.mark.skip(reason="#71")
 def test_enter_opens_a_session_for_one_hidden_candidate(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
@@ -144,7 +141,6 @@ def test_enter_opens_a_session_for_one_hidden_candidate(api):
     assert api.me(stranger)["id"] != me["id"]
 
 
-@pytest.mark.skip(reason="#71")
 def test_start_needs_consent_and_enter(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
@@ -157,7 +153,6 @@ def test_start_needs_consent_and_enter(api):
     assert cand.client.get(f"/api/exam/{invite['token']}").json()["status"] == "invited"
 
 
-@pytest.mark.skip(reason="#71")
 def test_start_sets_the_deadline_once(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
@@ -177,7 +172,6 @@ def test_start_sets_the_deadline_once(api):
     assert status["status"] == "in_progress" and status["started_at"] == body["started_at"]
 
 
-@pytest.mark.skip(reason="#71")
 def test_scenarios_and_submissions_open_only_after_start(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
@@ -200,7 +194,6 @@ def test_scenarios_and_submissions_open_only_after_start(api):
     assert res.json()["passed"] == 1
 
 
-@pytest.mark.skip(reason="#71")
 def test_time_running_out_finishes_the_attempt(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
@@ -215,7 +208,6 @@ def test_time_running_out_finishes_the_attempt(api):
     assert api.submit(cand, cohort["id"], S3, s3_results(set(S3_CHECK_IDS))).status_code == 403
 
 
-@pytest.mark.skip(reason="#71")
 def test_finish_closes_at_once_and_needs_a_start(api):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
@@ -232,7 +224,6 @@ def test_finish_closes_at_once_and_needs_a_start(api):
 
 
 @pytest.mark.parametrize("how", ["finish", "timeout"])
-@pytest.mark.skip(reason="#71")
 def test_start_after_the_end_is_409(api, how):
     teacher, cohort, invite = _setup(api)
     cand = _browser()
@@ -254,7 +245,6 @@ def test_start_after_the_end_is_409(api, how):
         assert after["started_at"] == started["started_at"]
 
 
-@pytest.mark.skip(reason="#71")
 def test_instructor_invite_list_follows_the_attempt(api):
     teacher, cohort, invite = _setup(api)
     waiting = _invite(api, teacher, cohort["id"], "지원자 B")
@@ -273,7 +263,6 @@ def test_instructor_invite_list_follows_the_attempt(api):
     assert row["finished_at"] is not None
 
 
-@pytest.mark.skip(reason="#71")
 def test_class_cohort_students_keep_the_old_flow(api):
     teacher = api.login_instructor()
     _exam(api, teacher)

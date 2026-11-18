@@ -9,6 +9,7 @@ from ninja.responses import Status
 
 from accounts.auth import jwt_auth
 from cohorts.services import my_membership, open_scenario
+from exams.services import check_attempt
 
 from .models import MAX_OUTPUT_CHARS, Submission
 from .schemas import SubmissionIn, SubmissionOut, SubmissionSummaryOut
@@ -45,6 +46,7 @@ def submit(request: HttpRequest, cohort_id: int, scenario_id: str, payload: Subm
     """에이전트가 돌린 결과를 증거와 함께 저장한다. 검사 id 는 시나리오의 것이어야 하고, 하나씩 다 있어야 한다."""
 
     m = my_membership(request, cohort_id)
+    check_attempt(m, submitting=True)
     scenario = open_scenario(m, scenario_id)
     expected = [c.id for c in scenario.checks]
     got = [r.id for r in payload.results]
