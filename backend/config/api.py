@@ -54,8 +54,8 @@ def health(request: HttpRequest, scope: str = "") -> Status[dict[str, object]]:
     checks = READY_CHECKS if scope == "ready" else HEALTH_CHECKS
     failed = [name for name, check in checks if not check()]
     if failed:
-        return Status(503, {"status": "error", "failed": failed})
-    return Status(200, {"status": "ok"})
+        return Status(503, {"status": "error", "failed": failed, "version": settings.INFRALAB_VERSION})
+    return Status(200, {"status": "ok", "version": settings.INFRALAB_VERSION})
 
 
 def _db_answers() -> bool:

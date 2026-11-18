@@ -14,6 +14,7 @@ from unittest import mock
 
 import pytest
 import yaml
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import OperationalError, connection
 from django.test import override_settings
@@ -46,7 +47,7 @@ def _student_compose(api, images: dict[str, object]) -> dict:
 def test_health_is_200_when_the_database_answers(client):
     res = client.get("/api/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok"}
+    assert res.json() == {"status": "ok", "version": settings.INFRALAB_VERSION}
 
 
 def _db_at(**override):
@@ -60,7 +61,7 @@ def test_health_is_503_when_the_database_refuses(client):
     with _db_at(host="127.0.0.1", port=1):
         res = client.get("/api/health")
     assert res.status_code == 503
-    assert res.json() == {"status": "error", "failed": ["db"]}
+    assert res.json() == {"status": "error", "failed": ["db"], "version": settings.INFRALAB_VERSION}
 
 
 @pytest.mark.django_db
@@ -70,7 +71,7 @@ def test_health_gives_up_on_an_unanswering_database_within_seconds(client):
     with _db_at(host="192.0.2.1", port=5432):
         res = client.get("/api/health")
     assert res.status_code == 503
-    assert res.json() == {"status": "error", "failed": ["db"]}
+    assert res.json() == {"status": "error", "failed": ["db"], "version": settings.INFRALAB_VERSION}
     assert time.monotonic() - started < 3
 
 
@@ -79,7 +80,7 @@ def test_health_is_503_when_the_database_query_fails(client):
     with mock.patch("config.api.psycopg.connect", side_effect=OperationalError("password authentication failed for user x")):
         res = client.get("/api/health")
     assert res.status_code == 503
-    assert res.json() == {"status": "error", "failed": ["db"]}
+    assert res.json() == {"status": "error", "failed": ["db"], "version": settings.INFRALAB_VERSION}
 
 
 @pytest.mark.django_db
@@ -170,23 +171,23 @@ def test_health_skips_the_proxy_check_without_a_proxy_secret(client):
 @pytest.mark.django_db
 def test_health_checks_the_proxy_when_the_secret_is_set(client):
     with _fake_proxy(200) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL=url, EXAM_PROXY_URL=DEAD_PUBLIC):
-        assert client.get("/api/health").json() == {"status": "ok"}
+        assert client.get("/api/health").json() == {"status": "ok", "version": settings.INFRALAB_VERSION}
     with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL="http://127.0.0.1:1"):
         res = client.get("/api/health")
     assert res.status_code == 503
-    assert res.json() == {"status": "error", "failed": ["proxy"]}
+    assert res.json() == {"status": "error", "failed": ["proxy"], "version": settings.INFRALAB_VERSION}
     with _fake_proxy(500) as url, override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL=url, EXAM_PROXY_URL=DEAD_PUBLIC):
-        assert client.get("/api/health").json() == {"status": "error", "failed": ["proxy"]}
+        assert client.get("/api/health").json() == {"status": "error", "failed": ["proxy"], "version": settings.INFRALAB_VERSION}
 
 
 @pytest.mark.django_db
 def test_health_scope_ready_ignores_a_dead_proxy_but_not_a_dead_db(client):
     with override_settings(EXAM_PROXY_SECRET="s", EXAM_PROXY_INTERNAL_URL="http://127.0.0.1:1"):
-        assert client.get("/api/health?scope=ready").json() == {"status": "ok"}
+        assert client.get("/api/health?scope=ready").json() == {"status": "ok", "version": settings.INFRALAB_VERSION}
         with _db_at(host="127.0.0.1", port=1):
             res = client.get("/api/health?scope=ready")
     assert res.status_code == 503
-    assert res.json() == {"status": "error", "failed": ["db"]}
+    assert res.json() == {"status": "error", "failed": ["db"], "version": settings.INFRALAB_VERSION}
 
 
 def test_compose_pins_the_internal_proxy_url_for_backend():

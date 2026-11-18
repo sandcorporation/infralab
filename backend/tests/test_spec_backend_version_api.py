@@ -37,17 +37,14 @@ def _db_dead():
 # ---------- 설정 ----------
 
 
-@pytest.mark.skip(reason="#179")
 def test_version_setting_reads_the_environment(monkeypatch):
     assert _settings_with(monkeypatch, "abc123")["INFRALAB_VERSION"] == "abc123"
 
 
-@pytest.mark.skip(reason="#179")
 def test_version_setting_is_dev_without_the_variable(monkeypatch):
     assert _settings_with(monkeypatch, None)["INFRALAB_VERSION"] == "dev"
 
 
-@pytest.mark.skip(reason="#179")
 def test_version_setting_is_dev_when_the_variable_is_empty(monkeypatch):
     assert _settings_with(monkeypatch, "")["INFRALAB_VERSION"] == "dev"
 
@@ -55,7 +52,6 @@ def test_version_setting_is_dev_when_the_variable_is_empty(monkeypatch):
 # ---------- health 본문 ----------
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_health_200_body_carries_the_version(client):
     with override_settings(INFRALAB_VERSION="abc123", EXAM_PROXY_SECRET=""):
@@ -64,7 +60,6 @@ def test_health_200_body_carries_the_version(client):
     assert res.json() == {"status": "ok", "version": "abc123"}
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_health_200_body_says_dev_by_default(client):
     with override_settings(INFRALAB_VERSION="dev", EXAM_PROXY_SECRET=""):
@@ -73,7 +68,6 @@ def test_health_200_body_says_dev_by_default(client):
     assert res.json() == {"status": "ok", "version": "dev"}
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_health_scope_ready_200_body_carries_the_version(client):
     with override_settings(INFRALAB_VERSION="abc123", EXAM_PROXY_SECRET=""):
@@ -82,7 +76,6 @@ def test_health_scope_ready_200_body_carries_the_version(client):
     assert res.json() == {"status": "ok", "version": "abc123"}
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_health_503_body_carries_the_version_when_the_database_is_dead(client):
     with override_settings(INFRALAB_VERSION="abc123", EXAM_PROXY_SECRET=""), _db_dead():
@@ -91,7 +84,6 @@ def test_health_503_body_carries_the_version_when_the_database_is_dead(client):
     assert res.json() == {"status": "error", "failed": ["db"], "version": "abc123"}
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_health_scope_ready_503_body_carries_the_version(client):
     with override_settings(INFRALAB_VERSION="abc123", EXAM_PROXY_SECRET=""), _db_dead():
@@ -103,7 +95,6 @@ def test_health_scope_ready_503_body_carries_the_version(client):
 # ---------- 응답 헤더 ----------
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_unauthenticated_me_401_carries_the_version_header(client):
     with override_settings(INFRALAB_VERSION="abc123"):
@@ -112,7 +103,6 @@ def test_unauthenticated_me_401_carries_the_version_header(client):
     assert res.headers[HEADER] == "abc123"
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_api_404_carries_the_version_header(client):
     with override_settings(INFRALAB_VERSION="abc123"):
@@ -121,7 +111,6 @@ def test_api_404_carries_the_version_header(client):
     assert res.headers[HEADER] == "abc123"
 
 
-@pytest.mark.skip(reason="#179")
 @pytest.mark.django_db
 def test_health_carries_the_version_header(client):
     with override_settings(INFRALAB_VERSION="dev", EXAM_PROXY_SECRET=""):
