@@ -14,6 +14,7 @@ import { Terminal } from "../components/Terminal";
 import { useMyCohort } from "../hooks";
 import { useExamClock } from "../examAttempt";
 import { useCrumbs, useInShell } from "../shell/crumbs";
+import { ButtonTabs } from "../components/ui";
 
 export default function ScenarioPage() {
   const { id, scenarioId = "" } = useParams();
@@ -119,22 +120,7 @@ export default function ScenarioPage() {
 
       <div className="ws-split">
         <div className="ws-pane">
-          <div className="sc-tabs" role="tablist" aria-label="시나리오">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                id={`ws-tab-${t.key}`}
-                aria-selected={tab === t.key}
-                aria-controls={`ws-panel-${t.key}`}
-                onClick={() => setTab(t.key)}
-              >
-                {t.label}
-                {t.count !== undefined && <span className="sc-tabs-count">{t.count}</span>}
-              </button>
-            ))}
-          </div>
+          <ButtonTabs label="시나리오" idPrefix="ws" items={tabs} value={tab} onChange={setTab} />
           {error && <p className="error ws-pane-body">{error}</p>}
           {!error && !scenario && <p className="muted ws-pane-body">불러오는 중…</p>}
           {scenario && (
@@ -183,8 +169,9 @@ export default function ScenarioPage() {
                 />
                 <EnvActions requires={scenario.requires} probe={probe} agentUrl={cohort.agent_url} token={cohort.agent_token} />
               </div>
-              {isPractice && (
-                <div className="ws-pane-body" role="tabpanel" id="ws-panel-history" aria-labelledby="ws-tab-history" hidden={tab !== "history"}>
+              {/* 내 기록은 열 때마다 새로 읽는다 — 방금 낸 제출·피드백이 보이게. */}
+              {isPractice && tab === "history" && (
+                <div className="ws-pane-body" role="tabpanel" id="ws-panel-history" aria-labelledby="ws-tab-history">
                   <PracticeHistory scenarioId={scenario.id} />
                 </div>
               )}

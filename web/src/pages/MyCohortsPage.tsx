@@ -42,7 +42,7 @@ export default function MyCohortsPage() {
       )}
       {cohorts && cohorts.length > 0 && (
         <div className="sc-table-scroll">
-          <table className="sc-table">
+          <table className="sc-table app-table-fit">
             <thead>
               <tr>
                 <th>기수</th>

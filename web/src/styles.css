@@ -637,6 +637,10 @@ table:not(.sc-table) {
   .sc-table-scroll > .sc-table {
     min-width: 680px;
   }
+  /* 칸이 몇 개 안 되는 표는 폭에 맞춘다. */
+  .sc-table-scroll > .sc-table.app-table-fit {
+    min-width: 0;
+  }
 }
 
 /* ---------- 시나리오 ---------- */

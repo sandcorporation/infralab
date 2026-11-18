@@ -14,7 +14,7 @@ import {
   type ExamTool,
 } from "../api";
 
-const SIGNAL_LABEL: Record<string, string> = {
+export const SIGNAL_LABEL: Record<string, string> = {
   tab_hidden: "탭 이탈",
   focus_lost: "포커스 잃음",
   paste: "붙여넣기",
