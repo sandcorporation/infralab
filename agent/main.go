@@ -25,6 +25,7 @@ func main() {
 		Workstation:    getenv("WORKSTATION_CONTAINER", "infralab-workstation"),
 		Floci:          getenv("FLOCI_CONTAINER", "infralab-floci"),
 		KindCluster:    getenv("KIND_CLUSTER", "infralab"),
+		LocalLLMURL:    os.Getenv("AGENT_LOCAL_LLM_URL"),
 	}
 	if cfg.Token == "" {
 		log.Fatal("AGENT_TOKEN is required")

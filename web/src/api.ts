@@ -170,7 +170,7 @@ export type SubmissionSummary = {
   has_transcript: boolean;
 };
 export type TranscriptEntry = { role: "user" | "assistant"; at: string; text: string };
-export type ToolTranscript = { tool: "claude" | "codex"; since: string; truncated: boolean; entries: TranscriptEntry[] };
+export type ToolTranscript = { tool: "claude" | "codex" | "local_llm"; model?: string; since: string; truncated: boolean; entries: TranscriptEntry[] };
 export type Submission = SubmissionSummary & { results: SubmittedResult[]; ai_transcript: ToolTranscript[] | null };
 export type GridCell = {
   submission_id: number;

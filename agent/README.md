@@ -10,6 +10,7 @@ workstation·Floci 를 찾고, kind 클러스터를 올리고 내리며, 브라�
 | --- | --- | --- |
 | `AGENT_TOKEN` | (필수) | 모든 API 의 `Authorization: Bearer` 토큰, 터미널 WS 의 `?token=` |
 | `AGENT_ALLOWED_ORIGINS` | `http://127.0.0.1:5173,http://localhost:5173` | 콤마로 구분한 대시보드 오리진. 여기 든 Origin 에만 CORS·`Access-Control-Allow-Private-Network` 헤더를 준다 |
+| `AGENT_LOCAL_LLM_URL` | (없음) | 지원자 PC 의 로컬 LLM(OpenAI 호환, 예 `http://host.docker.internal:11434`). 있으면 `POST /llm/v1/chat/completions` 가 `<값>/v1/chat/completions` 로 중계하고 대화를 `/api/ai-transcript` 에 `local_llm` 으로 남긴다. 없으면 중계는 502 |
 | `AGENT_ADDR` | `:7777` | 리슨 주소. 127.0.0.1 바인딩은 compose 의 포트 매핑이 한다 |
 | `WORKSTATION_CONTAINER` | `infralab-workstation` | 학생이 들어가는 작업 컨테이너 이름 |
 | `FLOCI_CONTAINER` | `infralab-floci` | AWS 에뮬레이터 컨테이너 이름 |

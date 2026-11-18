@@ -1,6 +1,6 @@
 import { formatTime, type ToolTranscript } from "../api";
 
-const TOOL_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
+const TOOL_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex", local_llm: "로컬 LLM" };
 
 /** 제출에 붙은 AI 대화 — 접이식 구역. 도구별로 사용자/어시스턴트 발화를 시간순으로 보인다. */
 export function TranscriptView({ transcript }: { transcript: ToolTranscript[] | null }) {

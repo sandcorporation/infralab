@@ -124,7 +124,8 @@ export async function isPrepared(agentUrl: string, token: string, scenarioId: st
 }
 
 export type AgentTranscript = {
-  tool: "claude" | "codex";
+  tool: "claude" | "codex" | "local_llm";
+  model?: string;
   since: string;
   truncated: boolean;
   error?: string;

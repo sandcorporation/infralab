@@ -29,6 +29,8 @@ type server struct {
 	// envMu 는 환경을 바꾸는 작업(kind up/down, Floci reset)을 하나씩만 돌린다 — 대시보드 더블클릭이
 	// kind create 를 두 번 띄우면 두 번째의 실패 정리가 첫 번째 클러스터를 지운다.
 	envMu sync.Mutex
+	// relay 는 로컬 LLM 중계가 남긴 대화(#79).
+	relay relayLog
 }
 
 // newHandler 는 전체 HTTP 표면을 만든다. 시험은 이것을 httptest 에 올린다.
@@ -46,6 +48,7 @@ func newHandler(cfg config, r Runner) http.Handler {
 	mux.HandleFunc("/api/preflight", s.auth(get(s.handlePreflight)))
 	// 채점도 환경 작업과 겹치지 않게 — 반쯤 내려간 클러스터를 보고 내린 판정은 증거가 못 된다.
 	mux.HandleFunc("/api/check", s.auth(post(s.exclusive(s.handleCheck))))
+	mux.HandleFunc("/llm/v1/chat/completions", s.auth(post(s.handleLLMRelay)))
 	mux.HandleFunc("/ws/terminal", s.handleTerminal)
 	return s.cors(mux)
 }
