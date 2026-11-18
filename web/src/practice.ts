@@ -2,8 +2,8 @@
 import type { MyCohort } from "./api";
 
 /** `GET /api/cohorts`(연습 묶음은 빠져 있다)가 비었으면 `/` 가 연습 화면으로 간다. */
-export function shouldOpenPractice(_myCohorts: readonly MyCohort[]): boolean {
-  throw new Error("#133");
+export function shouldOpenPractice(myCohorts: readonly MyCohort[]): boolean {
+  return myCohorts.length === 0;
 }
 
 export type FeedbackAction = "show" | "request" | "no_transcript" | "limit_reached";

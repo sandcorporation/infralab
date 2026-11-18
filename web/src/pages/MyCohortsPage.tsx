@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { ApiError, formatTime, getMyCohorts, type MyCohort } from "../api";
 import { useAuth } from "../auth";
+import { shouldOpenPractice } from "../practice";
 
 export default function MyCohortsPage() {
   const { me } = useAuth();
@@ -15,6 +16,8 @@ export default function MyCohortsPage() {
       .then(setCohorts)
       .catch((err: ApiError) => setError(err.message));
   }, []);
+
+  if (cohorts && shouldOpenPractice(cohorts) && !justJoined) return <Navigate to="/practice" replace />;
 
   return (
     <section>

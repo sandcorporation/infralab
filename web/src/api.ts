@@ -219,6 +219,10 @@ export const devLogin = (uid: string, nickname: string) =>
 export const logoutSession = () => api<void>("/api/auth/logout", { method: "POST" });
 export const getMe = () => api<Me>("/api/accounts/me");
 export const getMyCohorts = () => api<MyCohort[]>("/api/cohorts");
+export type PracticeStatus = { cohort_id: number; name: string; joined: boolean };
+export const getPractice = () => api<PracticeStatus>("/api/practice");
+export const joinPractice = () =>
+  api<{ cohort_id: number; name: string; created: boolean }>("/api/practice/join", { method: "POST" });
 export const getMyCohort = (id: number) => api<MyCohortDetail>(`/api/cohorts/${id}`);
 export const regenerateAgentToken = (id: number) =>
   api<MyCohortDetail>(`/api/cohorts/${id}/agent-token/regenerate`, { method: "POST" });

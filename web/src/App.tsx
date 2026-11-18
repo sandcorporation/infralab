@@ -6,6 +6,7 @@ import MyCohortsPage from "./pages/MyCohortsPage";
 import InstructorCohortsPage from "./pages/InstructorCohortsPage";
 import InstructorCohortPage from "./pages/InstructorCohortPage";
 import CohortPage from "./pages/CohortPage";
+import PracticePage from "./pages/PracticePage";
 import SetupPage from "./pages/SetupPage";
 import ScenarioPage from "./pages/ScenarioPage";
 import InstructorExamDashboardPage from "./pages/InstructorExamDashboardPage";
@@ -40,6 +41,7 @@ function Layout() {
             {me?.is_instructor && <Link to="/instructor">강사</Link>}
             {me ? (
               <>
+                <Link to="/practice">연습</Link>
                 <span className="masthead-user">{me.display_name || me.username}</span>
                 <button className="link" onClick={logout}>
                   로그아웃
@@ -78,6 +80,7 @@ export default function App() {
         <Route path="/exam/:token" element={<ExamPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/" element={<MyCohortsPage />} />
+          <Route path="/practice" element={<PracticePage />} />
           <Route path="/cohorts/:id" element={<CohortPage />} />
           <Route path="/cohorts/:id/setup" element={<SetupPage />} />
           <Route path="/cohorts/:id/scenarios/:scenarioId" element={<ScenarioPage />} />

@@ -9,7 +9,11 @@ import { useMyCohort } from "../hooks";
 // 학생의 기수 화면. 환경(에이전트) 상태, 설치 안내 입구, 열린 시나리오 목록.
 export default function CohortPage() {
   const { id } = useParams();
-  const cohortId = parseId(id);
+  return <CohortView cohortId={parseId(id)} backTo="/" backLabel="내 기수" />;
+}
+
+// 기수 화면의 몸통 — 연습 화면도 같은 것을 쓴다(연습 묶음은 기수와 같은 학생 경로를 쓴다).
+export function CohortView({ cohortId, backTo, backLabel }: { cohortId: number | null; backTo: string; backLabel: string }) {
   const { cohort, error } = useMyCohort(cohortId);
   const probe = useAgentProbe(cohort?.agent_url, cohort?.agent_token);
   // 이 화면에서는 응시 전 점검을 경고로만 보인다(연습). 시험의 「시작」은 응시 화면이 점검으로 막는다.
@@ -45,7 +49,7 @@ export default function CohortPage() {
   return (
     <section>
       <p>
-        <Link to="/">← 내 기수</Link>
+        <Link to={backTo}>← {backLabel}</Link>
       </p>
       <div className="row">
         <h1>{cohort.name}</h1>

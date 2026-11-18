@@ -39,6 +39,7 @@ export default function LoginPage() {
   return (
     <section className="card narrow">
       <h1>로그인</h1>
+      <p className="muted">로그인하면 바로 연습을 시작할 수 있습니다 — 모든 시나리오를 풀어 보고 결과를 확인하세요.</p>
       {devLoginAllowed() ? (
         <>
           <p className="muted">개발용 로그인</p>
