@@ -93,7 +93,7 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 | job | timeout | 근거 |
 | --- | --- | --- |
 | `token` (모든 공장 workflow) | 2분 | secret 하나 확인 |
-| Decompose | 45분 | 빌드 없음. 에이전트 120턴(Opus) |
+| Decompose | 45분 | 빌드 없음. 에이전트 250턴(Opus) — spec #62(티켓 15개)가 120턴을 넘겨 실패한 뒤 올림 |
 | Odin | 90분 | 충돌 풀기(40분 상한)·검토(60분 상한)·`ci.sh all` 최대 두 번(각 3분 안팎) |
 | Implementer `implement` | 90분 | 에이전트 200턴 + `ci.sh all` 최대 두 번. 원본(Windows·Rust 빌드)의 180분에서 줄였다 |
 | Implementer `frontier`·`approved`·`resume` | 기본 | `dispatch-next.sh` 만, 1~2분 |
