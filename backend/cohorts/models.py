@@ -21,6 +21,7 @@ class Cohort(models.Model):
     class Kind(models.TextChoices):
         CLASS = "class", "수업"
         EXAM = "exam", "시험"
+        PRACTICE = "practice", "연습"
 
     org = models.ForeignKey("orgs.Organization", related_name="cohorts", on_delete=models.PROTECT)
     name = models.CharField(max_length=100)

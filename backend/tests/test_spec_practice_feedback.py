@@ -8,19 +8,22 @@ AC: #134: 6번째 새 피드백 요청은 429 와 「오늘 피드백 5회를 �
 AC: #134: 채점기가 실패하면 502 이고 세지 않는다
 AC: #134: GET /api/practice/feedback-quota 는 {limit: 5, used, remaining}
 AC: #134: 다른 사용자의 제출, 연습이 아닌 묶음의 제출은 404
+AC: #134: 동시에 여러 번 눌러도 하루 5회를 넘지 않고 제출당 피드백은 하나다
 
 연습 참여(`/api/practice/join`, #132)로 들어가 기존 제출 경로로 대화 기록을 붙여 낸 뒤 피드백 API 를 부른다. 채점 키는
 비워 가짜 채점기만 쓰고, 채점 실패는 키를 넣고 `AnthropicGrader._ask` 를 실패시켜 만든다(네트워크 없음). 「오늘」은
 `django.utils.timezone.now` 를 고정한 시각으로 바꿔 본다 — 로그인은 바꾸기 전에 한다.
 """
 
+import threading
 from datetime import datetime, timezone as dt_timezone
 
 import pytest
-from django.test import override_settings
+from django.db import connection
+from django.test import Client, override_settings
 
 from exams import grading
-from tests.api_helpers import S3, S3_CHECK_IDS, s3_results
+from tests.api_helpers import S3, S3_CHECK_IDS, dashboard_origin, s3_results
 
 pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("fake_grader")]
 
@@ -248,3 +251,48 @@ def test_class_cohort_submission_gets_no_practice_feedback(api):
 def test_feedback_needs_login(api):
     assert api.get("/api/practice/feedback-quota").status_code == 401
     assert api.post("/api/practice/submissions/1/feedback").status_code == 401
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.skip(reason="#134")
+def test_concurrent_requests_keep_the_daily_limit_and_one_feedback_per_submission(api):
+    s, pid = _practice_user(api)
+    subs = [_submit(api, s, pid)["id"] for _ in range(7)]
+    # 같은 제출에 세 번, 나머지 여섯 제출에 한 번씩 — 아홉 요청을 한꺼번에 보낸다(서로 다른 제출은 일곱 개, 한도는 5).
+    targets = [subs[0], subs[0], subs[0], *subs[1:]]
+    barrier = threading.Barrier(len(targets))
+    results: list[tuple[int, int, dict | None]] = []
+    lock = threading.Lock()
+
+    def hit(sub_id):
+        client = Client()
+        for name, morsel in s.client.cookies.items():
+            client.cookies[name] = morsel.value
+        try:
+            barrier.wait(timeout=30)
+            res = client.post(
+                f"/api/practice/submissions/{sub_id}/feedback",
+                content_type="application/json",
+                HTTP_ORIGIN=dashboard_origin(),
+            )
+            with lock:
+                results.append((sub_id, res.status_code, res.json() if res.status_code == 200 else None))
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=hit, args=(sid,)) for sid in targets]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+
+    assert len(results) == len(targets)
+    assert {code for _, code, _ in results} <= {200, 429}
+    graded = {sid for sid, code, _ in results if code == 200}
+    assert len(graded) == 5
+    # 같은 제출에 대한 200 응답은 모두 같은 피드백 하나다.
+    same = [body for sid, code, body in results if sid == subs[0] and code == 200]
+    assert all(body == same[0] for body in same)
+    assert _quota(api, s) == {"limit": 5, "used": 5, "remaining": 0}
+    stored = [sid for sid in subs if api.get(f"/api/practice/submissions/{sid}/feedback", s).status_code == 200]
+    assert sorted(stored) == sorted(graded)

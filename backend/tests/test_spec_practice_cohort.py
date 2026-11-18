@@ -226,7 +226,7 @@ def test_practice_users_do_not_see_each_others_submissions(api):
 def test_practice_cohort_is_not_on_the_instructor_surface_even_for_its_org_staff(api):
     student = api.login("p1")
     pid = _start(api, student)["cohort_id"]
-    _submit(api, student, pid, {"bucket-exists"})
+    sub = _submit(api, student, pid, {"bucket-exists"})
     operator = api.login_instructor("operator", org=PRACTICE_ORG)
     own = api.create_cohort(api.login_instructor("teacher"), "1기")
 
@@ -238,6 +238,7 @@ def test_practice_cohort_is_not_on_the_instructor_surface_even_for_its_org_staff
     assert api.get(f"/api/instructor/cohorts/{pid}/grid", operator).status_code == 404
     assert api.put(f"/api/instructor/cohorts/{pid}/scenarios", {"scenario_ids": [S3]}, operator).status_code == 404
     assert api.patch(f"/api/instructor/cohorts/{pid}", {"archived": True}, operator).status_code == 404
+    assert api.get(f"/api/instructor/submissions/{sub['id']}", operator).status_code == 404
     # 다른 조직의 기수는 지금처럼 보이지 않는다(연습 제외가 남의 기수를 끌어오지 않는다).
     assert own["id"] not in [c["id"] for c in cohorts.json()]
 

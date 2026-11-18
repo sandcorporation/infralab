@@ -14,6 +14,7 @@ from exams.api import exam_router, proxy_router
 from exams.api import instructor_router as exams_instructor_router
 from orgs.api import instructor_router as orgs_instructor_router
 from orgs.api import invite_router
+from practice.api import practice_router
 from scenarios.api import instructor_router as scenarios_instructor_router
 from scenarios.api import student_router as scenarios_student_router
 from submissions.api import student_router as submissions_student_router
@@ -29,6 +30,7 @@ api.add_router("", scenarios_student_router)
 api.add_router("", submissions_student_router)
 api.add_router("", exam_router)
 api.add_router("", proxy_router)
+api.add_router("", practice_router)
 # 강사 표면. 라우터 자체가 강사 플래그를 요구한다(accounts.auth.InstructorAuth).
 api.add_router("/instructor", accounts_instructor_router)
 api.add_router("/instructor", cohorts_instructor_router)

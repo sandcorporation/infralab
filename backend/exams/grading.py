@@ -42,8 +42,26 @@ class RubricItem:
     evidence: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Turn:
+    """대화 발화 하나 — 채점기의 공통 재료. `role` 은 "user" 또는 "assistant"."""
+
+    role: str
+    text: str
+
+
+def turns_from_exchanges(exchanges: list[AIExchange]) -> list[Turn]:
+    raise NotImplementedError("#131")
+
+
+def turns_from_transcript(ai_transcript: list[dict] | None) -> list[Turn]:
+    raise NotImplementedError("#131")
+
+
 class Grader(Protocol):
     def grade(self, exchanges: list[AIExchange]) -> list[RubricItem]: ...
+
+    def grade_turns(self, turns: list[Turn]) -> list[RubricItem]: ...
 
 
 _SENTENCE = re.compile(r"[^\n.!?。]+[.!?。]?")
@@ -102,6 +120,9 @@ class FakeGrader:
                             found.append(s)
             items.append(RubricItem(key=key, score=min(MAX_SCORE, len(found)), evidence=found[:MAX_EVIDENCE]))
         return items
+
+    def grade_turns(self, turns: list[Turn]) -> list[RubricItem]:
+        raise NotImplementedError("#131")
 
 
 GRADER_MODEL = "claude-sonnet-5-5"
@@ -163,6 +184,9 @@ class AnthropicGrader:
             quotes = [q for q in quotes if q and any(q in s for s in sources)][:MAX_EVIDENCE]
             items.append(RubricItem(key=key, score=_clamp(raw.get("score")), evidence=quotes))
         return items
+
+    def grade_turns(self, turns: list[Turn]) -> list[RubricItem]:
+        raise NotImplementedError("#131")
 
 
 def get_grader() -> Grader:
