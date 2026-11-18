@@ -3,6 +3,12 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { kakaoEnabled, startKakaoLogin } from "../kakao";
 
+// 개발용(Fake) 로그인 폼은 개발 서버(DEV)이거나 명시 변수 VITE_DEV_LOGIN=1 일 때만 보인다.
+// 운영 빌드는 카카오 키가 없어도 폼을 띄우지 않는다.
+function devLoginAllowed(): boolean {
+  return import.meta.env.DEV || import.meta.env.VITE_DEV_LOGIN === "1";
+}
+
 export default function LoginPage() {
   const { me, login } = useAuth();
   const navigate = useNavigate();
@@ -37,6 +43,8 @@ export default function LoginPage() {
         <button className="kakao" onClick={() => startKakaoLogin(returnTo)}>
           카카오로 로그인
         </button>
+      ) : !devLoginAllowed() ? (
+        <p className="muted">로그인 준비 중</p>
       ) : (
         <>
           <p className="muted">개발용 로그인</p>
