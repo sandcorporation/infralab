@@ -55,6 +55,10 @@ describe("사이드바 내비", () => {
     ["/", "내 기수"],
     ["/cohorts/4/scenarios/vpc-basics", "내 기수"],
     ["/practice", "연습"],
+    ["/practice/records/k8s-basics", "연습"],
+    ["/instructor/exams/3", "시험"],
+    ["/instructor/org/invites", "조직"],
+    ["/cohorts/4/setup", "내 기수"],
   ])("%s → 현재 위치는 %s", (path, label) => {
     expect(currentNavItem(navGroups(INSTRUCTOR), path)?.label).toBe(label);
   });
@@ -70,6 +74,17 @@ describe("사이드바 내비", () => {
     });
     expect(navLinks(render("/instructor/org"))).toEqual({ 기수: false, 시험: false, 조직: true, "내 기수": false, 연습: false });
     expect(navLinks(render("/practice"))).toEqual({ 기수: false, 시험: false, 조직: false, "내 기수": false, 연습: true });
+    // 하위 경로에서도 가장 구체적인 한 항목만 — NavLink 의 앞부분 일치로 「기수」「내 기수」가 같이 켜지던 것(#147).
+    for (const [path, label] of [
+      ["/instructor/exams/3", "시험"],
+      ["/instructor/org/invites", "조직"],
+      ["/instructor/cohorts/3/invites", "기수"],
+      ["/practice/records/k8s-basics", "연습"],
+      ["/cohorts/4/scenarios/vpc-basics", "내 기수"],
+    ]) {
+      const on = Object.entries(navLinks(render(path))).filter(([, v]) => v).map(([k]) => k);
+      expect(on, path).toEqual([label]);
+    }
   });
 
   it("로그인 사용자는 sc-app 골격(사이드바 + 상단 바 + 휴대폰 메뉴 단추 + 계정 메뉴)", () => {
