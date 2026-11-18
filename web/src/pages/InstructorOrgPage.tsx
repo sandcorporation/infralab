@@ -8,7 +8,6 @@ import {
   type OrgInvite,
   type OrgMemberRow,
 } from "../api";
-import { InstructorTabs } from "../components/InstructorTabs";
 import { loadSelectedOrg, pickOrg, saveSelectedOrg } from "../orgSelection";
 
 type Role = "owner" | "staff";
@@ -80,7 +79,6 @@ export default function InstructorOrgPage() {
 
   return (
     <section>
-      <InstructorTabs />
       {orgs.length > 1 ? (
         <select aria-label="조직" value={orgId} onChange={(e) => chooseOrg(Number(e.target.value))}>
           {orgs.map((o) => (

@@ -1,10 +1,16 @@
-import { Link, Navigate, Outlet, Route, Routes, matchPath, useLocation } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import LoginPage from "./pages/LoginPage";
 import JoinPage from "./pages/JoinPage";
 import MyCohortsPage from "./pages/MyCohortsPage";
 import InstructorCohortsPage from "./pages/InstructorCohortsPage";
-import InstructorCohortPage from "./pages/InstructorCohortPage";
+import InstructorCohortPage, {
+  CohortInvites,
+  CohortOverview,
+  CohortScenarios,
+  CohortSettings,
+  CohortStudents,
+} from "./pages/InstructorCohortPage";
 import CohortPage from "./pages/CohortPage";
 import PracticePage from "./pages/PracticePage";
 import SetupPage from "./pages/SetupPage";
@@ -15,51 +21,7 @@ import OrgInvitePage from "./pages/OrgInvitePage";
 import InstructorGridPage from "./pages/InstructorGridPage";
 import InstructorExamReportPage from "./pages/InstructorExamReportPage";
 import ExamPage from "./pages/ExamPage";
-import { isExamUser, rememberedExamToken } from "./exam";
-import { ExamBar, ExamClockProvider } from "./examAttempt";
-import mark from "sandcorp-design/assets/mark.svg";
-import markDark from "sandcorp-design/assets/mark-dark.svg";
-
-function Layout() {
-  const { me, logout } = useAuth();
-  const location = useLocation();
-  // 응시 화면이면 그 링크, 응시자 세션이면 들어온 링크의 시계를 어느 화면에서나 보인다.
-  const examToken =
-    matchPath("/exam/:token", location.pathname)?.params.token ?? (isExamUser(me?.username) ? rememberedExamToken() : null);
-  return (
-    <ExamClockProvider token={examToken}>
-      <header className="sc-masthead masthead">
-        <div className="sc-masthead-row">
-          <Link to="/" className="sc-brand brand">
-            <picture>
-              <source srcSet={markDark} media="(prefers-color-scheme: dark)" />
-              <img src={mark} alt="" />
-            </picture>
-            Sandcorp <span className="brand-product">infralab</span>
-          </Link>
-          <nav className="masthead-nav">
-            {me?.is_instructor && <Link to="/instructor">강사</Link>}
-            {me ? (
-              <>
-                <Link to="/practice">연습</Link>
-                <span className="masthead-user">{me.display_name || me.username}</span>
-                <button className="link" onClick={logout}>
-                  로그아웃
-                </button>
-              </>
-            ) : (
-              <Link to="/login">로그인</Link>
-            )}
-          </nav>
-        </div>
-      </header>
-      <ExamBar />
-      <main className="page">
-        <Outlet />
-      </main>
-    </ExamClockProvider>
-  );
-}
+import { AppShell } from "./shell/AppShell";
 
 function RequireAuth({ instructor = false }: { instructor?: boolean }) {
   const { me, loading } = useAuth();
@@ -73,7 +35,7 @@ function RequireAuth({ instructor = false }: { instructor?: boolean }) {
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route element={<AppShell />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/join/:token" element={<JoinPage />} />
         <Route path="/org-invite/:token" element={<OrgInvitePage />} />
@@ -89,8 +51,14 @@ export default function App() {
           <Route path="/instructor" element={<InstructorCohortsPage />} />
           <Route path="/instructor/exams" element={<InstructorExamDashboardPage />} />
           <Route path="/instructor/org" element={<InstructorOrgPage />} />
-          <Route path="/instructor/cohorts/:id" element={<InstructorCohortPage />} />
-          <Route path="/instructor/cohorts/:id/grid" element={<InstructorGridPage />} />
+          <Route path="/instructor/cohorts/:id" element={<InstructorCohortPage />}>
+            <Route index element={<CohortOverview />} />
+            <Route path="scenarios" element={<CohortScenarios />} />
+            <Route path="students" element={<CohortStudents />} />
+            <Route path="grid" element={<InstructorGridPage />} />
+            <Route path="invites" element={<CohortInvites />} />
+            <Route path="settings" element={<CohortSettings />} />
+          </Route>
           <Route path="/instructor/cohorts/:id/exam-invites/:inviteId/report" element={<InstructorExamReportPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
