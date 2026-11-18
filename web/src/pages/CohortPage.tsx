@@ -14,7 +14,7 @@ import { PreflightPanel, usePreflight } from "../components/PreflightPanel";
 import { RequiresTags } from "../components/ScenarioPicker";
 import { PageHead } from "../components/ui";
 import { useMyCohort } from "../hooks";
-import { useCrumbs, useInShell } from "../shell/crumbs";
+import { useCrumbs } from "../shell/crumbs";
 
 // 학생의 기수 화면. 환경(에이전트) 상태, 설치 안내 입구, 열린 시나리오 목록.
 export default function CohortPage() {
@@ -70,7 +70,6 @@ export function CohortView({
   }, [cohortId]);
 
   const navigate = useNavigate();
-  const inShell = useInShell();
   useCrumbs(practice ? [{ label: backLabel }] : [{ label: backLabel, to: backTo }, { label: cohort?.name ?? "…" }]);
 
   if (error) return <p className="error">{error}</p>;
@@ -88,11 +87,6 @@ export function CohortView({
   const scenarioUrl = (id: string) => `/cohorts/${cohort.id}/scenarios/${id}`;
   return (
     <>
-      {!inShell && (
-        <p>
-          <Link to={backTo}>← {backLabel}</Link>
-        </p>
-      )}
       <PageHead
         title={practice ? "연습" : cohort.name}
         badges={

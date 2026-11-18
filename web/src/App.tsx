@@ -22,13 +22,14 @@ import InstructorGridPage from "./pages/InstructorGridPage";
 import InstructorExamReportPage from "./pages/InstructorExamReportPage";
 import ExamPage from "./pages/ExamPage";
 import { AppShell } from "./shell/AppShell";
+import { AccessDenied } from "./components/AccessDenied";
 
 function RequireAuth({ instructor = false }: { instructor?: boolean }) {
   const { me, loading } = useAuth();
   const location = useLocation();
   if (loading) return <p className="muted">불러오는 중…</p>;
   if (!me) return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
-  if (instructor && !me.is_instructor) return <p className="error">강사만 볼 수 있는 화면입니다.</p>;
+  if (instructor && !me.is_instructor) return <AccessDenied />;
   return <Outlet />;
 }
 
