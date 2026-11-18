@@ -121,12 +121,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Require CLAUDE_CODE_OAUTH_TOKEN
+      - name: Require CLAUDE_OAUTH_TOKEN
         env:
-          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TOKEN: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
         run: |
           if [ -z "$TOKEN" ]; then
-            echo "::error::CLAUDE_CODE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
+            echo "::error::CLAUDE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
             exit 1
           fi
 
@@ -263,7 +263,7 @@ jobs:
         if: steps.guard.outputs.go == 'true' && steps.guard.outputs.mode != 'conflict'
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # Runs dispatched by this workflow itself (frontier, next tickets) have the bot as actor.
           allowed_bots: github-actions
@@ -352,7 +352,7 @@ jobs:
         if: steps.guard.outputs.go == 'true' && steps.rebase.outputs.conflict == 'true'
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           allowed_bots: github-actions
           prompt: |
@@ -395,7 +395,7 @@ jobs:
         if: steps.guard.outputs.go == 'true' && steps.checks_first.outcome == 'failure'
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           allowed_bots: github-actions
           prompt: |
