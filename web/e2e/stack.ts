@@ -59,8 +59,8 @@ export function inWorkstation(...cmd: string[]): string {
  * workstation 에서 Claude Code 처럼 AI 프록시의 Anthropic 길(`<ANTHROPIC_BASE_URL>/v1/messages`)로 요청 하나를 보낸다.
  * busybox wget 의 서버 응답 머리(-S)·본문·오류 줄을 그대로 준다 — 4xx 면 `server returned error: HTTP/1.1 401 …`.
  */
-export function anthropicRequestFromWorkstation(baseUrl: string, token: string): string {
-  const body = JSON.stringify({ model: "e2e", max_tokens: 16, messages: [{ role: "user", content: "hello" }] });
+export function anthropicRequestFromWorkstation(baseUrl: string, token: string, content = "hello"): string {
+  const body = JSON.stringify({ model: "e2e", max_tokens: 16, messages: [{ role: "user", content }] });
   const script = 'wget -S -O- --header "x-api-key: $1" --header "content-type: application/json" --post-data "$2" "$3/v1/messages" 2>&1; true';
   return execFileSync("docker", ["exec", workstation, "sh", "-c", script, "sh", token, body, baseUrl], {
     encoding: "utf8",
