@@ -195,7 +195,8 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.log.Printf("%s %s tool=%s model=%s client=%s status=%d count_tokens (not recorded)", r.Method, r.URL.Path, rt.tool, model, clientID, resp.StatusCode)
 		return
 	}
-	in, out := usageFrom(recorded.Bytes())
+	u := usageFrom(recorded.Bytes())
+	in, out := u.In, u.Out
 	p.log.Printf("%s %s tool=%s model=%s client=%s status=%d input_tokens=%d output_tokens=%d",
 		r.Method, r.URL.Path, rt.tool, model, clientID, resp.StatusCode, in, out)
 
@@ -203,14 +204,16 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
 	defer cancel()
 	ex := exchange{
-		Token:        token,
-		Tool:         rt.tool,
-		Model:        model,
-		ClientID:     clientID,
-		InputTokens:  in,
-		OutputTokens: out,
-		Request:      string(outBody),
-		Response:     recorded.String(),
+		Token:                    token,
+		Tool:                     rt.tool,
+		Model:                    model,
+		ClientID:                 clientID,
+		InputTokens:              in,
+		OutputTokens:             out,
+		CacheReadInputTokens:     u.CacheRead,
+		CacheCreationInputTokens: u.CacheCreation,
+		Request:                  string(outBody),
+		Response:                 recorded.String(),
 	}
 	if err := p.backend.recordExchange(ctx, ex); err != nil {
 		p.log.Printf("%s %s tool=%s client=%s record exchange failed: %v", r.Method, r.URL.Path, rt.tool, clientID, err)

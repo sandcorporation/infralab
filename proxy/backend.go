@@ -27,8 +27,11 @@ type exchange struct {
 	ClientID     string `json:"client_id"`
 	InputTokens  int    `json:"input_tokens"`
 	OutputTokens int    `json:"output_tokens"`
-	Request      string `json:"request"`
-	Response     string `json:"response"`
+	// 캐시 읽기·쓰기 입력(InputTokens 에 이미 들어 있다). 응답에 필드가 없으면 보내지 않는다(#252).
+	CacheReadInputTokens     *int   `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens *int   `json:"cache_creation_input_tokens,omitempty"`
+	Request                  string `json:"request"`
+	Response                 string `json:"response"`
 }
 
 // backendClient 는 backend 의 프록시 전용 내부 API 를 공유 비밀로 부른다.

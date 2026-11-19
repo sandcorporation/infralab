@@ -6,6 +6,7 @@ AC: #72: 시작 전·마감 뒤·회수 뒤 ai-config 409
 AC: #72: POST /api/proxy/authorize 는 공유 비밀이 틀리면 401, 허용이면 {allowed: true, model, remaining_tokens}
 AC: #72: 거절 사유 unknown·revoked·outside_window·tool_not_allowed·limit·in_use_elsewhere(5분이 지나면 새 클라이언트가 이어 쓴다)
 AC: #72: POST /api/proxy/exchanges 가 요청·응답·사용량을 기록하고 사용량을 한도에서 깎는다
+AC: #252: 캐시 읽기·쓰기 토큰을 따로 적는다(없으면 null). input_tokens·used_tokens 는 그대로, 옛 프록시 본문도 받는다
 AC: #72: 담당자가 ai-token/revoke 하면 다음 확인부터 revoked, 남의 조직이면 404
 AC: #72: 지원자가 finish 하면 토큰이 회수된다
 
@@ -104,6 +105,9 @@ def _exchange(ai_token, input_tokens=100, output_tokens=50, tool="claude_code", 
         "request": extra.get("request", '{"messages":[{"role":"user","content":"버킷을 만들어 줘"}]}'),
         "response": extra.get("response", '{"content":[{"type":"text","text":"aws s3 mb 로 만듭니다"}]}'),
     }
+    for key in ("cache_read_input_tokens", "cache_creation_input_tokens"):
+        if key in extra:
+            body[key] = extra[key]
     return _proxy("/api/proxy/exchanges", body)
 
 
@@ -239,6 +243,37 @@ def test_exchanges_are_recorded_and_spend_the_budget(api):
         ("claude_code", CLAUDE_MODEL, "10.0.0.5", "REQ-1", "RESP-1", 300, 200)
     ]
     assert _exchange("no-such-token").status_code == 404
+
+
+def test_exchanges_keep_cache_tokens_apart_without_changing_the_totals(api):
+    from exams.models import AIExchange, AIToken
+
+    teacher, cohort, invite, cand = _setup(api)
+    ai_token = _ai_config(api, cand, invite["token"])["token"]
+
+    # input_tokens 는 캐시 입력을 포함한 합계(프록시가 더해 보낸다) — 캐시 열은 따로 남길 뿐이다.
+    cached = _exchange(
+        ai_token, input_tokens=300, output_tokens=200, cache_read_input_tokens=250, cache_creation_input_tokens=40
+    )
+    # 옛 프록시(#252 전)는 캐시 필드를 보내지 않는다.
+    old_proxy = _exchange(ai_token, input_tokens=10, output_tokens=5)
+    explicit_null = _exchange(
+        ai_token, input_tokens=1, output_tokens=1, cache_read_input_tokens=None, cache_creation_input_tokens=None
+    )
+
+    assert (cached.status_code, old_proxy.status_code, explicit_null.status_code) == (204, 204, 204)
+    rows = list(AIExchange.objects.filter(ai_token__token=ai_token))
+    assert [
+        (r.input_tokens, r.output_tokens, r.cache_read_input_tokens, r.cache_creation_input_tokens) for r in rows
+    ] == [(300, 200, 250, 40), (10, 5, None, None), (1, 1, None, None)]
+    assert AIToken.objects.get(token=ai_token).used_tokens == 300 + 200 + 10 + 5 + 1 + 1
+
+
+def test_exchanges_refuse_negative_cache_tokens(api):
+    teacher, cohort, invite, cand = _setup(api)
+    ai_token = _ai_config(api, cand, invite["token"])["token"]
+
+    assert _exchange(ai_token, cache_read_input_tokens=-1).status_code == 422
 
 
 def test_authorize_refuses_when_the_budget_is_spent(api):

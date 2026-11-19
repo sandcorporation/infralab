@@ -146,6 +146,9 @@ class ProxyExchangeIn(Schema):
     client_id: str = Field(default="", max_length=200)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
+    # input_tokens 에 이미 들어 있는 캐시 입력. 옛 프록시는 보내지 않는다(#252).
+    cache_read_input_tokens: int | None = Field(default=None, ge=0)
+    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
     request: str = ""
     response: str = ""
 

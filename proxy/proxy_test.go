@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -252,6 +253,9 @@ func TestAnthropicAllowedRequestUsesFixedModelAndIsRecorded(t *testing.T) {
 	if got.InputTokens != 15 || got.OutputTokens != 5 {
 		t.Fatalf("tokens = %d/%d, want 15/5", got.InputTokens, got.OutputTokens)
 	}
+	if got.CacheReadInputTokens == nil || *got.CacheReadInputTokens != 3 || got.CacheCreationInputTokens != nil {
+		t.Fatalf("cache tokens = %v/%v, want 3/nil", got.CacheReadInputTokens, got.CacheCreationInputTokens)
+	}
 	if got.Response != anthropicReply || !strings.Contains(got.Request, fixedModel) || !strings.Contains(got.Request, `"hi"`) {
 		t.Fatalf("exchange request/response = %q / %q", got.Request, got.Response)
 	}
@@ -395,7 +399,7 @@ func TestCountTokensPassesWithTokenRuleAndIsNotRecorded(t *testing.T) {
 // AC: 스트리밍 응답이 조각 단위로 흘러가고 끝난 뒤 한 번 기록된다.
 func TestStreamingFlowsChunkByChunkAndIsRecordedOnceAtTheEnd(t *testing.T) {
 	release := make(chan struct{})
-	first := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":21,\"output_tokens\":1}}}\n\n"
+	first := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":11,\"output_tokens\":1,\"cache_creation_input_tokens\":4,\"cache_read_input_tokens\":6}}}\n\n"
 	rest := "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n" +
 		"event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":9}}\n\n" +
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
@@ -460,6 +464,9 @@ func TestStreamingFlowsChunkByChunkAndIsRecordedOnceAtTheEnd(t *testing.T) {
 	}
 	if ex[0].InputTokens != 21 || ex[0].OutputTokens != 9 {
 		t.Fatalf("tokens = %d/%d, want 21/9", ex[0].InputTokens, ex[0].OutputTokens)
+	}
+	if r, c := ex[0].CacheReadInputTokens, ex[0].CacheCreationInputTokens; r == nil || *r != 6 || c == nil || *c != 4 {
+		t.Fatalf("cache tokens = %v/%v, want 6/4", r, c)
 	}
 	if ex[0].Response != first+rest {
 		t.Fatalf("recorded response = %q", ex[0].Response)
@@ -727,24 +734,36 @@ func TestClientIDRule(t *testing.T) {
 }
 
 func TestUsageFrom(t *testing.T) {
+	n := func(v int) *int { return &v }
 	cases := []struct {
-		name    string
-		body    string
-		in, out int
+		name          string
+		body          string
+		in, out       int
+		read, created *int
 	}{
-		{"anthropic", `{"usage":{"input_tokens":3,"output_tokens":4,"cache_creation_input_tokens":1}}`, 4, 4},
-		{"chat", `{"usage":{"prompt_tokens":5,"completion_tokens":6}}`, 5, 6},
-		{"responses", `{"usage":{"input_tokens":7,"output_tokens":8}}`, 7, 8},
-		{"anthropic sse", "event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":10,\"output_tokens\":1}}}\n\nevent: message_delta\ndata: {\"usage\":{\"output_tokens\":12}}\n\n", 10, 12},
-		{"chat sse", "data: {\"choices\":[]}\n\ndata: {\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3}}\n\ndata: [DONE]\n\n", 2, 3},
-		{"responses sse", "event: response.completed\ndata: {\"response\":{\"usage\":{\"input_tokens\":9,\"output_tokens\":1}}}\n\n", 9, 1},
-		{"error body", `{"error":{"message":"x"}}`, 0, 0},
-		{"garbage", "nope", 0, 0},
+		{"anthropic", `{"usage":{"input_tokens":3,"output_tokens":4,"cache_creation_input_tokens":1}}`, 4, 4, nil, n(1)},
+		{"anthropic cache", `{"usage":{"input_tokens":3,"output_tokens":4,"cache_creation_input_tokens":5,"cache_read_input_tokens":20}}`, 28, 4, n(20), n(5)},
+		{"anthropic cache zero", `{"usage":{"input_tokens":3,"output_tokens":4,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}`, 3, 4, n(0), n(0)},
+		{"chat", `{"usage":{"prompt_tokens":5,"completion_tokens":6}}`, 5, 6, nil, nil},
+		{"responses", `{"usage":{"input_tokens":7,"output_tokens":8}}`, 7, 8, nil, nil},
+		{"anthropic sse", "event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":10,\"output_tokens\":1}}}\n\nevent: message_delta\ndata: {\"usage\":{\"output_tokens\":12}}\n\n", 10, 12, nil, nil},
+		{"anthropic sse cache", "event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":10,\"output_tokens\":1,\"cache_creation_input_tokens\":7,\"cache_read_input_tokens\":30}}}\n\nevent: message_delta\ndata: {\"usage\":{\"output_tokens\":12}}\n\n", 47, 12, n(30), n(7)},
+		{"chat sse", "data: {\"choices\":[]}\n\ndata: {\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3}}\n\ndata: [DONE]\n\n", 2, 3, nil, nil},
+		{"responses sse", "event: response.completed\ndata: {\"response\":{\"usage\":{\"input_tokens\":9,\"output_tokens\":1}}}\n\n", 9, 1, nil, nil},
+		{"error body", `{"error":{"message":"x"}}`, 0, 0, nil, nil},
+		{"garbage", "nope", 0, 0, nil, nil},
+	}
+	show := func(p *int) string {
+		if p == nil {
+			return "nil"
+		}
+		return strconv.Itoa(*p)
 	}
 	for _, c := range cases {
-		in, out := usageFrom([]byte(c.body))
-		if in != c.in || out != c.out {
-			t.Errorf("%s: got %d/%d want %d/%d", c.name, in, out, c.in, c.out)
+		u := usageFrom([]byte(c.body))
+		if u.In != c.in || u.Out != c.out || show(u.CacheRead) != show(c.read) || show(u.CacheCreation) != show(c.created) {
+			t.Errorf("%s: got %d/%d cache %s/%s want %d/%d cache %s/%s", c.name, u.In, u.Out, show(u.CacheRead), show(u.CacheCreation),
+				c.in, c.out, show(c.read), show(c.created))
 		}
 	}
 }

@@ -59,6 +59,9 @@ class AIExchange(models.Model):
     response = models.TextField(blank=True, default="")
     input_tokens = models.IntegerField(default=0)
     output_tokens = models.IntegerField(default=0)
+    # 캐시 읽기·쓰기 입력 토큰(input_tokens 에 이미 들어 있다). 응답에 필드가 없거나 #252 전 기록이면 null.
+    cache_read_input_tokens = models.IntegerField(null=True, blank=True)
+    cache_creation_input_tokens = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
