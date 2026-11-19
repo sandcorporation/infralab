@@ -233,8 +233,11 @@ guard() {
     echo "::warning::guard: the factory spent \$$daily of \$$dlimit on $day (KST); nothing starts until KST midnight"
     ledger=$(ledger_issue)
     if [ -n "$ledger" ] && ! has_marker "$ledger" "<!-- factory-budget-daily $day -->"; then
+      local again="KST 0시가 지나면 예약 실행이 다시 시작한다."
+      # A budget of 0 is a stop on purpose: midnight does not start the factory again (#502).
+      reached 0 "$dlimit" && again="상한이 0이라 일부러 멈춘 상태다. 다시 켜려면 상한을 올린다."
       post_comment "$ledger" "<!-- factory-budget-daily $day -->
-하루 상한에 닿아 공장이 멈췄다: $day(KST) 합계 \$$daily / 상한 \$$dlimit. KST 0시가 지나면 예약 실행이 다시 시작한다." \
+하루 상한에 닿아 공장이 멈췄다: $day(KST) 합계 \$$daily / 상한 \$$dlimit. $again" \
         || echo "::warning::guard: could not mark the ledger #$ledger"
     fi
     output go=false reason=daily

@@ -326,6 +326,15 @@ eq "10 of 10" false "$(out go)"
 FACTORY_DAILY_BUDGET_USD=20 bash "$ledger" guard 1 > /dev/null
 eq "10 of 20" true "$(out go)"
 
+setup "guard: a daily budget of 0 is a stop on purpose, not a wait for midnight (#502)"
+with_ledger
+issue 1 spec "spec"
+FACTORY_DAILY_BUDGET_USD=0 bash "$ledger" guard 1 > /dev/null
+eq "0 of 0" false "$(out go)"
+daily0=$(jq -r '.[] | select(.body | startswith("<!-- factory-budget-daily ")) | .body' "$FAKE_GH/comments-900.json" | tr -d '\r')
+case "$daily0" in *"0시"*) bad "no midnight in [$daily0]" ;; *) ok ;; esac
+case "$daily0" in *"일부러 멈춘 상태"*) ok ;; *) bad "stop on purpose not in [$daily0]" ;; esac
+
 setup "guard: no ledger issue means nothing spent"
 issue 1 spec "spec"
 FACTORY_DAILY_BUDGET_USD=1 FACTORY_SPEC_BUDGET_USD=1 bash "$ledger" guard 1 > /dev/null
