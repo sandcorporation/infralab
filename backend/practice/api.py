@@ -19,6 +19,7 @@ from cohorts.models import Cohort, Membership
 from cohorts.schemas import JoinOut
 from exams import grading
 from exams.api import HIDDEN_USER_PREFIX
+from exams.models import LLMUsage
 from scenarios import registry
 from submissions.models import Submission
 from submissions.services import has_transcript, passed_against, score
@@ -170,6 +171,7 @@ def request_feedback(request: HttpRequest, submission_id: int):
             result = {item.key: item for item in grader.grade_turns(turns)}
         except Exception as e:  # 채점기 바깥 서비스 실패 — 행을 만들지 않으니 세지 않는다
             raise HttpError(502, f"채점에 실패했습니다: {e}") from e
+        grading.record_usage(grader, LLMUsage.PURPOSE_PRACTICE_FEEDBACK, submission=sub)
         items = []
         for key in grading.RUBRIC_KEYS:
             item = result.get(key) or grading.RubricItem(key=key, score=0)

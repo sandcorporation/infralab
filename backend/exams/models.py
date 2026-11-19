@@ -104,3 +104,36 @@ class RubricEdit(models.Model):
 
     class Meta:
         ordering = ["at", "id"]
+
+
+class LLMUsage(models.Model):
+    """backend 가 직접 부른 Claude 호출 한 번의 사용량(#249) — 채점·연습 피드백의 원가 재료.
+
+    덮어쓰지 않고 쌓는다(다시 채점하면 행이 늘어난다). 요청·응답 본문이나 개인정보는 넣지 않는다.
+    `invite` 는 채점한 응시, `submission` 은 피드백을 받은 연습 제출 — 대상이 지워져도 사용량은 남는다.
+    """
+
+    PURPOSE_GRADING = "grading"
+    PURPOSE_PRACTICE_FEEDBACK = "practice_feedback"
+    PURPOSES = [(PURPOSE_GRADING, "채점"), (PURPOSE_PRACTICE_FEEDBACK, "연습 피드백")]
+
+    purpose = models.CharField(max_length=30, choices=PURPOSES)
+    model = models.CharField(max_length=200, blank=True, default="")
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    cache_read_input_tokens = models.IntegerField(default=0)
+    cache_creation_input_tokens = models.IntegerField(default=0)
+    invite = models.ForeignKey(
+        ExamInvite, related_name="llm_usages", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    submission = models.ForeignKey(
+        "submissions.Submission", related_name="llm_usages", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [models.Index(fields=["created_at"])]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.purpose} {self.model} in={self.input_tokens} out={self.output_tokens}"

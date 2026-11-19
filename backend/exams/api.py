@@ -33,7 +33,7 @@ from cohorts.schemas import CohortOut
 from . import ai, grading, providers, services
 from submissions.models import MAX_OUTPUT_CHARS, Submission
 
-from .models import AIExchange, ExamEvent, ExamInvite, ExamRubric, RubricEdit
+from .models import AIExchange, ExamEvent, ExamInvite, ExamRubric, LLMUsage, RubricEdit
 from .schemas import (
     ExamEnterOut,
     AiConfigOut,
@@ -248,6 +248,8 @@ def grade_exam_report(request: HttpRequest, cohort_id: int, invite_id: int):
         result = {item.key: item for item in grader.grade(_exchanges(invite))}
     except Exception as e:  # 채점기 바깥 서비스 실패
         raise HttpError(502, f"채점에 실패했습니다: {e}") from e
+    finally:  # 응답을 받았으면 채점이 실패해도 쓴 토큰은 남긴다
+        grading.record_usage(grader, LLMUsage.PURPOSE_GRADING, invite=invite)
     items = []
     for key in grading.RUBRIC_KEYS:
         item = result.get(key) or grading.RubricItem(key=key, score=0)
