@@ -63,6 +63,14 @@ check() {
 scen deferred '[{"name":"spec"},{"name":"deferred"}]' "$body_with_oq"
 check deferred 1 "" "deferred"
 
+# 라벨 이름을 FACTORY_LABEL_DEFERRED 로 바꾸면 그 라벨에서 거절하고, 옛 이름은 더 이상 거절하지 않는다.
+scen custom-label '[{"name":"human:deferred"}]' "$body_with_oq"
+check custom-label 1 "" "human:deferred" FACTORY_LABEL_DEFERRED=human:deferred
+scen custom-label-old '[{"name":"deferred"}]' '## Open Questions
+- ?'
+check custom-label-old 0 '## Open Questions
+- ?' "" FACTORY_LABEL_DEFERRED=human:deferred
+
 # deferred 없음 + 절 있음 → 그 절만(하위 제목·코드 울타리 포함, 다음 ## 앞까지).
 scen with-oq '[{"name":"spec"}]' "$body_with_oq"
 check with-oq 0 '## Open Questions
