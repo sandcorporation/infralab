@@ -3,18 +3,12 @@
 # State lives in $FAKE_MAIL:
 #   sent.jsonl   one JSON object per successful send: {profile, args: [...]}
 #   fail         if present, every send fails
-#   fail-to      if present, a send whose --to is one of its lines fails
 #   calls.log    every call's arguments, one line each
 set -u -o pipefail
 d=${FAKE_MAIL:?FAKE_MAIL is not set}
 printf '%s\n' "$*" >> "$d/calls.log"
 [ "${1:-}" = send ] || { echo "fake switchboard: unsupported command: $*" >&2; exit 2; }
 if [ -e "$d/fail" ]; then echo "fake switchboard: sending is broken" >&2; exit 1; fi
-if [ -e "$d/fail-to" ]; then
-  to=; prev=
-  for a in "$@"; do [ "$prev" = --to ] && to=$a; prev=$a; done
-  if grep -qxF -- "$to" "$d/fail-to"; then echo "fake switchboard: cannot send to $to" >&2; exit 1; fi
-fi
 # Each argument as a JSON string (works on every jq, whatever the argument starts with).
 args=$(for a in "$@"; do printf '%s' "$a" | jq -Rs .; done | jq -cs .) || exit 1
 jq -cn --arg p "${SWITCHBOARD_PROFILE:-}" --argjson a "$args" '{profile: $p, args: $a}' | tr -d '\r' >> "$d/sent.jsonl" \

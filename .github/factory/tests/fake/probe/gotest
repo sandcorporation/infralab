@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Fake `go test -json` of acceptance-probe.sh (PROBE_GOTEST): for `-run ^<Test>$` prints go-<Test>.jsonl
-# (real `go test -json` output), or go-build.jsonl when $FAKE_GO_BUILD is set, and appends <Test> to
-# $FAKE_SEEN/gotest.runs.
-here=$(cd "$(dirname "$0")" && pwd)
+# Fake `go test -json` for tests/acceptance-probe.sh (#492): appends its arguments to
+# $FAKE_SEEN/gotest.args, the test files as it saw them to $FAKE_SEEN/gotest.files, and prints
+# $FAKE_GO/<test>.jsonl for the test named by `-run ^<test>$` (nothing when there is none). Exits 1.
+printf '%s\n' "$*" >> "$FAKE_SEEN/gotest.args"
+cat ./*_test.go >> "$FAKE_SEEN/gotest.files" 2>/dev/null
 t=
-while [ $# -gt 0 ]; do [ "$1" = -run ] && { t=${2#^}; t=${t%\$}; }; shift; done
-echo "$t" >> "$FAKE_SEEN/gotest.runs"
-if [ -n "${FAKE_GO_BUILD:-}" ]; then cat "$here/go-build.jsonl"; else cat "$here/go-$t.jsonl"; fi
+while [ $# -gt 0 ]; do
+  [ "$1" = -run ] && { t=${2#^}; t=${t%$}; shift; }
+  shift
+done
+[ -f "${FAKE_GO:-}/$t.jsonl" ] && cat "$FAKE_GO/$t.jsonl"
 exit 1

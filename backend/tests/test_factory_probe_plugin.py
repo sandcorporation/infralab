@@ -81,5 +81,5 @@ def test_the_plugin_writes_one_row_per_outcome_with_the_exception_type(tmp_path:
     assert rows["test_spec_x.py::test_fixture"][:3] == ("setup", "failed", "KeyError")
     when, outcome, kind, message = rows["test_spec_broken.py"]
     assert (when, outcome, kind) == ("collect", "failed", "CollectError")
-    assert message.startswith("ModuleNotFoundError: No module named 'nowhere'")
+    assert "ModuleNotFoundError: No module named 'nowhere'" in message  # the kit's plugin (#238) keeps the whole report
     assert "test_spec_x.py::test_skipped" not in rows

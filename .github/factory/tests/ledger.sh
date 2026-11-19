@@ -109,7 +109,7 @@ setup "record: extra pairs go at the end of the line"
 with_ledger
 issue 249 spec "no parent here"
 execution_file
-bash "$ledger" record decompose 249 tickets=4 > /dev/null
+bash "$ledger" record decompose 249 tickets=4 > /dev/null 2>&1
 line=$(jq -r '.[-1].body' "$FAKE_GH/comments-900.json" | tr -d '\r' | sed -n 2p)
 eq "extra" "cache_write=4000 tickets=4" "${line##*cache_read=30000 }"
 
@@ -138,13 +138,13 @@ eq "commenting fails" 0 $?
 setup "record: no ledger issue is created and the cost recorded on it"
 issue 5 "" "x"
 execution_file
-bash "$ledger" record decompose 5 > /dev/null
+bash "$ledger" record decompose 5 > /dev/null 2>&1
 n=$(grep -l factory-ledger "$FAKE_GH"/issue-*.json | sed 's/.*issue-\([0-9]*\).json/\1/')
 eq "one ledger issue made" 1 "$(printf '%s\n' "$n" | grep -c .)"
-eq "its title" "공장 비용 장부" "$(jq -r .title "$FAKE_GH/issue-$n.json")"
+eq "its title" "공장 비용 장부" "$(jq -r .title "$FAKE_GH/issue-$n.json" | tr -d '\r')"
 eq "the cost is on it" 1 "$(comment_count "$n" '<!-- ledger -->')"
 execution_file
-bash "$ledger" record decompose 5 > /dev/null
+bash "$ledger" record decompose 5 > /dev/null 2>&1
 eq "the second record reuses it" 2 "$(comment_count "$n" '<!-- ledger -->')"
 eq "still one ledger issue" 1 "$(grep -l factory-ledger "$FAKE_GH"/issue-*.json | grep -c .)"
 
@@ -162,7 +162,7 @@ issue 9 "" "x"
 eq "none: the issue itself" 9 "$(bash "$ledger" spec-of 9)"
 eq "parent-of none: empty" "" "$(bash "$ledger" parent-of 9)"
 
-setup "spec-of: a spec label issue is its own spec even with a parent (#203)"
+setup "spec-of: a spec label issue is its own spec even with a parent"
 issue 174 spec "## Parent
 
 #45"
@@ -179,7 +179,7 @@ issue 10 "bug" "## Parent
 eq "no spec label: the parent" 45 "$(bash "$ledger" spec-of 10)"
 with_ledger
 execution_file
-bash "$ledger" record decompose 174 tickets=8 > /dev/null
+bash "$ledger" record decompose 174 tickets=8 > /dev/null 2>&1
 eq "decompose of the spec goes to the spec" 1 \
   "$(jq '[.[] | select(.body | contains("spec=#174 node=decompose issue=#174"))] | length' "$FAKE_GH/comments-900.json" | tr -d '\r')"
 
@@ -380,10 +380,11 @@ with_ledger
 for l in "impl-start issue=#1 track=1 wait=100" "impl-start issue=#2 track=2 wait=300" \
          "impl-start issue=#3 track=1 wait=200" "verify-start issue=#1 pr=#40 wait=10" \
          "verify-start issue=#2 pr=#41 wait=50" "verify-end issue=#1 pr=#40 outcome=merged" \
-         "verify-end issue=#2 pr=#41 outcome=conflict files=AGENTS.md,web/src/api.ts" \
+         "verify-end issue=#2 pr=#41 outcome=conflict files=AGENTS.md,crates/app/src/text.rs" \
          "verify-end issue=#3 pr=#42 outcome=rebase-ci" \
-         "verify-end issue=#5 pr=#44 outcome=conflict files=agent/main.go,AGENTS.md" \
-         "verify-end issue=#4 pr=#43 outcome=review"; do
+         "verify-end issue=#5 pr=#44 outcome=conflict files=crates/app/src/main.rs,AGENTS.md" \
+         "verify-end issue=#4 pr=#43 outcome=review" "handover issue=#6 code=conflict" \
+         "handover issue=#7 code=push-rejected" "handover issue=#8 code=conflict" "handover issue=#9"; do
   jq --arg b "<!-- factory-event -->
 event=$l run=1" '. + [{id: (length + 1), created_at: "2026-11-17T01:00:00Z", body: $b}]' \
     "$FAKE_GH/comments-900.json" 2>/dev/null | tr -d '\r' > "$FAKE_GH/c.new" || true
@@ -397,10 +398,14 @@ eq "stats" "verify: 5 runs, conflict send-backs 3 (ratio 60%)
 implementer wait, track 1: n=2 mean=150s max=200s
 implementer wait, track 2: n=1 mean=300s max=300s
 verify wait: n=2 mean=30s max=50s
+hand-overs per code: 4 in all
+  2 conflict
+  1 other
+  1 push-rejected
 conflicts per file:
   2 AGENTS.md
-  1 agent/main.go
-  1 web/src/api.ts" "$stats"
+  1 crates/app/src/main.rs
+  1 crates/app/src/text.rs" "$stats"
 eq "sums untouched" 5.0000 "$(bash "$ledger" spec-total 1 | tr -d '\r')"
 
 setup "stats: no conflicting files"
@@ -409,6 +414,7 @@ jq -n '[{id: 1, created_at: "2026-11-17T01:00:00Z",
   body: "<!-- factory-event -->\nevent=verify-end issue=#1 pr=#40 outcome=merged run=1"}]' \
   | tr -d '\r' > "$FAKE_GH/comments-900.json"
 eq "none" "conflicts per file: none" "$(bash "$ledger" stats | tr -d '\r' | tail -n 1)"
+eq "no hand-overs" "hand-overs per code: none" "$(bash "$ledger" stats | tr -d '\r' | grep '^hand-overs')"
 
 echo "ledger: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]

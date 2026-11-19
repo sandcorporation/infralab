@@ -320,7 +320,7 @@ eq "bot pull_request run deleted (#270)" "" "$(runs_left)"
 eq "labels" ready-for-agent "$(labels_of 7)"
 eq "the ticket goes first into a track (#286)" "--first 7" "$(cat "$tmp/next-args")"
 lacks "no direct dispatch" "factory-implementer.yml" "$(calls)"
-eq "no human marker" 0 "$(count_marker 7 '<!-- factory-human -->')"
+eq "no human marker" 0 "$(count_marker 7 '<!-- factory-human ')"
 
 setup second-sendback
 jq -n '[{id: 1, created_at: "2026-11-17T01:00:00Z", body: "<!-- factory-sendback -->\nVerify가 PR #39을 되돌렸다.\n\n앞 사유"}]' \
@@ -328,7 +328,7 @@ jq -n '[{id: 1, created_at: "2026-11-17T01:00:00Z", body: "<!-- factory-sendback
 bash "$verify" sendback 7 40 "$tmp/reason.md" > /dev/null
 eq "exit" 0 "$?"
 eq "sendback comments" 2 "$(count_marker 7 '<!-- factory-sendback')"
-eq "human marker" 1 "$(count_marker 7 '<!-- factory-human -->')"
+eq "human marker" 1 "$(count_marker 7 '<!-- factory-human acceptance-unpassable -->')"
 eq "labels" ready-for-human "$(labels_of 7)"
 lacks "implementer not dispatched" "factory-implementer.yml" "$(calls)"
 eq "next ticket" yes "$(next_dispatched)"
@@ -368,7 +368,7 @@ jq '. + [{id: 9, created_at: "2026-11-17T02:00:00Z", body: "<!-- factory-reset -
   "$FAKE_GH/comments-7.json" | tr -d '\r' > "$FAKE_GH/c.json" && mv "$FAKE_GH/c.json" "$FAKE_GH/comments-7.json"
 bash "$verify" sendback 7 40 "$tmp/reason.md" acceptance > /dev/null
 eq "one acceptance failure after the reset" ready-for-agent "$(labels_of 7)"
-eq "no human marker after the reset (#192)" 0 "$(count_marker 7 '<!-- factory-human -->')"
+eq "no human marker after the reset (#192)" 0 "$(count_marker 7 '<!-- factory-human ')"
 
 setup conflict-sendback-keeps-the-pr
 checked_pr
@@ -398,13 +398,13 @@ setup two-conflicts-stay-with-the-factory
 prior conflict
 bash "$verify" sendback 7 40 "$tmp/reason.md" conflict > /dev/null
 eq "labels" ready-for-agent "$(labels_of 7)"
-eq "no human marker" 0 "$(count_marker 7 '<!-- factory-human -->')"
+eq "no human marker" 0 "$(count_marker 7 '<!-- factory-human ')"
 
 setup three-conflicts-go-to-a-human
 prior conflict acceptance conflict
 bash "$verify" sendback 7 40 "$tmp/reason.md" conflict > /dev/null
 eq "labels" ready-for-human "$(labels_of 7)"
-eq "human marker" 1 "$(count_marker 7 '<!-- factory-human -->')"
+eq "human marker" 1 "$(count_marker 7 '<!-- factory-human conflict -->')"
 has "names the conflict limit" "사람 넘김 한도: main과의 충돌 3번" "$(last_body)"
 eq "PR stays open" open "$(state_of pull-40)"
 

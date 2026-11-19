@@ -269,7 +269,7 @@ jobs:
         env:
           MODE: ${{ steps.guard.outputs.mode }}
         run: |
-          # Comments the agent leaves from here on are this run's (record-failure.sh nocommit, #212).
+          # Comments the agent leaves from here on are this run's (record-failure.sh's run start, #212, #238).
           echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           git config user.name "sandcorp-factory[bot]"
           git config user.email "358343752+sandcorp-factory[bot]@users.noreply.github.com"
@@ -403,7 +403,7 @@ jobs:
 
       # No commits means nothing to check: fail here instead of after the checks. An agent that stopped
       # with a comment on the ticket (implementer.md §4: a wrong acceptance test, a missing decision) goes
-      # to a person at once; otherwise it counts as an infrastructure failure (record-failure.sh nocommit).
+      # to a person at once; otherwise it counts as an infrastructure failure (record-failure.sh with the run start).
       - name: Require commits
         id: commits
         if: steps.guard.outputs.go == 'true'
@@ -555,10 +555,13 @@ jobs:
       - name: Record failure
         if: failure() && steps.guard.outputs.go == 'true'
         run: |
+          # record-failure.sh (facet kit, #238): a run without commits passes its start time as the
+          # fourth argument, so a comment the agent left since then hands the ticket over at once.
+          started=
           if [ "${{ steps.checks.outcome }}" = failure ]; then what=code
-          elif [ "${{ steps.commits.outcome }}" = failure ]; then what=nocommit
+          elif [ "${{ steps.commits.outcome }}" = failure ]; then what=infra started=${RUN_STARTED_AT:-}
           else what=infra; fi
-          bash .github/factory/record-failure.sh "$N" "$what" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          bash .github/factory/record-failure.sh "$N" "$what" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" ${started:+"$started"}
 
       # Refill the tracks: this run's track is free once it ends (dispatch-next.sh does not
       # count the run calling it), so the next ticket waits in the track's group for this run only.

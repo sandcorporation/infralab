@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cost ledger, budgets and the stage guard of the software factory (docs/adr/0001-software-factory.md,
-# ADR-0001 "비용 장부와 상한").
+# spec #249 "비용 장부와 상한").
 #
 # The ledger is the one open issue labelled `factory-ledger`. Every Claude stage adds one comment:
 #
@@ -9,14 +9,13 @@
 #
 #   ledger.sh record <node> <issue> [key=value …]
 #                                     read the action's execution file and comment its cost, turns and
-#                                     tokens on the ledger, then the given pairs (Decompose: tickets=N, the
-#                                     spec's sub-issues, so turns per ticket compare across runs, #185).
+#                                     tokens on the ledger, creating the ledger issue when there is none.
 #                                     Never fails the workflow: a missing file, ledger issue or jq only warns.
 #   ledger.sh spec-total <S>          sum of the ledger comments with spec=#S, in USD
 #   ledger.sh day-total [YYYY-MM-DD]  sum of the ledger comments created on that KST date (default: today)
-#   ledger.sh spec-of <issue>         the spec of an issue: the issue itself when it has the `spec` label,
-#                                     else its GitHub sub-issue parent, else the first #number in its
-#                                     "## Parent" section, or the issue itself when it has none
+#   ledger.sh spec-of <issue>         the spec of an issue: itself when it has the spec label, else its GitHub
+#                                     sub-issue parent, else the first
+#                                     #number in its "## Parent" section, or the issue itself when it has none
 #   ledger.sh parent-of <issue>       the same without the fallback: empty when the issue has no parent
 #   ledger.sh guard <issue>           decide whether a stage may start for <issue>. Writes go=true|false and
 #                                     reason=<why> to $GITHUB_OUTPUT (stdout when unset). Stops when the spec
@@ -24,7 +23,7 @@
 #                                     daily budget, or the spec's total reached its budget. A budget stop leaves
 #                                     its marker comment once (and labels the spec `factory-paused`).
 #   ledger.sh event <kind> <issue> [key=value …]
-#                                     a measurement comment, never failing:
+#                                     a measurement comment (#286), never failing:
 #                                       <!-- factory-event -->
 #                                       event=<kind> issue=#N [key=value …] [wait=<seconds>] run=<run id>
 #                                     impl-start (Implementer claimed the ticket; key track=T; wait since
@@ -32,14 +31,16 @@
 #                                     Verify; track=T), verify-start (pr=#P; wait since the last impl-end
 #                                     of the ticket), verify-end (pr=#P outcome=merged|mech|conflict|
 #                                     rebase-ci|push|review|merge-failed|cancelled|stopped, and on a
-#                                     conflict files=a,b: the files that conflicted with main).
+#                                     conflict files=a,b: the files that conflicted with main, #307).
 #                                     impl-start also has mode=conflict when the run only resolves
-#                                     conflicts on the open PR. Not a cost: the sums
+#                                     conflicts on the open PR (#307). handover (code=C: hand-to-human.sh,
+#                                     #437). Not a cost: the sums
 #                                     read only `<!-- ledger -->` comments.
 #   ledger.sh stats                   verify runs and the share sent back for a conflict (outcome
 #                                     conflict, rebase-ci or push), the Implementer wait per track,
 #                                     the Verify wait (count, mean, max) and the conflicts with main
-#                                     per file, most first (verify-end files=), from the event
+#                                     per file, most first (verify-end files=, #307) and the hand-overs
+#                                     to a person per code (handover code=, #437), from the event
 #                                     comments
 #
 # Environment:
@@ -59,7 +60,7 @@ SPEC_BUDGET_DEFAULT=60
 DAILY_BUDGET_DEFAULT=150
 KST=32400 # seconds east of UTC
 
-# Strip any CR jq prints (CRLF output on some platforms).
+# jq on Windows prints CRLF; strip the CR everywhere.
 j() { jq "$@" | tr -d '\r'; }
 
 warn() { echo "::warning::ledger: $*"; }
@@ -81,9 +82,7 @@ ensure_ledger() {
   local n; n=$(ledger_issue)
   if [ -z "$n" ]; then
     warn "no open factory-ledger issue; creating one" >&2
-    n=$(gh api "repos/$REPO/issues" -f title="공장 비용 장부" -f 'labels[]=factory-ledger' \
-      -f body="소프트웨어 공장의 비용 장부. 이 이슈를 닫지 않는다 (docs/adr/0001-software-factory.md)." \
-      2>/dev/null | j -r '.number // empty' 2>/dev/null)
+    n=$(gh api "repos/$REPO/issues" -f title="공장 비용 장부" -f 'labels[]=factory-ledger'       -f body="소프트웨어 공장의 비용 장부. 이 이슈를 닫지 않는다 (docs/adr/0001-software-factory.md)."       2>/dev/null | j -r '.number // empty' 2>/dev/null)
   fi
   echo "$n"
 }
@@ -139,8 +138,8 @@ parent_of() {
 }
 
 # The spec of an issue: the issue itself when it has the `spec` label (a spec may have a "## Parent"
-# umbrella of its own, #203), else its parent, else the issue itself. One issue read serves the label
-# and the "## Parent" section.
+# umbrella of its own), else its parent, else the issue itself. One issue read serves the label and
+# the "## Parent" section.
 spec_of() {
   local json p
   json=$(issue_json "$1" 2>/dev/null) || json=
@@ -170,7 +169,8 @@ has_marker() {
     | grep -q yes
 }
 
-# The body goes as a raw field, not `-F body=@file` (the file may be gone by the time gh reads it).
+# The body goes as a raw field, not `-F body=@file`: on the Windows runner gh is a Windows program
+# and would not find a Git Bash /tmp path.
 post_comment() { gh api "repos/$REPO/issues/$1/comments" -f "body=$2" >/dev/null; }
 
 add_label() { gh api "repos/$REPO/issues/$1/labels" -f "labels[]=$2" >/dev/null; }
@@ -180,10 +180,9 @@ output() {
 }
 
 record() {
-  local node=$1 issue=$2 extra
+  local node=$1 issue=$2 extra=
   shift 2
-  extra=$(printf ' %s' "$@") # key=value pairs appended to the line (decompose: tickets=N, #185)
-  [ $# -gt 0 ] || extra=
+  [ $# -eq 0 ] || extra=$(printf ' %s' "$@") # key=value pairs appended to the line (decompose: tickets=N)
   local exec="${RUNNER_TEMP:-/tmp}/claude-execution-output.json"
   if [ ! -f "$exec" ]; then warn "no execution file for $node #$issue; nothing recorded"; return 0; fi
   if ! command -v jq >/dev/null 2>&1; then warn "jq is missing; $node #$issue not recorded"; return 0; fi
@@ -265,7 +264,7 @@ budget=$budget
 # Seconds of an ISO 8601 time.
 secs() { j -rn --arg t "$1" '$t | fromdateiso8601'; }
 
-# event <kind> <issue> [key=value …]: one measurement comment on the ledger. Never fails.
+# event <kind> <issue> [key=value …]: one measurement comment on the ledger (#286). Never fails.
 event() {
   local kind=$1 issue=$2; shift 2
   command -v jq >/dev/null 2>&1 || { warn "jq is missing; event $kind #$issue not recorded"; return 0; }
@@ -299,11 +298,12 @@ $line"; then
   return 0
 }
 
-# stats: the measurements of the event comments.
+# stats: the measurements of the event comments (#286).
 #   verify runs, of them sent back for a conflict (outcome conflict, rebase-ci or push), and the ratio
 #   the wait from `ready-for-agent` to the Implementer's start, per track: count, mean, max (seconds)
 #   the wait from the hand-over to Verify's start: count, mean, max (seconds)
-#   the files of the verify-end events (files=a,b: conflicts with main) per file, most first
+#   the files of the verify-end events (files=a,b: conflicts with main) per file, most first (#307)
+#   the hand-overs to a person (event=handover code=…, left by hand-to-human.sh) per code, most first (#437)
 stats() {
   local n; n=$(ledger_issue)
   [ -n "$n" ] || { echo "no open factory-ledger issue" >&2; return 1; }
@@ -320,6 +320,10 @@ stats() {
       ([$e[] | select(.event == "impl-start")] | group_by(.track // "1")[]
         | "implementer wait, track \(.[0].track // "1"): \(waits | summary)"),
       "verify wait: \([$e[] | select(.event == "verify-start")] | waits | summary)",
+      ([$e[] | select(.event == "handover") | .code // "other"] | group_by(.)
+        | map({code: .[0], n: length}) | sort_by(-.n, .code)
+        | if length == 0 then "hand-overs per code: none"
+          else "hand-overs per code: \(map(.n) | add) in all", (.[] | "  \(.n) \(.code)") end),
       ([$v[] | .files // empty | split(",")[] | select(. != "")] | group_by(.)
         | map({file: .[0], n: length}) | sort_by(-.n, .file)
         | if length == 0 then "conflicts per file: none"

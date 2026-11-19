@@ -243,7 +243,7 @@ printf '### scripts/ci.sh all 실패\nerror: unused variable\n' > "$tmp/reason.m
 bash "$odin" human 50 70 "$tmp/reason.md" > /dev/null 2>&1
 eq "exit" 0 "$?"
 eq "spec to a human" "ready-for-human,spec" "$(labels_of 50)"
-has "human marker" "<!-- factory-human -->" "$(spec_comments)"
+has "human marker" "<!-- factory-human spec-merge-failed -->" "$(spec_comments)"
 has "reason on the spec" "error: unused variable" "$(spec_comments)"
 has "reason on the PR" "error: unused variable" "$(pr_comments)"
 eq "not merged" false "$(merged)"
