@@ -73,6 +73,8 @@ release() {
   bash scripts/check_image_pins_test.sh
   bash scripts/check_workstation_env_test.sh
   bash scripts/retry_test.sh
+  # 조율자 질문 묶기(#248): deferred spec 의 Open Questions 를 대장에게 올리지 않는 문.
+  bash scripts/oq-bundle_test.sh
   # 병합 장치(#164): CI 초록일 때만 병합하는 스크립트(로컬 작업자·공장 공용, #172).
   bash scripts/pr-merge_test.sh
   # 필수 검사 목록 드리프트(#183): ci.yml 잡 == pr-merge.sh REQUIRED. ruleset 쪽은 release.yml ruleset 잡.
