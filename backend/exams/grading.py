@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import urllib.request
 from dataclasses import dataclass, field
@@ -16,7 +17,9 @@ from typing import TYPE_CHECKING, Protocol
 from django.conf import settings
 
 if TYPE_CHECKING:
-    from .models import AIExchange
+    from submissions.models import Submission
+
+    from .models import AIExchange, ExamInvite
 
 #: 루브릭 항목 — 이 순서로 보인다.
 RUBRIC_KEYS = ("decomposition", "instruction_clarity", "verification", "risky_command_guard")
@@ -141,6 +144,41 @@ class FakeGrader:
         return items
 
 
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Usage:
+    """Anthropic 응답의 `usage` 한 번 — 모델과 토큰 수만(본문 없음)."""
+
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+
+
+def _tokens(usage: dict[str, object], key: str) -> int:
+    value = usage.get(key)
+    return value if isinstance(value, int) and value >= 0 else 0
+
+
+def usage_from_response(data: dict[str, object], fallback_model: str) -> Usage | None:
+    """Messages API 응답에서 사용량을 꺼낸다. `usage` 가 없으면 None."""
+
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    model = data.get("model")
+    return Usage(
+        model=model if isinstance(model, str) and model else fallback_model,
+        input_tokens=_tokens(usage, "input_tokens"),
+        output_tokens=_tokens(usage, "output_tokens"),
+        cache_read_input_tokens=_tokens(usage, "cache_read_input_tokens"),
+        cache_creation_input_tokens=_tokens(usage, "cache_creation_input_tokens"),
+    )
+
+
 GRADER_MODEL = "claude-sonnet-5-5"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 _PROMPT = """너는 인프라 실습 시험의 채점관이다. 아래는 지원자가 AI 도구와 나눈 대화 기록이다.
@@ -169,6 +207,8 @@ class AnthropicGrader:
     def __init__(self, api_key: str, model: str = GRADER_MODEL):
         self.api_key = api_key
         self.model = model
+        #: 마지막 호출의 사용량 — 부른 쪽이 `record_usage` 로 남긴다. 응답에 usage 가 없으면 None.
+        self.last_usage: Usage | None = None
 
     def _ask(self, prompt: str) -> str:
         body = json.dumps(
@@ -180,8 +220,10 @@ class AnthropicGrader:
             method="POST",
             headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
         )
+        self.last_usage = None
         with urllib.request.urlopen(req, timeout=120) as res:  # noqa: S310 — 고정 https 주소
             data = json.loads(res.read())
+        self.last_usage = usage_from_response(data, self.model)
         return "".join(part.get("text", "") for part in data.get("content", []) if part.get("type") == "text")
 
     def grade(self, exchanges: list[AIExchange]) -> list[RubricItem]:
@@ -203,6 +245,41 @@ class AnthropicGrader:
             quotes = [q for q in quotes if q and any(q in s for s in sources)][:MAX_EVIDENCE]
             items.append(RubricItem(key=key, score=_clamp(raw.get("score")), evidence=quotes))
         return items
+
+
+def record_usage(
+    grader: Grader,
+    purpose: str,
+    *,
+    invite: ExamInvite | None = None,
+    submission: Submission | None = None,
+) -> None:
+    """채점기의 마지막 호출 사용량을 `LLMUsage` 행 하나로 쌓는다. 사용량이 없으면(가짜 채점기) 아무것도 안 한다.
+
+    저장이 실패해도 채점·피드백은 계속된다 — 예외를 삼키고 로그만 남긴다. 바깥 트랜잭션이 깨지지 않게 저장점 안에서 쓴다.
+    """
+
+    usage = getattr(grader, "last_usage", None)
+    if not isinstance(usage, Usage):
+        return
+    from django.db import transaction
+
+    from .models import LLMUsage
+
+    try:
+        with transaction.atomic():
+            LLMUsage.objects.create(
+                purpose=purpose,
+                model=usage.model,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                cache_read_input_tokens=usage.cache_read_input_tokens,
+                cache_creation_input_tokens=usage.cache_creation_input_tokens,
+                invite=invite,
+                submission=submission,
+            )
+    except Exception:  # 원가 기록 실패가 채점을 막지 않는다
+        logger.exception("LLM 사용량 저장 실패(purpose=%s)", purpose)
 
 
 def get_grader() -> Grader:
