@@ -189,6 +189,12 @@ run
 eq code 0 "$(code)"
 eq sends 0 "$(sent_count)"
 
+setup "a deferred issue is not mailed as ready-for-human (#238)"
+issue 314 open ready-for-human,deferred "e"; labeled 314 ready-for-human 2026-11-18T01:00:00Z
+run
+eq code 0 "$(code)"
+eq sends 0 "$(sent_count)"
+
 setup "the reason is the latest trusted factory marker comment, quoted"
 issue 301 open ready-for-human "티켓 하나"
 labeled 301 ready-for-human 2026-11-18T01:00:00Z

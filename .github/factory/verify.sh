@@ -192,16 +192,16 @@ run_link() { [ -n "${RUN_URL:-}" ] && printf ' (%s)' "$RUN_URL"; }
 # --- sendback ------------------------------------------------------------------------------------
 
 sendback() {
-  local n=$1 pr=$2 file=$3 kind=${4:-acceptance} reason branch count limit what next
+  local n=$1 pr=$2 file=$3 kind=${4:-acceptance} reason branch count limit what next code
   case "$kind" in acceptance | conflict) ;; *) usage ;; esac
   reason=$(cat "$file" 2>/dev/null)
   [ -n "$reason" ] || reason="(사유가 남지 않았다)"
 
   if [ "$kind" = conflict ]; then
-    limit=$CONFLICT_LIMIT what="main과의 충돌"
+    limit=$CONFLICT_LIMIT what="main과의 충돌" code=conflict
     next="PR #$pr과 그 브랜치는 그대로 둔다. Implementer가 다시 구현하지 않고 그 브랜치에 main을 merge해 충돌만 푼다."
   else
-    limit=$ACCEPTANCE_LIMIT what="인수 실패"
+    limit=$ACCEPTANCE_LIMIT what="인수 실패" code=acceptance-unpassable
     next="PR #$pr을 닫았다. Implementer가 오늘의 main에서 다시 구현한다."
   fi
   comment "$n" "$SENDBACK kind=$kind pr=$pr -->
@@ -220,7 +220,7 @@ $reason"
 
   count=$(sendback_count "$n" "$kind")
   if [ "${count:-0}" -ge "$limit" ]; then
-    bash "$here/hand-to-human.sh" "$n" "Verify가 이 티켓을 ${what}로 ${count}번 되돌렸다(사람 넘김 한도: ${what} ${limit}번). 공장은 더 돌리지 않는다: 사람이 위 되돌림 사유를 보고 티켓이나 인수 시험을 고치거나 충돌을 푼 뒤 \`ready-for-human\`을 떼고 \`ready-for-agent\`를 붙이며 \`<!-- factory-reset -->\` 댓글을 남긴다." \
+    bash "$here/hand-to-human.sh" "$n" "$code" "Verify가 이 티켓을 ${what}로 ${count}번 되돌렸다(사람 넘김 한도: ${what} ${limit}번). 공장은 더 돌리지 않는다: 사람이 위 되돌림 사유를 보고 티켓이나 인수 시험을 고치거나 충돌을 푼 뒤 \`ready-for-human\`을 떼고 \`ready-for-agent\`를 붙이며 \`<!-- factory-reset -->\` 댓글을 남긴다." \
       || echo "::warning::could not hand #$n to a human"
     echo "#$n: $kind send-back $count of $limit, handed to a human"
     next_ticket

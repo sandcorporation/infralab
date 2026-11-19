@@ -39,10 +39,17 @@ bash "$script" 80 > /dev/null 2>&1; eq "exit" 0 $?
 eq "local" true "$(res)"
 eq "labels" "local,model:sonnet,ready-for-human" "$(labels 80)"
 eq "one comment" 1 "$(ncomments 80)"
-eq "marker" "<!-- factory-human -->|<!-- factory-local -->" "$(jq -r '.[0].body | split("\n")[0:2] | join("|")' "$FAKE_GH/comments-80.json")"
+eq "marker" "<!-- factory-human workflow-change -->|<!-- factory-local -->" "$(jq -r '.[0].body | split("\n")[0:2] | join("|")' "$FAKE_GH/comments-80.json")"
 bash "$script" 80 > /dev/null 2>&1
 eq "again: no second comment" 1 "$(ncomments 80)"
 eq "again: labels the same" "local,model:sonnet,ready-for-human" "$(labels 80)"
+
+setup "a ticket labelled local without naming a workflow is handed over as local-only (#238)"
+issue 81 ready-for-agent,local "비밀값 넣기" "운영 비밀값을 넣는다."
+bash "$script" 81 > /dev/null 2>&1; eq "exit" 0 $?
+eq "local" true "$(res)"
+eq "labels" "local,ready-for-human" "$(labels 81)"
+eq "marker" "<!-- factory-human local-only -->|<!-- factory-local -->" "$(jq -r '.[0].body | split("\n")[0:2] | join("|")' "$FAKE_GH/comments-81.json")"
 
 setup "an ordinary ticket is left alone"
 issue 81 ready-for-agent "백엔드" "모델을 더한다"

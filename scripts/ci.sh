@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # PR 검사와 같은 검사를 저장소 루트에서 한 명령으로 돈다.
-#   scripts/ci.sh <backend|web|agent|factory|release|e2e|all>
+#   scripts/ci.sh <backend|web|agent|factory|kit|release|e2e|all>
+#   (factory 는 kit 도 돈다: 공장 장치 한 벌이 facet 정본과 같은지)
 # 필요: backend=uv + 접근 가능한 Postgres(POSTGRES_HOST·PORT 등, 기본 127.0.0.1:55440),
 #       web=node+npm, agent=go(agent/·proxy/), factory=bash·jq·git (가짜 gh 로 공장 스크립트 시험),
 #       release=bash·git·jq·python3 (production 승격 스크립트 시험, 로컬 bare 저장소, 병합 장치 시험),
@@ -43,6 +44,24 @@ agent() {
 factory() {
   need jq "공장 스크립트 시험"
   bash .github/factory/test.sh
+  kit
+}
+
+# 공장 장치 한 벌(kit, #238 ← facet#437): .github/factory/kit.txt 의 파일이 정본(farrar142/facet main 의
+# .github/factory, 공개)과 바이트까지 같은지 본다. FACTORY_KIT_CANON 에 정본 디렉터리를 주면 받지 않고 그것과 비교한다.
+kit() {
+  local canon=${FACTORY_KIT_CANON:-} tmp=
+  if [ -z "$canon" ]; then
+    need git "공장 장치 한 벌 검사"
+    tmp=$(mktemp -d)
+    git clone -q --depth 1 --filter=blob:none --sparse https://github.com/farrar142/facet.git "$tmp/facet"
+    git -C "$tmp/facet" sparse-checkout set .github/factory
+    canon="$tmp/facet/.github/factory"
+  fi
+  local rc=0
+  bash .github/factory/kit-check.sh "$canon" || rc=$?
+  [ -z "$tmp" ] || rm -r "$tmp"
+  return "$rc"
 }
 
 release() {
@@ -111,6 +130,7 @@ case "${1:-}" in
   web) web ;;
   agent) agent ;;
   factory) factory ;;
+  kit) kit ;;
   release) release ;;
   e2e) e2e "$@" ;;
   all) backend; web; agent; factory; release ;;

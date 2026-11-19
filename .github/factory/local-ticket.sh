@@ -43,10 +43,20 @@ case "$labels" in *,local,*) ;; *)
   gh api "repos/$REPO/issues/$n/labels" -f "labels[]=local" > /dev/null \
     || echo "::warning::local-ticket: could not add local to #$n" ;;
 esac
-# hand-to-human.sh takes ready-for-agent off and leaves the marker; once.
+# hand-to-human.sh takes ready-for-agent off and leaves the marker; once. The code says why (#238,
+# facet#437): a ticket that names `.github/workflows/` or `.claude/` cannot be done by the factory
+# (workflow-change); one that is only labelled `local` needs a person's decision, secret or machine
+# (local-only).
 case "$labels" in *,ready-for-human,*) ;; *)
-  bash "$here/hand-to-human.sh" "$n" '<!-- factory-local -->
-workflow·`.claude/` 파일 — 로컬 작업자 몫. 이 티켓은 `.github/workflows/` 나 `.claude/` 를 건드린다: 공장의 push 토큰(App)에는 workflows 권한이 없고, 공장 에이전트(Claude Code)는 `.claude/` 아래 파일을 고치지 못한다(민감 파일 거부, #166). `local` 로 공장 밖에 두고 사람(로컬 작업자)에게 넘긴다.' > /dev/null \
+  if [ "$mentions" = true ]; then
+    code=workflow-change
+    why='workflow·`.claude/` 파일 — 로컬 작업자 몫. 이 티켓은 `.github/workflows/` 나 `.claude/` 를 건드린다: 공장의 push 토큰(App)에는 workflows 권한이 없고, 공장 에이전트(Claude Code)는 `.claude/` 아래 파일을 고치지 못한다(민감 파일 거부, #166). `local` 로 공장 밖에 두고 사람(로컬 작업자)에게 넘긴다.'
+  else
+    code=local-only
+    why='사람 몫 — 사람의 결정·비밀값·사람 기계가 필요한 티켓. `local` 로 공장 밖에 두고 사람에게 넘긴다.'
+  fi
+  bash "$here/hand-to-human.sh" "$n" "$code" "<!-- factory-local -->
+$why" > /dev/null \
     || echo "::warning::local-ticket: could not hand #$n to a human" ;;
 esac
 output local=true

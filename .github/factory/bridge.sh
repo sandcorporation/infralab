@@ -22,7 +22,9 @@
 #    again is a new mail. The label itself is trusted (only someone with write access can put it on).
 #    The reason in the mail is the issue's latest `<!-- factory-… -->` marker comment by a trusted
 #    author (below), quoted; without one the mail says 「까닭 댓글 없음」 and is sent anyway.
-#    needs-triage, needs-info and `local` alone are not mailed.
+#    needs-triage, needs-info and `local` alone are not mailed. An issue a person deferred (label
+#    `deferred`, #238 from facet#437) waits for nobody: it is not mailed as ready-for-human even when
+#    that label was left on.
 #
 # 2. Marker comments that have no label of their own:
 #
@@ -225,6 +227,7 @@ for label in needs-decision human-check ready-for-human factory-paused; do
   numbers=$(printf '%s' "$list" | j -s -r --arg l "$label" 'add // [] | .[]
     | select(.state == "open" and any(.labels[]; .name == $l))
     | select($l != "human-check" or ((.body // "") | test("(^|\n)[ \t]*[-*+] \\[ \\]")))
+    | select($l != "ready-for-human" or (any(.labels[]; .name == "deferred") | not))
     | .number')
   case $label in
     needs-decision) recipients=$TO_BOSS ;;

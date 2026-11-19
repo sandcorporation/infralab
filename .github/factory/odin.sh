@@ -154,7 +154,7 @@ human() {
 Odin$(run_link): 병합하지 않음
 
 $reason" || echo "::warning::could not comment on PR #$pr"
-  bash "$here/hand-to-human.sh" "$s" "Odin이 스펙 PR #$pr을 병합하지 못했다$(run_link). 공장은 이 spec을 더 돌리지 않는다: 사람이 아래 까닭을 보고 스펙 PR을 고친 뒤 \`ready-for-human\`을 떼고 Odin을 다시 돌린다(\`factory-odin.yml\`, 입력 spec=$s).
+  bash "$here/hand-to-human.sh" "$s" spec-merge-failed "Odin이 스펙 PR #$pr을 병합하지 못했다$(run_link). 공장은 이 spec을 더 돌리지 않는다: 사람이 아래 까닭을 보고 스펙 PR을 고친 뒤 \`ready-for-human\`을 떼고 Odin을 다시 돌린다(\`factory-odin.yml\`, 입력 spec=$s).
 
 $reason" || echo "::warning::could not hand #$s to a human"
 }

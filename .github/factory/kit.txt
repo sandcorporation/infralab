@@ -1,0 +1,25 @@
+# 공장 장치 한 벌(#437): 이 장치를 복사해 쓰는 저장소는 아래 파일을 정본과 바이트까지 같게 둔다.
+# 경로는 .github/factory/ 기준이다. 저장소마다 다른 값은 파일을 고치지 않고 환경 변수로 준다
+# (REPO, GH_TOKEN, FACTORY_REPO, BRIDGE_TO_BOSS, BRIDGE_TO_COORD, BRIDGE_CC, SWITCHBOARD_PROFILE,
+# BRIDGE_STATE_DIR, FACTORY_SPEC_QUEUE, PROBE_LOG; 기준 브랜치는 acceptance-probe.sh의 인자).
+# 고칠 때는 정본에서 고치고 복사해 쓰는 저장소로 옮긴 뒤 kit-check.sh <정본 .github/factory>로 맞춘다.
+hand-to-human.sh
+record-failure.sh
+acceptance-probe.sh
+bridge.sh
+merge-check.sh
+workflow-guard.sh
+ledger.sh
+kit-check.sh
+kit.txt
+tests/hand-to-human.sh
+tests/record-failure.sh
+tests/acceptance-probe.sh
+tests/bridge.sh
+tests/merge-check.sh
+tests/workflow-guard.sh
+tests/ledger.sh
+tests/kit-check.sh
+tests/fake/gh
+tests/fake/switchboard
+tests/fake/cargo

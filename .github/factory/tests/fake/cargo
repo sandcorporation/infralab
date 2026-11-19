@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fake cargo for the factory script tests (#414): records its arguments in $FAKE_CARGO_LOG and
+# prints $FAKE_CARGO_OUT (a file with canned `cargo test` output), exiting with $FAKE_CARGO_EXIT.
+echo "$*" >> "${FAKE_CARGO_LOG:-/dev/null}"
+cat "$FAKE_CARGO_OUT"
+exit "${FAKE_CARGO_EXIT:-101}"
