@@ -41,11 +41,13 @@ issue() {
     | tr -d '\r' > "$FAKE_GH/issue-$1.json"
 }
 
-# labeled <n> <label> <time>: a `labeled` event in the issue's timeline
+# labeled <n> <label> <time> [actor login, default github-actions[bot]]: a `labeled` event in the
+# issue's timeline
 labeled() {
   local f="$FAKE_GH/timeline-$1.json"
   [ -f "$f" ] || echo '[]' > "$f"
-  jq --arg l "$2" --arg t "$3" '. + [{event: "labeled", created_at: $t, label: {name: $l}}]' "$f" \
+  jq --arg l "$2" --arg t "$3" --arg a "${4:-github-actions[bot]}" \
+    '. + [{event: "labeled", created_at: $t, label: {name: $l}, actor: {login: $a}}]' "$f" \
     | tr -d '\r' > "$f.new" && mv "$f.new" "$f"
 }
 
@@ -328,6 +330,33 @@ run
 eq sends 1 "$(sent_count)"
 has body "까닭 댓글 없음" "$(arg 0 --body)"
 
+setup "factory-paused and ready-for-human put on by a person are not mailed; by a bot they are (#502)"
+issue 250 open spec,factory-paused "검색"
+labeled 250 factory-paused 2026-11-19T03:41:28Z someone
+issue 301 open ready-for-human "손으로 맡은 티켓"
+labeled 301 ready-for-human 2026-11-19T03:51:30Z someone
+issue 302 open ready-for-human "앱 봇이 넘긴 티켓"
+labeled 302 ready-for-human 2026-11-19T04:00:00Z test-bot[bot]
+issue 249 open spec,needs-decision "공장 개선"
+labeled 249 needs-decision 2026-11-19T04:00:00Z someone
+export BRIDGE_TRUSTED_BOTS=test-bot[bot]
+run
+eq code 0 "$(code)"
+eq "the bot's hand-over and the person's question only" "test/boss test/coord" "$(tos)"
+has "the bot's hand-over is #302" "#302" "$(arg 1 --subject)"
+has "status line for the paused spec" "not mailing factory-paused #250: put on by someone" "$(cat "$tmp/log")"
+has "status line for the hand-over" "not mailing ready-for-human #301: put on by someone" "$(cat "$tmp/log")"
+has "remembered" "label 250 factory-paused 2026-11-19T03:41:28Z human" "$(state)"
+run
+eq "not again" 2 "$(sent_count)"
+eq "the status line once" no "$(case "$(cat "$tmp/log")" in *"not mailing"*) echo yes ;; *) echo no ;; esac)"
+unlabel 250 factory-paused
+relabel 250 factory-paused
+labeled 250 factory-paused 2026-11-19T05:00:00Z
+run
+eq "put on again by the factory: mailed" 3 "$(sent_count)"
+has "spec stop" "spec 상한 멈춤: #250" "$(arg 2 --subject)"
+
 # --- marker comments -------------------------------------------------------------------------------
 
 markers() {
@@ -365,6 +394,20 @@ eq state "13
 16" "$(state)"
 run
 eq "not again" 4 "$(sent_count)"
+
+setup "a daily budget of 0 is mailed as a stop on purpose, without the midnight sentence (#502)"
+issue 900 open factory-ledger "장부"
+comment 13 900 "<!-- factory-budget-daily 2026-11-19 -->
+하루 상한에 닿아 공장이 멈췄다: 2026-11-19(KST) 합계 \$0 / 상한 \$0. KST 0시가 지나면 예약 실행이 다시 시작한다."
+comment 14 900 "<!-- factory-budget-daily 2026-11-18 -->
+하루 상한에 닿아 공장이 멈췄다: 2026-11-18(KST) 합계 \$150 / 상한 \$150. KST 0시가 지나면 예약 실행이 다시 시작한다."
+run
+eq code 0 "$(code)"
+eq sends 2 "$(sent_count)"
+eq "cap 0 subject" "[facet 공장] 하루 상한 0(멈춤): #900 장부" "$(arg 0 --subject)"
+eq "no midnight for cap 0" no "$(case "$(arg 0 --body)" in *"0시"*) echo yes ;; *) echo no ;; esac)"
+has "what to do for cap 0" "상한 0: 일부러 멈춘 상태다" "$(arg 0 --body)"
+has "a cap above 0 still waits for midnight" "KST 0시가 지나면 공장이 스스로 다시 돈다" "$(arg 1 --body)"
 
 setup "marker comments are copied to every BRIDGE_CC"
 markers

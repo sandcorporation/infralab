@@ -27,6 +27,11 @@
 #    a person deferred (label `deferred`,
 #    #437) waits for nobody: it is not mailed as ready-for-human even when that label was left on.
 #
+#    ready-for-human and factory-paused are mailed only when the last `labeled` event is by
+#    github-actions[bot] or a BRIDGE_TRUSTED_BOTS login (#502). Put on by a person (a coordinator
+#    pausing a spec or taking a ticket by hand) they get one status line and no mail. A daily budget
+#    marker whose cap is $0 is mailed as a stop on purpose, not as "midnight starts it again".
+#
 #    For ready-for-human, factory-paused and human-check the BRIDGE_TO_COORD mail is a processing
 #    order (#437): its 할 일 is four steps (원인 확인 → 고침 → 재발 방지 장치 → 결과 보고) and says not
 #    to wait for another order; BRIDGE_CC gets one line only (kind, issue, title) with the same key
@@ -88,7 +93,8 @@
 #                         (BRIDGE_CC splits on commas, spaces and tabs; empty entries, repeats and
 #                         BRIDGE_TO_COORD itself are dropped)
 #   BRIDGE_TRUSTED_BOTS   bot logins (e.g. example-bot[bot]) whose marker comments are trusted like
-#                         github-actions[bot] without a permission lookup; same separators (optional)
+#                         github-actions[bot] without a permission lookup, and whose ready-for-human /
+#                         factory-paused labels are mailed; same separators (optional)
 #   BRIDGE_HUMAN_CHECK_TO coord (default): human-check goes to BRIDGE_TO_COORD + BRIDGE_CC as a
 #                         processing order; boss: to BRIDGE_TO_BOSS alone, as a plain mail. Covers the
 #                         label and the `<!-- factory-human-check SPEC -->` marker comment
@@ -175,11 +181,15 @@ slug() { printf '%s' "$1" | tr -c 'A-Za-z0-9-' '-'; }
 # $trust ("<login> yes|no" lines, plain bash 3) so an author is asked once per run.
 # Returns 0 trusted, 1 not trusted, 2 the permission could not be read (tried again next run).
 trust=
+# trusted_bot <login>: github-actions[bot] or a BRIDGE_TRUSTED_BOTS login (no permission lookup).
+trusted_bot() {
+  [ "$1" = "github-actions[bot]" ] && return 0
+  [ -n "$1" ] && [ -n "$BOTS" ] && printf '%s\n' "$BOTS" | grep -qxF -- "$1"
+}
 trusted() {
   local login=$1 p v
-  [ "$login" = "github-actions[bot]" ] && return 0
+  trusted_bot "$login" && return 0
   [ -n "$login" ] || return 1
-  [ -n "$BOTS" ] && printf '%s\n' "$BOTS" | grep -qxF -- "$login" && return 0
   v=$(printf '%s\n' "$trust" | sed -n "s/^$login //p" | head -n 1)
   if [ -z "$v" ]; then
     p=$(gh api "repos/$REPO/collaborators/$login/permission") || return 2
@@ -291,6 +301,21 @@ for label in needs-decision ready-for-human factory-paused human-check; do
     at=$(printf '%s' "$tl" | j -s -r --arg l "$label" 'add // [] | map(select(.event == "labeled"
       and (.label.name // "") == $l)) | sort_by(.created_at) | last | .created_at // "unknown"')
     base="label $n $label $at"
+    # ready-for-human and factory-paused are the factory's own hand-over and spec stop (#502): mailed only
+    # when the last `labeled` event was by github-actions[bot] or a BRIDGE_TRUSTED_BOTS login. A person
+    # (a coordinator pausing a spec or taking a ticket by hand) put it on on purpose: one status line, no
+    # mail. Without a labeled event (who put it on is unknown) it is mailed as before.
+    case $label in ready-for-human | factory-paused)
+      by=$(printf '%s' "$tl" | j -s -r --arg l "$label" 'add // [] | map(select(.event == "labeled"
+        and (.label.name // "") == $l)) | sort_by(.created_at) | last | .actor.login // ""')
+      if [ "$at" != unknown ] && ! trusted_bot "$by"; then
+        if ! sent "$base human"; then
+          remember "$base human"
+          echo "bridge: not mailing $label #$n: put on by ${by:-?} at $at, not by the factory"
+        fi
+        continue
+      fi ;;
+    esac
     # Everything sent already (the usual run): skip without reading anything else.
     todo_any=false
     while IFS= read -r to; do
@@ -414,7 +439,14 @@ while IFS=$'\t' read -r id kind n author value; do
   case "$kind" in
     budget-daily)
       label="하루 상한 멈춤"
-      todo="할 일 없음: KST 0시가 지나면 공장이 스스로 다시 돈다." ;;
+      todo="할 일 없음: KST 0시가 지나면 공장이 스스로 다시 돈다."
+      # A daily budget of 0 (`상한 $0` in the ledger comment) is a stop on purpose: midnight does not
+      # start the factory again (#502). The ledger's own midnight sentence is dropped from the quote.
+      if printf '%s' "$body" | grep -qE '상한 \$0(\.0*)?([^0-9.]|$)'; then
+        label="하루 상한 0(멈춤)"
+        todo="상한 0: 일부러 멈춘 상태다. 다시 켜려면 하루 상한(FACTORY_DAILY_BUDGET_USD)을 올린다."
+        body=$(printf '%s\n' "$body" | sed 's/ *KST 0시가 지나면 예약 실행이 다시 시작한다\.//')
+      fi ;;
     queue-empty)
       label="spec 큐 바닥남"
       todo="다음 spec을 FACTORY_SPEC_QUEUE에 넣는다(조율자 몫)." ;;
