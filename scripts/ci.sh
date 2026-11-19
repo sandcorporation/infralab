@@ -49,13 +49,17 @@ factory() {
 
 # 공장 장치 한 벌(kit, #238 ← facet#437): .github/factory/kit.txt 의 파일이 정본(farrar142/facet main 의
 # .github/factory, 공개)과 바이트까지 같은지 본다. FACTORY_KIT_CANON 에 정본 디렉터리를 주면 받지 않고 그것과 비교한다.
+# FACTORY_KIT_REF 는 받을 facet 의 브랜치·태그·커밋(기본 main; 정본 PR 이 병합되기 전 그 커밋과 맞춰 볼 때).
 kit() {
-  local canon=${FACTORY_KIT_CANON:-} tmp=
+  local canon=${FACTORY_KIT_CANON:-} ref=${FACTORY_KIT_REF:-main} tmp=
   if [ -z "$canon" ]; then
     need git "공장 장치 한 벌 검사"
     tmp=$(mktemp -d)
-    git clone -q --depth 1 --filter=blob:none --sparse https://github.com/farrar142/facet.git "$tmp/facet"
+    git init -q "$tmp/facet"
+    git -C "$tmp/facet" remote add origin https://github.com/farrar142/facet.git
     git -C "$tmp/facet" sparse-checkout set .github/factory
+    git -C "$tmp/facet" fetch -q --depth 1 --filter=blob:none origin "$ref"
+    git -C "$tmp/facet" checkout -q FETCH_HEAD
     canon="$tmp/facet/.github/factory"
   fi
   local rc=0

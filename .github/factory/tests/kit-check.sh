@@ -67,5 +67,17 @@ current="usage errors exit 2"
 bash "$factory/kit-check.sh" > /dev/null 2>&1; eq "no argument" 2 $?
 bash "$factory/kit-check.sh" "$root/nowhere" > /dev/null 2>&1; eq "no directory" 2 $?
 
+current="kit.txt names every environment variable the kit reads, and every file it needs (#492)"
+head=$(grep '^#' "$factory/kit.txt")
+for v in $(grep -v '^#' "$factory/kit.txt" | tr -d '\r' | grep -E '\.(sh|py)$' | grep -v '^tests/' | sed "s|^|$factory/|" \
+    | xargs grep -ohE '\$\{?(PROBE|BRIDGE|FACTORY|SWITCHBOARD|FAILURE)_[A-Z_]+' | tr -d '${' | sort -u); do
+  [ "$v" = PROBE_OUT ] && continue # set by acceptance-probe.sh for its pytest plugin, not read from outside
+  has "$v in the header" "$v" "$head"
+done
+for f in probe_pytest.py tests/fake/probe/pytest tests/fake/probe/vitest tests/fake/probe/gotest; do
+  eq "$f listed" 1 "$(grep -cxF "$f" "$factory/kit.txt")"
+done
+has "argument order" "hand-to-human.sh <issue> <code> <reason>" "$head"
+
 echo "kit-check.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]

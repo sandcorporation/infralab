@@ -3,8 +3,9 @@
 #
 #   hand-to-human.sh <issue> <code> <reason>
 #
-# Takes `in-progress` and `ready-for-agent` off the issue (when present), adds `ready-for-human` and
-# leaves one comment: the marker line `<!-- factory-human <code> -->`, then <reason>. The mail bridge
+# Takes `in-progress` and `ready-for-agent` off the issue (when present), leaves one comment, then adds
+# `ready-for-human` (#492: the reason is there before the label): the comment is the marker line
+# `<!-- factory-human <code> -->`, then <reason>. The mail bridge
 # (bridge.sh) mails that marker to the managing session, with the code in the subject and the first
 # line (#437). Every factory path that hands an issue to a person calls this script, and no other
 # factory file adds that label (tests/hand-to-human.sh checks it): a hand-over without the marker
@@ -78,12 +79,14 @@ for l in in-progress ready-for-agent; do
       || echo "::warning::hand-to-human: could not take $l off #$n" ;;
   esac
 done
+# The reason comment first, the label after (#492): the label is what wakes people and the bridge up,
+# and they read the reason from the comment. A failed comment still gets the label (exit 1).
 status=0
-gh api "repos/$REPO/issues/$n/labels" -f "labels[]=$LABEL" > /dev/null \
-  || { echo "::warning::hand-to-human: could not add $LABEL to #$n"; status=1; }
 gh api "repos/$REPO/issues/$n/comments" -f "body=$HUMAN
 $reason" > /dev/null \
   || { echo "::warning::hand-to-human: could not comment on #$n"; status=1; }
+gh api "repos/$REPO/issues/$n/labels" -f "labels[]=$LABEL" > /dev/null \
+  || { echo "::warning::hand-to-human: could not add $LABEL to #$n"; status=1; }
 bash "$here/ledger.sh" event handover "$n" "code=$code" > /dev/null 2>&1 || true
 echo "#$n: handed to a human ($code)"
 exit $status

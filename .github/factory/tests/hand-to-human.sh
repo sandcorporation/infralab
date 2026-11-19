@@ -117,5 +117,10 @@ adders=$(grep -rnE 'ready-for-human' "$github/factory" "$github/workflows" \
 eq "adders" "" "$adders"
 case "$(cat "$github/factory/hand-to-human.sh")" in *'LABEL=ready-for-human'*) ok ;; *) bad "hand-to-human.sh no longer names the label" ;; esac
 
+setup "the reason comment goes on before the label, so whoever sees the label finds the reason (#492)" "in-progress"
+run 7 agent-blocked "까닭"
+order=$(grep -nE 'issues/7/(comments|labels) ' "$FAKE_GH/calls.log" | grep -v DELETE | sed -E 's/^([0-9]+):.*issues\/7\/(comments|labels).*/\2/' | tr '\n' ' ')
+eq "comment then label" "comments labels " "$order"
+
 echo "hand-to-human.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]

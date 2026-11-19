@@ -12,13 +12,17 @@
 #   fail-dispatch       if present, workflow dispatches fail
 #   list-empty          if present, `gh issue list` finds nothing (a lagging search index);
 #   list-empty-once     the same for the next `gh issue list` only
+#   list-stale-<label>  numbers `gh issue list --label <label>` still finds whatever their state (lag)
+#   timeline-<n>.json   the timeline of issue <n> (`…/issues/<n>/timeline`), default []
 #   listed-<n>.json     issue <n> as the lagging search index still sees it: `gh issue list` reads it
-#                       instead of issue-<n>.json (a ticket closed a moment ago still open there, #189)
+#                       instead of issue-<n>.json (a ticket closed a moment ago still open there)
 #   labels-lag          if present, `gh api …/issues?labels=<l>` misses the issues (a label not yet
-#                       showing in the list, #183); …/issues/<n> still reads them
+#                       showing in the list); …/issues/<n> still reads them
+#   blocked-by-<n>.json the issues blocking <n> (`…/issues/<n>/dependencies/blocked_by`), default []:
+#                       a number stands for issue-<m>.json, an object ({number, id}) is given as it is
+#   fail-timeline       if present, `…/issues/<n>/timeline` fails
 #   runs-list.json      runs for `gh run list`; `gh workflow run` adds one (runs-hidden: it does not)
 #   events-<n>.json     the events of issue <n> (`…/issues/<n>/events`), default []
-#   timeline-<n>.json   the timeline of issue <n> (`…/issues/<n>/timeline`), default []
 #   calls.log           every call's arguments, one line each
 # New comments get created_at $FAKE_GH_NOW (default 2026-11-17T03:00:00Z).
 set -u
@@ -80,12 +84,16 @@ case "${1:-}" in
     [ -e "$d/list-empty" ] && files=()
     for i in "${!files[@]}"; do
       stale="$d/listed-${files[$i]##*/issue-}"
-      [ -e "$stale" ] && files[$i]=$stale
+      [ -e "$stale" ] && files[i]=$stale
     done
     if [ ${#files[@]} -eq 0 ]; then list='[]'; else
       list=$(jqf -s --arg l "$label" \
         '[.[] | select(.state == "open" and (has("pull_request") | not)
           and ($l == "" or any(.labels[]; .name == $l))) | {number}]' "${files[@]}")
+    fi
+    if [ -f "$d/list-stale-$label" ]; then
+      list=$(printf '%s' "$list" | jqf -c --rawfile s "$d/list-stale-$label" \
+        '. + ($s | split("\n") | map(select(. != "") | {number: tonumber}))')
     fi
     if [ -n "$expr" ]; then printf '%s' "$list" | jqf -r "$expr"; else printf '%s\n' "$list"; fi
     exit 0 ;;
@@ -182,11 +190,12 @@ field() { # field <name>: value of -f/-F name=value, reading @file
 #                       PUT …/merge marks it merged and closed (fails while fail-merge exists)
 #   DELETE …/issues/<n>/labels/<name> removes the label; PATCH …/issues/<n> sets state or body
 #   DELETE …/git/refs/heads/<b> and POST …/actions/workflows/<f>/dispatches only log
-# Calls of decompose.sh create-tickets (#185):
+# Sub-issues and dependencies (a ticket-making stage):
 #   POST …/issues/<s>/sub_issues -F sub_issue_id=<id>   appends the issue with that id to sub-issues-<s>.json
 #                                                       (fails while fail-sub-issues exists)
-#   GET  …/issues/<n>/dependencies/blocked_by           blocked-by-<n>.json ([{number, id}]), default []
-#   POST …/issues/<n>/dependencies/blocked_by -F issue_id=<id>   appends that issue (fails while fail-blocked-by exists)
+#   GET  …/issues/<n>/dependencies/blocked_by           blocked-by-<n>.json (above), default []
+#   POST …/issues/<n>/dependencies/blocked_by -F issue_id=<id>   appends {number, id} of that issue
+#                                                       (fails while fail-blocked-by exists)
 # An issue's database id is its "id", else 100000 + its number.
 by_id() { # the issue file whose id is $1
   local f
@@ -203,13 +212,20 @@ case "$method $path" in
     f="$d/sub-issues-$s.json"; [ -f "$f" ] || echo '[]' > "$f"
     jqf --slurpfile i "$src" '. + [{number: $i[0].number, state: $i[0].state}]' "$f" > "$f.new" && mv "$f.new" "$f"
     echo '{}'; exit 0 ;;
-  "GET repos/"*/*/issues/*/dependencies/blocked_by | "POST repos/"*/*/issues/*/dependencies/blocked_by)
+  "GET repos/"*/*/issues/*/dependencies/blocked_by)
+    n=${path%/dependencies/blocked_by}; n=${n##*/}
+    f="$d/blocked-by-$n.json"
+    [ -f "$f" ] || { echo '[]'; exit 0; }
+    jqf -c '.[]' "$f" | while read -r m; do
+      case "$m" in "{"*) printf '%s\n' "$m" ;; *) cat "$d/issue-$m.json" ;; esac
+    done | jqf -s .
+    exit 0 ;;
+  "POST repos/"*/*/issues/*/dependencies/blocked_by)
     n=${path%/dependencies/blocked_by}; n=${n##*/}
     [ -f "$d/issue-$n.json" ] || fail "no issue #$n"
-    f="$d/blocked-by-$n.json"; [ -f "$f" ] || echo '[]' > "$f"
-    if [ "$method" = GET ]; then cat "$f"; exit 0; fi
     [ -e "$d/fail-blocked-by" ] && fail "dependencies are broken"
     src=$(by_id "$(field issue_id)") || fail "no issue with id $(field issue_id)"
+    f="$d/blocked-by-$n.json"; [ -f "$f" ] || echo '[]' > "$f"
     jqf --slurpfile i "$src" '. + [{number: $i[0].number, id: ($i[0].id // (100000 + $i[0].number))}]' "$f" \
       > "$f.new" && mv "$f.new" "$f"
     echo '{}'; exit 0 ;;
@@ -236,7 +252,7 @@ case "$method $path" in
     cat "$f"; exit 0 ;;
   "DELETE repos/"*/*/git/refs/heads/*) echo '{}'; exit 0 ;;
   # prune-runs.sh: runs.json ([{id, event, head_branch, triggering_actor: {login}, jobs, cancelled}],
-  # default []; optional head_sha, status, conclusion). GET …/workflows/<f>/runs filters by the
+  # default []; bench-gate.sh adds head_sha, status, conclusion). GET …/workflows/<f>/runs filters by the
   # query's branch=, event= and status= (status or conclusion), newest first as written; …/runs/<id>/jobs
   # gives {total_count: jobs}; DELETE …/runs/<id> removes the run (fails while fail-delete-run exists);
   # POST …/runs/<id>/cancel sets cancelled (fails while fail-cancel-run exists).
@@ -321,17 +337,16 @@ case "$path" in
     if [ -n "$label" ] && [ -e "$d/labels-lag" ]; then echo '[]'; exit 0; fi
     jqf -s --arg l "$label" '[.[] | select(.state == "open" and ($l == "" or any(.labels[]; .name == $l)))]' "${files[@]}"
     ;;
-  # ledger.sh event: the issue's events, events-<n>.json ([{event, created_at, label: {name}}], default []).
-  repos/*/*/issues/*/events)
-    n=${path%/events}; n=${n##*/}
-    if [ -f "$d/events-$n.json" ]; then cat "$d/events-$n.json"; else echo '[]'; fi
-    ;;
-  # bridge.sh: the timeline of issue <n>, timeline-<n>.json ([{event, created_at, label: {name}}], default []);
-  # fails while fail-timeline exists.
+  # The timeline of issue <n>, timeline-<n>.json, default []; fails while fail-timeline exists.
   repos/*/*/issues/*/timeline)
     [ -e "$d/fail-timeline" ] && fail "timelines are broken"
     n=${path%/timeline}; n=${n##*/}
     if [ -f "$d/timeline-$n.json" ]; then cat "$d/timeline-$n.json"; else echo '[]'; fi
+    ;;
+  # ledger.sh event: the issue's events, events-<n>.json ([{event, created_at, label: {name}}], default []).
+  repos/*/*/issues/*/events)
+    n=${path%/events}; n=${n##*/}
+    if [ -f "$d/events-$n.json" ]; then cat "$d/events-$n.json"; else echo '[]'; fi
     ;;
   repos/*/*/issues/*/comments)
     n=${path%/comments}; n=${n##*/}

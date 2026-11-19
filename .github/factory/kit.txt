@@ -1,11 +1,30 @@
 # 공장 장치 한 벌(#437): 이 장치를 복사해 쓰는 저장소는 아래 파일을 정본과 바이트까지 같게 둔다.
-# 경로는 .github/factory/ 기준이다. 저장소마다 다른 값은 파일을 고치지 않고 환경 변수로 준다
-# (REPO, GH_TOKEN, FACTORY_REPO, BRIDGE_TO_BOSS, BRIDGE_TO_COORD, BRIDGE_CC, SWITCHBOARD_PROFILE,
-# BRIDGE_STATE_DIR, FACTORY_SPEC_QUEUE, PROBE_LOG; 기준 브랜치는 acceptance-probe.sh의 인자).
+# 경로는 .github/factory/ 기준이다. 저장소마다 다른 값은 파일을 고치지 않고 환경 변수와 인자로 준다(#492).
 # 고칠 때는 정본에서 고치고 복사해 쓰는 저장소로 옮긴 뒤 kit-check.sh <정본 .github/factory>로 맞춘다.
+#
+# 인자(차례대로):
+#   hand-to-human.sh <issue> <code> <reason>
+#   record-failure.sh <ticket> <code|infra> <run url> [<run started at>]
+#   acceptance-probe.sh [<base ref>]                       (기본 origin/main)
+#   bridge.sh [--seed]
+#   merge-check.sh finish | merge-check.sh check <main commit>
+#   workflow-guard.sh check <issue> <base> | push-failed <issue> <log> | push-retry <issue> <log> <mode> <push args...>
+#   ledger.sh record <node> <issue> [key=value …] | spec-total <spec> | day-total [YYYY-MM-DD] | event … | stats …
+#   kit-check.sh <canonical .github/factory directory>
+#
+# 환경 변수(뜻·기본값은 각 스크립트 머리말). 넣지 않으면 정본 저장소의 동작 그대로다:
+#   공통            REPO, GH_TOKEN, FACTORY_REPO
+#   acceptance-probe PROBE_RUNNERS(기본 cargo), PROBE_FILES_RE, PROBE_FILES_CMD, PROBE_GREEN(기본 fail),
+#                   PROBE_LOG, PROBE_PYTEST, PROBE_VITEST, PROBE_GOTEST
+#   bridge          BRIDGE_TO_BOSS, BRIDGE_TO_COORD, BRIDGE_CC, BRIDGE_TRUSTED_BOTS,
+#                   BRIDGE_HUMAN_CHECK_TO(기본 coord), BRIDGE_STATE_DIR, BRIDGE_LOOKBACK_DAYS(기본 14),
+#                   BRIDGE_SINCE, FACTORY_SPEC_QUEUE, SWITCHBOARD_PROFILE(기본 automation), BRIDGE_TO(폐지)
+#   ledger          FACTORY_SPEC_BUDGET_USD(기본 60), FACTORY_DAILY_BUDGET_USD(기본 150), FACTORY_NOW
+#   record-failure  FAILURE_REASON
 hand-to-human.sh
 record-failure.sh
 acceptance-probe.sh
+probe_pytest.py
 bridge.sh
 merge-check.sh
 workflow-guard.sh
@@ -23,3 +42,6 @@ tests/kit-check.sh
 tests/fake/gh
 tests/fake/switchboard
 tests/fake/cargo
+tests/fake/probe/pytest
+tests/fake/probe/vitest
+tests/fake/probe/gotest

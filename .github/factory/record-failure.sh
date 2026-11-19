@@ -29,12 +29,16 @@ case "$kind" in
   *) usage ;;
 esac
 BLOCKED='<!-- factory-implementer-blocked -->'
+# A comment by a bot: a GitHub App or github-actions[bot] (only an App installed on the repository can
+# comment as one).
+BOT='def bot: .user.type == "Bot" or (.user.login // "" | endswith("[bot]"));'
 
-# since_reset: the bodies of the ticket's comments after the last reset comment, as a JSON array.
+# since_reset: the bodies of the ticket's comments after the last reset comment that a bot wrote (#492:
+# the agent and the workflow comment as a bot; anyone can comment on a public repository), as a JSON array.
 since_reset() {
   gh api "repos/$REPO/issues/$n/comments?per_page=100" --paginate \
-    | jq -s '[.[][] | .body] | (map(startswith("<!-- factory-reset -->")) | rindex(true)) as $r
-        | .[(if $r == null then 0 else $r + 1 end):]' | tr -d '\r'
+    | jq -s "$BOT"' [.[][]] | (map(.body | startswith("<!-- factory-reset -->")) | rindex(true)) as $r
+        | [.[(if $r == null then 0 else $r + 1 end):][] | select(bot) | .body]' | tr -d '\r'
 }
 
 bodies=$(since_reset) || { echo "::warning::record-failure: could not read the comments of #$n"; bodies='[]'; }
@@ -48,7 +52,9 @@ ${blocked#"$BLOCKED"}"
 fi
 
 if [ -n "$started" ]; then
-  said=$(gh api "repos/$REPO/issues/$n/comments?per_page=100" --paginate     | jq -rs --arg t "$started" '[.[][] | select(.created_at >= $t and (.body | startswith("<!--") | not)) | .body] | last // empty'     | tr -d '') || said=
+  said=$(gh api "repos/$REPO/issues/$n/comments?per_page=100" --paginate \
+    | jq -rs --arg t "$started" "$BOT"' [.[][] | select(.created_at >= $t and bot and (.body | startswith("<!--") | not)) | .body] | last // empty' \
+    | tr -d '\r') || said=
   if [ -n "$said" ]; then
     gh api -X DELETE "repos/$REPO/issues/$n/labels/in-progress" > /dev/null 2>&1 || true
     bash "$here/hand-to-human.sh" "$n" agent-blocked "Implementer가 커밋 없이 멈추며 까닭을 남겼다($url). 사람이 아래를 정한 뒤 티켓을 공장에 돌려준다.

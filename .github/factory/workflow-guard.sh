@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# A workflow file the Implementer cannot push (ADR-0001, "workflow 파일은 사람 몫"). GITHUB_TOKEN may not
-# create or update `.github/workflows/*` (GitHub: "refusing to allow a GitHub App to create or update
+# A workflow file the Implementer cannot push (ADR-0001, "workflow 파일은 사람 몫"). The factory's push
+# token (GITHUB_TOKEN, or an App's token without `workflows` permission) may not create or update
+# `.github/workflows/*` (GitHub: "refusing to allow a GitHub App to create or update
 # workflow … without `workflows` permission"), so a ticket that needs it only fails at the push, and
 # counting that as a code failure retries it (a port of this factory lost several runs that way, #389).
 # This hands such a ticket to a person at once: no failure is counted, nothing is dispatched again.
@@ -48,7 +49,7 @@ case "${1:-}" in
     [ $# -eq 3 ] || { echo 'usage: workflow-guard.sh check <issue> <base>' >&2; exit 2; }
     files=$(git diff --name-only "$3"...HEAD -- .github/workflows/ | head -n 5 | tr '\n' ' ')
     if [ -n "$files" ]; then
-      handover "$2" workflow-change "사유: workflow 파일. 이 티켓은 \`.github/workflows/\` 를 바꾼다(${files% }). 공장의 GITHUB_TOKEN 은 workflow 파일을 push 할 수 없어 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
+      handover "$2" workflow-change "사유: workflow 파일. 이 티켓은 \`.github/workflows/\` 를 바꾼다(${files% }). 공장이 push 에 쓰는 토큰은 workflow 파일을 push 할 수 없어 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
       exit 0
     fi
     output blocked=false
@@ -56,7 +57,7 @@ case "${1:-}" in
   push-failed)
     [ $# -eq 3 ] || { echo 'usage: workflow-guard.sh push-failed <issue> <log>' >&2; exit 2; }
     if refused "$3"; then
-      handover "$2" workflow-change "사유: workflow 파일. push 가 workflow 파일 때문에 거절됐다(공장의 GITHUB_TOKEN 에 \`workflows\` 권한이 없다). 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
+      handover "$2" workflow-change "사유: workflow 파일. push 가 workflow 파일 때문에 거절됐다(공장이 push 에 쓰는 토큰에 `workflows` 권한이 없다). 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
       exit 0
     fi
     output blocked=false
@@ -72,7 +73,7 @@ case "${1:-}" in
     fi
     files=$(git diff --name-only origin/main...HEAD -- .github/workflows/ | head -n 5 | tr '\n' ' ')
     if [ -n "$files" ]; then
-      handover "$issue" workflow-change "사유: workflow 파일. 이 티켓은 \`.github/workflows/\` 를 바꾼다(${files% }). push 가 거절됐고 공장의 GITHUB_TOKEN 은 workflow 파일을 push 할 수 없어 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
+      handover "$issue" workflow-change "사유: workflow 파일. 이 티켓은 \`.github/workflows/\` 를 바꾼다(${files% }). push 가 거절됐고 공장이 push 에 쓰는 토큰은 workflow 파일을 push 할 수 없어 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
       exit 3
     fi
     caught=true
@@ -95,7 +96,7 @@ case "${1:-}" in
     fi
     cat "$log"
     if refused "$log"; then
-      handover "$issue" push-rejected "사유: workflow 파일. push 가 workflow 파일 때문에 거절됐고, main 을 따라잡은 뒤에도($how) 거절됐다(공장의 GITHUB_TOKEN 에 \`workflows\` 권한이 없다). 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
+      handover "$issue" push-rejected "사유: workflow 파일. push 가 workflow 파일 때문에 거절됐고, main 을 따라잡은 뒤에도($how) 거절됐다(공장이 push 에 쓰는 토큰에 `workflows` 권한이 없다). 사람이 처리한다. 실패 횟수는 늘리지 않았고 다시 돌리지 않는다."
       exit 3
     fi
     output blocked=false

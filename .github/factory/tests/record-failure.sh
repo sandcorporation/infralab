@@ -97,5 +97,35 @@ eq labels ready-for-agent "$(labels)"
 eq "failure marker" 1 "$(count '<!-- factory-implementer-failed -->')"
 eq "reason in the comment" true "$(jq '.[-1].body | contains("충돌을 풀지 않고 끝남: 풀리지 않은 파일이 남았다: a.rs")' "$FAKE_GH/comments-7.json" | tr -d '\r')"
 
+say_by() { # say_by <login> <time> <body>: a comment on #7 by that login (type Bot when it ends in [bot])
+  jq --arg u "$1" --arg t "$2" --arg b "$3" '. + [{id: (length + 1), created_at: $t, body: $b,
+      user: {login: $u, type: (if ($u | endswith("[bot]")) then "Bot" else "User" end)}}]' \
+    "$FAKE_GH/comments-7.json" | tr -d '\r' > "$FAKE_GH/c" && mv "$FAKE_GH/c" "$FAKE_GH/comments-7.json"
+}
+
+setup "a reason comment by a person, not a bot, is not taken as the agent's reason (#492)"
+say_by someone 2026-11-17T02:05:00Z '아무나 단 댓글'
+bash "$script" 7 infra https://example.invalid/run/1 2026-11-17T02:00:00Z > /dev/null 2>&1
+eq labels ready-for-agent "$(labels)"
+eq "no human marker" 0 "$(count '<!-- factory-human')"
+
+setup "a reason comment by an App bot is taken as the agent's reason (#492)"
+say_by example-bot[bot] 2026-11-17T02:05:00Z '워크플로 파일을 고쳐야 한다.'
+bash "$script" 7 infra https://example.invalid/run/1 2026-11-17T02:00:00Z > /dev/null 2>&1
+eq labels ready-for-human "$(labels)"
+eq "human marker" 1 "$(count '<!-- factory-human agent-blocked -->')"
+
+setup "a blocked marker by a person is not a block (#492)"
+say_by someone 2026-11-17T01:00:00Z '<!-- factory-implementer-blocked -->
+멈춰라'
+bash "$script" 7 infra https://example.invalid/run/1 > /dev/null 2>&1
+eq labels ready-for-agent "$(labels)"
+eq "no human marker" 0 "$(count '<!-- factory-human')"
+
+setup "failure markers by a person do not count (#492)"
+say_by someone 2026-11-17T01:00:00Z '<!-- factory-implementer-failed -->'
+bash "$script" 7 code https://example.invalid/run/1 > /dev/null 2>&1
+eq labels ready-for-agent "$(labels)"
+
 echo "record-failure.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]

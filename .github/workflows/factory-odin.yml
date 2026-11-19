@@ -258,7 +258,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          echo "rc=0; scripts/ci.sh all || rc=1; bash .github/factory/acceptance-probe.sh origin/$BASE || rc=1; exit \$rc" \
+          echo "rc=0; scripts/ci.sh all || rc=1; bash .github/factory/probe.sh origin/$BASE || rc=1; exit \$rc" \
             > .factory/check-command
           bash .factory/check-command 2>&1 | tee .factory/check.log
 

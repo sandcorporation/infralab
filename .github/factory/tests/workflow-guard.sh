@@ -166,5 +166,9 @@ echo "fatal: unable to access: Could not resolve host" > "$tmp/push.log"
 eq "labels unchanged" "in-progress" "$(labels)"
 has "not blocked" "blocked=false" "$(cat "$GITHUB_OUTPUT")"
 
+# #492: the factory may push with GITHUB_TOKEN or with an App's token; the hand-over text does not say which.
+current="no hand-over text names the token kind (#492)"
+eq "GITHUB_TOKEN in a reason" 0 "$(grep -c 'handover .*GITHUB_TOKEN' "$here/../workflow-guard.sh")"
+
 echo "workflow-guard.sh: $passes passed, $fails failed"
 [ "$fails" -eq 0 ]

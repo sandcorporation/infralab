@@ -1,65 +1,69 @@
-"""pytest plugin of acceptance-probe.sh (#212): one JSON line per test outcome into $PROBE_OUT.
+"""pytest plugin for acceptance-probe.sh (#492): one JSON line per test outcome to $PROBE_OUT.
 
-Loaded with `-p probe_pytest` (PYTHONPATH holds .github/factory). Each line is
-{"test", "when", "outcome", "type", "message"}: `when` is "collect", "setup", "call" or "teardown",
-`type` the exception's class name. acceptance-probe.sh decides which failures are the right kind.
+Loaded with `-p probe_pytest` (the probe puts this directory on PYTHONPATH). Writes
+{"test", "when", "outcome", "type", "message"} for every call phase and for every failed setup,
+teardown or collection, so the probe can tell an assertion or a ticket stub from any other error.
 """
-
-from __future__ import annotations
 
 import json
 import os
-from collections.abc import Generator
-
-import pytest
-
-_OUT = os.environ.get("PROBE_OUT", "")
 
 
-def _write(row: dict[str, str]) -> None:
-    if not _OUT:
+def _write(row):
+    path = os.environ.get("PROBE_OUT")
+    if not path:
         return
-    with open(_OUT, "a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    with open(path, "a", encoding="utf-8") as out:
+        out.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def _error_lines(text: str) -> str:
-    """The `E   ...` lines of a pytest traceback (the exception), or its last line."""
-    lines = [ln[1:].strip() for ln in text.splitlines() if ln.startswith("E ")]
-    if not lines:
-        lines = [ln for ln in text.splitlines() if ln.strip()][-1:]
-    return " ".join(lines)[:600]
+def _error(report):
+    """(type, message) of the exception behind a failed report."""
+    call = getattr(report, "_probe_excinfo", None)
+    if call is not None:
+        return call
+    longrepr = getattr(report, "longrepr", None)
+    crash = getattr(longrepr, "reprcrash", None)
+    if crash is not None:
+        message = crash.message or ""
+        kind, _, rest = message.partition(": ")
+        if kind and " " not in kind:
+            return kind.rsplit(".", 1)[-1], rest
+        return "", message
+    return "", str(longrepr or "")
 
 
-def pytest_collectreport(report: pytest.CollectReport) -> None:
+def pytest_runtest_makereport(item, call):
+    if call.excinfo is not None:
+        item._probe_excinfo = (call.excinfo.type.__name__, str(call.excinfo.value))
+
+
+def pytest_runtest_logreport(report):
+    if report.when != "call" and not report.failed:
+        return
+    kind, message = ("", "")
+    if report.failed or report.skipped:
+        kind, message = _error(report)
+    _write(
+        {
+            "test": report.nodeid,
+            "when": report.when,
+            "outcome": report.outcome,
+            "type": kind,
+            "message": message,
+        }
+    )
+
+
+def pytest_collectreport(report):
     if report.failed:
+        kind, message = _error(report)
         _write(
             {
                 "test": report.nodeid,
                 "when": "collect",
                 "outcome": "failed",
-                "type": "CollectError",
-                "message": _error_lines(str(report.longrepr)),
+                "type": kind or "CollectError",
+                "message": message,
             }
         )
-
-
-@pytest.hookimpl(wrapper=True)
-def pytest_runtest_makereport(
-    item: pytest.Item, call: pytest.CallInfo[None]
-) -> Generator[None, pytest.TestReport, pytest.TestReport]:
-    report = yield
-    if report.failed:
-        excinfo = call.excinfo
-        _write(
-            {
-                "test": item.nodeid,
-                "when": call.when,
-                "outcome": "failed",
-                "type": excinfo.typename if excinfo else "",
-                "message": str(excinfo.value)[:600] if excinfo else "",
-            }
-        )
-    elif report.passed and call.when == "call":
-        _write({"test": item.nodeid, "when": "call", "outcome": "passed", "type": "", "message": ""})
-    return report

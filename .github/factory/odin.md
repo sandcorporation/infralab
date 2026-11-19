@@ -58,7 +58,7 @@ The workflow runs it again after you. If it still fails you get its log in the s
 
 ## 5. Make the tests fail for the right reason
 
-A switched-off test proves nothing until it runs. Once the stubs build, run `bash .github/factory/acceptance-probe.sh origin/main` from the repo root: it switches on every acceptance test of this PR once, runs them, puts the files back and prints one line per test.
+A switched-off test proves nothing until it runs. Once the stubs build, run `bash .github/factory/probe.sh origin/main` (acceptance-probe.sh with this repository's runners) from the repo root: it switches on every acceptance test of this PR once, runs them, puts the files back and prints one line per test.
 
 - `fail`: red on an assertion (or `pytest.fail`, a failed `.resolves`/`.rejects`, `t.Error`/`t.Fatal`) or on its ticket's stub. That is what a test of unbuilt behaviour does.
 - `pass`: already green before its ticket. Make sure it still asserts what its criterion needs (a guard of existing behaviour may pass).
