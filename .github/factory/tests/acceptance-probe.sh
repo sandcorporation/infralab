@@ -256,6 +256,45 @@ FAKE_PY_EXIT=4 probe
 eq exit 1 "$code"
 has 'acceptance-probe: error backend (runner): the runner gave no result (exit 4): fake pytest output' "$out"
 
+# The real pytest with the real probe_pytest plugin (#492): the fake pytest above copies canned rows,
+# so a plugin that never wrote the exception type went unnoticed. Skipped without pytest.
+if python3 -m pytest --version > /dev/null 2>&1; then
+  msetup "real pytest: an assertion and a ticket stub fail, a fixture error is an error"
+  cat > backend/tests/test_spec_x.py <<'PY'
+import pytest
+
+
+@pytest.fixture
+def db():
+    raise RuntimeError("no db")
+
+
+@pytest.mark.skip(reason="#42")
+def test_adds():
+    assert 1 == 3
+
+
+@pytest.mark.skip(reason="#42")
+def test_stub():
+    raise NotImplementedError("#42")
+
+
+@pytest.mark.skip(reason="#42")
+def test_fixture(db):
+    pass
+PY
+  commit
+  PROBE_PYTEST="python3 -m pytest" probe
+  eq exit 1 "$code"
+  has "acceptance-probe: fail backend tests/test_spec_x.py::test_adds: call: AssertionError: assert 1 == 3" "$out"
+  has "acceptance-probe: fail backend tests/test_spec_x.py::test_stub: call: NotImplementedError: #42" "$out"
+  has "acceptance-probe: error backend tests/test_spec_x.py::test_fixture: setup: RuntimeError: no db" "$out"
+  has 'acceptance-probe: 1 error(s)' "$out"
+  eq "working tree clean afterwards" "" "$(git status --porcelain)"
+else
+  echo "  skip [real pytest]: python3 -m pytest가 없어 건너뜀"
+fi
+
 msetup "vitest: assertion and #N stubs pass, other errors fail"
 cat > web/src/spec/spec_x.test.ts <<'TS'
 import { it, expect } from "vitest"

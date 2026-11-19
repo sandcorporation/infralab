@@ -8,6 +8,10 @@ teardown or collection, so the probe can tell an assertion or a ticket stub from
 import json
 import os
 
+# (nodeid, when) -> (exception type name, message), filled by makereport and taken by the report hooks.
+# The report pytest builds is a new object, so the item cannot carry it there (#492).
+_EXCINFO = {}
+
 
 def _write(row):
     path = os.environ.get("PROBE_OUT")
@@ -19,7 +23,8 @@ def _write(row):
 
 def _error(report):
     """(type, message) of the exception behind a failed report."""
-    call = getattr(report, "_probe_excinfo", None)
+    key = (getattr(report, "nodeid", ""), getattr(report, "when", None))
+    call = _EXCINFO.pop(key, None)
     if call is not None:
         return call
     longrepr = getattr(report, "longrepr", None)
@@ -35,7 +40,7 @@ def _error(report):
 
 def pytest_runtest_makereport(item, call):
     if call.excinfo is not None:
-        item._probe_excinfo = (call.excinfo.type.__name__, str(call.excinfo.value))
+        _EXCINFO[(item.nodeid, call.when)] = (call.excinfo.type.__name__, str(call.excinfo.value))
 
 
 def pytest_runtest_logreport(report):
