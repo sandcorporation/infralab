@@ -560,6 +560,8 @@ def proxy_exchanges(request: HttpRequest, payload: ProxyExchangeIn):
         client_id=payload.client_id,
         input_tokens=payload.input_tokens,
         output_tokens=payload.output_tokens,
+        cache_read_input_tokens=payload.cache_read_input_tokens,
+        cache_creation_input_tokens=payload.cache_creation_input_tokens,
         request=payload.request,
         response=payload.response,
     ):

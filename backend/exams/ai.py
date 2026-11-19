@@ -167,6 +167,8 @@ def record_exchange(
     output_tokens: int,
     request: str,
     response: str,
+    cache_read_input_tokens: int | None = None,
+    cache_creation_input_tokens: int | None = None,
 ) -> bool:
     """프록시가 넘긴 요청·응답을 적고 사용량을 깎는다. 모르는 토큰이면 False."""
 
@@ -184,6 +186,8 @@ def record_exchange(
             response=response,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
         )
         AIToken.objects.filter(pk=ai.pk).update(
             used_tokens=F("used_tokens") + input_tokens + output_tokens,

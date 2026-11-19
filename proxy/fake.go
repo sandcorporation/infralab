@@ -56,14 +56,14 @@ func fakeProvider() http.Handler {
 				"id": "msg_fake", "type": "message", "role": "assistant", "model": model,
 				"content":     []any{map[string]any{"type": "text", "text": FakeReply}},
 				"stop_reason": "end_turn", "stop_sequence": nil,
-				"usage": map[string]any{"input_tokens": in, "output_tokens": fakeOutputTokens},
+				"usage": map[string]any{"input_tokens": in, "output_tokens": fakeOutputTokens, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
 			})
 			return
 		}
 		sse := newSSE(w)
 		sse.event("message_start", map[string]any{"type": "message_start", "message": map[string]any{
 			"id": "msg_fake", "type": "message", "role": "assistant", "model": model, "content": []any{},
-			"stop_reason": nil, "stop_sequence": nil, "usage": map[string]any{"input_tokens": in, "output_tokens": 1},
+			"stop_reason": nil, "stop_sequence": nil, "usage": map[string]any{"input_tokens": in, "output_tokens": 1, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
 		}})
 		sse.event("content_block_start", map[string]any{"type": "content_block_start", "index": 0,
 			"content_block": map[string]any{"type": "text", "text": ""}})
