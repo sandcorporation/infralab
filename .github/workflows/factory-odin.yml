@@ -62,12 +62,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Require CLAUDE_OAUTH_TOKEN
+      - name: Require CLAUDE_CODE_OAUTH_TOKEN
         env:
-          TOKEN: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           if [ -z "$TOKEN" ]; then
-            echo "::error::CLAUDE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN 없음: 저장소 secret 을 등록하기 전에는 공장이 돌지 않는다 (docs/adr/0001-software-factory.md 「켜는 순서」)"
             exit 1
           fi
 
@@ -171,7 +171,7 @@ jobs:
         timeout-minutes: 40
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           allowed_bots: github-actions
           prompt: |
@@ -221,7 +221,7 @@ jobs:
         timeout-minutes: 60
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # Decompose and the resume job dispatch this run with GITHUB_TOKEN: the actor is the bot.
           allowed_bots: github-actions
@@ -267,7 +267,7 @@ jobs:
         timeout-minutes: 40
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           allowed_bots: github-actions
           prompt: |
