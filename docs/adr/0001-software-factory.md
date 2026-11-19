@@ -1,6 +1,6 @@
 # 0001. 소프트웨어 공장: spec 에서 병합까지 GitHub Actions 안에서
 
-- 상태: 채택. secret `CLAUDE_OAUTH_TOKEN` 이 없으면 모든 공장 run 이 첫 job(`token`)에서 멈춘다. 첫 run 은 조율자가 켠다(아래 「켜는 순서」).
+- 상태: 채택. secret `CLAUDE_CODE_OAUTH_TOKEN` 이 없으면 모든 공장 run 이 첫 job(`token`)에서 멈춘다. 첫 run 은 조율자가 켠다(아래 「켜는 순서」).
 - 날짜: 2026-11-18 (#47, 상위 spec #45)
 - 원본: 같은 조직의 다른 공개 저장소(Rust·Windows 데스크톱 앱)가 쓰던 공장과 그 ADR. 흐름·스크립트·장부·알림 다리를 그대로 들이고, 스택에 걸린 부분만 바꿨다(맨 아래 「원본에서 바꾼 것」).
 
@@ -17,7 +17,7 @@ infralab 은 backend(Django·pytest), web(React·vitest), agent(Go) 세 부분�
 | Ticket tracker | GitHub Issues (라벨은 `docs/agents/triage-labels.md`) |
 | Orchestrator | GitHub Actions (`.github/workflows/factory-*.yml`) |
 | Runner | 모두 `ubuntu-latest` |
-| 에이전트 | `anthropics/claude-code-action@v1`, 인증은 구독 OAuth 토큰(secret `CLAUDE_OAUTH_TOKEN`) |
+| 에이전트 | `anthropics/claude-code-action@v1`, 인증은 구독 OAuth 토큰(secret `CLAUDE_CODE_OAUTH_TOKEN`) |
 | PR·push·병합 토큰 | 조직 GitHub App `sandcorp-factory`(variable `FACTORY_APP_ID`, secret `FACTORY_APP_PRIVATE_KEY`). 브랜치 push(`app-push.sh`)·PR 열기·병합(`merge-pr.sh` → `scripts/pr-merge.sh`)만 이 토큰(contents·pull-requests 쓰기, workflows 없음). 라벨·댓글·이슈·dispatch 는 `GITHUB_TOKEN` — App 이 라벨을 달면 issues 이벤트가 공장 run 을 다시 깨운다(#172) |
 | 병합 문 | main ruleset: ci.yml 필수 잡(backend·web·agent·exam-proxy-route·factory) 초록, 예외(bypass) 없음. App 의 push 라 공장 PR 에도 ci.yml 이 돈다(#172) |
 | 자동 검사 | `scripts/ci.sh all` (backend pytest + Postgres 서비스, web typecheck·vitest·build, agent gofmt·vet·test, 공장 스크립트 시험) |
@@ -80,9 +80,9 @@ Decompose·Odin 은 Opus, Verify 는 Sonnet, Implementer 는 티켓의 `model:so
 
 ### 켜는 순서
 
-1. **지금(#47 병합)**: workflow 는 main 에 있지만 secret 이 없어 어느 run 이든 `token` job 에서 「CLAUDE_OAUTH_TOKEN 없음」으로 멈춘다(1분 안). `token` 이 실패하면 뒤 job 이 건너뛰어지므로 runner 를 더 쓰지 않고, 사슬(`dispatch-next.sh`)도 돌지 않는다.
+1. **지금(#47 병합)**: workflow 는 main 에 있지만 secret 이 없어 어느 run 이든 `token` job 에서 「CLAUDE_CODE_OAUTH_TOKEN 없음」으로 멈춘다(1분 안). `token` 이 실패하면 뒤 job 이 건너뛰어지므로 runner 를 더 쓰지 않고, 사슬(`dispatch-next.sh`)도 돌지 않는다.
 2. **대표가 등록한다**(Settings → Secrets and variables → Actions):
-   - secret `CLAUDE_OAUTH_TOKEN` (`claude setup-token`). workflow 는 이것을 action 입력 `claude_code_oauth_token` 으로 넘긴다.
+   - secret `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`). workflow 는 이것을 action 입력 `claude_code_oauth_token` 으로 넘긴다.
    - 변수 `FACTORY_TRACKS` — 처음엔 `1` 을 권한다(한 줄로 지켜본다).
    - 변수 `FACTORY_DAILY_BUDGET_USD`, `FACTORY_SPEC_BUDGET_USD` — 없으면 $150·$60.
    - 변수 `FACTORY_SPEC_QUEUE` — 처음엔 비워 둔다(라벨 붙인 spec 하나만 돈다).
