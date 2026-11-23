@@ -110,6 +110,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: exp/ 갈래 PR 거절
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'exp/')
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "::error::exp/ 갈래는 실험용이라 병합하지 않는다 — 운영에 들이기로 정해졌으면 평소 갈래에서 PR 을 다시 낸다 (head: ${HEAD_REF})"
+          exit 1
       - uses: actions/checkout@v4
       - run: scripts/ci.sh factory
       - run: scripts/ci.sh release
