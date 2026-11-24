@@ -44,6 +44,8 @@ agent() {
 factory() {
   need jq "공장 스크립트 시험"
   bash .github/factory/test.sh
+  # 알림 다리의 Orca 판(#257): kit 이 Orca 판을 받기 전까지 infralab 전용 자리에서 돈다.
+  bash scripts/factory-bridge/bridge_test.sh
   kit
 }
 
