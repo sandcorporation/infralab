@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Fake `orca` for scripts/factory-bridge/bridge_test.sh: put this folder first on PATH.
+# State lives in $FAKE_ORCA:
+#   terminals.json  the live terminals, a JSON array of {worktree, title, handle}; `terminal list --worktree path:<dir>`
+#                   prints those whose worktree is <dir> (none when the file is missing)
+#   fail            if present, every send fails
+#   fail-list       if present, `terminal list` fails
+#   sent.jsonl      one JSON object per successful send: {args: [...], body: <the --body-file - text>}
+#   calls.log       every call's arguments, one line each
+set -u -o pipefail
+d=${FAKE_ORCA:?FAKE_ORCA is not set}
+printf '%s\n' "$*" >> "$d/calls.log"
+case "${1:-} ${2:-}" in
+  "terminal list")
+    [ -e "$d/fail-list" ] && { echo "fake orca: terminal list is broken" >&2; exit 1; }
+    sel=
+    while [ $# -gt 0 ]; do [ "$1" = --worktree ] && sel=${2:-}; shift; done
+    t="$d/terminals.json"
+    if [ -f "$t" ]; then
+      jq -c --arg s "$sel" '{result: {terminals: map(select("path:" + .worktree == $s))}}' "$t" | tr -d '\r'
+    else
+      echo '{"result": {"terminals": []}}'
+    fi
+    ;;
+  "orchestration send")
+    shift 2
+    from= body= stdin=false
+    args=$(for a in "$@"; do printf '%s' "$a" | jq -Rs .; done | jq -cs .) || exit 1
+    prev=
+    for a in "$@"; do
+      [ "$prev" = --from ] && from=$a
+      [ "$prev" = --body-file ] && [ "$a" = - ] && stdin=true
+      prev=$a
+    done
+    # A process outside a terminal (cron) is refused without --from.
+    [ -n "$from" ] || { echo "no_active_sender_terminal" >&2; exit 1; }
+    $stdin && body=$(cat)
+    if [ -e "$d/fail" ]; then echo "fake orca: sending is broken" >&2; exit 1; fi
+    jq -cn --argjson a "$args" --arg b "$body" '{args: $a, body: $b}' | tr -d '\r' >> "$d/sent.jsonl" || exit 1
+    echo "msg_fake"
+    ;;
+  *) echo "fake orca: unsupported command: $*" >&2; exit 2 ;;
+esac
