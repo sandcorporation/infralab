@@ -3,7 +3,7 @@
 FROM hashicorp/terraform:1.17.2@sha256:6e9c1e647c31a960dc9b59e13272f9111d90010c10b717f77ffb324767660475 AS tf
 
 # alpine 3.21 패키지는 openjdk 21 까지다 — 25 는 Temurin 의 musl 빌드를 복사한다.
-FROM eclipse-temurin:25.0.5_8-jdk-alpine@sha256:c7c3d0bdf7f2bbc5a05a6712ed334d198360105634ea9adf76fca94f381b1e3f AS jdk
+FROM eclipse-temurin:27.0.1.1_4-jdk-alpine@sha256:3ce6707ba035480069ff65d12265a8806d74fe9fd761987d183dd86362def451 AS jdk
 
 # linux/amd64·arm64 로 게시한다(image.yml, 아키텍처마다 네이티브 실행기).
 FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
